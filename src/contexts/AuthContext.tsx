@@ -47,13 +47,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     // Check for stored auth on mount
     const storedAuth = localStorage.getItem('juko_auth');
-    if (storedAuth) {
-      const user = JSON.parse(storedAuth);
-      setAuthState({
-        user,
-        isAuthenticated: true,
-        loading: false
-      });
+    const storedExpiry = localStorage.getItem('juko_auth_expiry');
+    
+    if (storedAuth && storedExpiry) {
+      const expiryTime = parseInt(storedExpiry);
+      const currentTime = Date.now();
+      
+      if (currentTime < expiryTime) {
+        const user = JSON.parse(storedAuth);
+        setAuthState({
+          user,
+          isAuthenticated: true,
+          loading: false
+        });
+      } else {
+        // Token expired, clear storage
+        localStorage.removeItem('juko_auth');
+        localStorage.removeItem('juko_auth_expiry');
+        setAuthState(prev => ({ ...prev, loading: false }));
+      }
     } else {
       setAuthState(prev => ({ ...prev, loading: false }));
     }
@@ -74,7 +86,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         isAuthenticated: true,
         loading: false
       });
+      
+      // Store auth with 30-day expiry
+      const expiryTime = Date.now() + (30 * 24 * 60 * 60 * 1000);
       localStorage.setItem('juko_auth', JSON.stringify(user));
+      localStorage.setItem('juko_auth_expiry', expiryTime.toString());
       return true;
     }
     return false;
@@ -87,6 +103,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       loading: false
     });
     localStorage.removeItem('juko_auth');
+    localStorage.removeItem('juko_auth_expiry');
   };
 
   return (

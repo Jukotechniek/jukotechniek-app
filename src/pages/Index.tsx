@@ -5,8 +5,12 @@ import LoginForm from '@/components/LoginForm';
 import Navigation from '@/components/Navigation';
 import Dashboard from '@/components/Dashboard';
 import WorkHours from '@/components/WorkHours';
+import Projects from '@/components/Projects';
+import Billing from '@/components/Billing';
+import HourComparison from '@/components/HourComparison';
 import UserManagement from '@/components/UserManagement';
 import Reports from '@/components/Reports';
+import AIChatbot from '@/components/AIChatbot';
 
 const AppContent = () => {
   const { isAuthenticated, loading } = useAuth();
@@ -33,10 +37,18 @@ const AppContent = () => {
         return <Dashboard />;
       case 'hours':
         return <WorkHours />;
+      case 'projects':
+        return <Projects />;
+      case 'billing':
+        return <Billing />;
+      case 'verification':
+        return <HourComparison />;
       case 'users':
         return <UserManagement />;
       case 'reports':
         return <Reports />;
+      case 'chatbot':
+        return <AIChatbot />;
       default:
         return <Dashboard />;
     }

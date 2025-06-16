@@ -14,13 +14,19 @@ const Navigation: React.FC<NavigationProps> = ({ activeTab, onTabChange }) => {
   const adminTabs = [
     { id: 'dashboard', label: 'Dashboard' },
     { id: 'hours', label: 'Work Hours' },
+    { id: 'projects', label: 'Projects' },
+    { id: 'billing', label: 'Billing' },
+    { id: 'verification', label: 'Hour Verification' },
     { id: 'users', label: 'User Management' },
-    { id: 'reports', label: 'Reports' }
+    { id: 'reports', label: 'Reports' },
+    { id: 'chatbot', label: 'AI Assistant' }
   ];
 
   const technicianTabs = [
     { id: 'dashboard', label: 'Dashboard' },
-    { id: 'hours', label: 'My Hours' }
+    { id: 'hours', label: 'My Hours' },
+    { id: 'projects', label: 'My Projects' },
+    { id: 'chatbot', label: 'AI Assistant' }
   ];
 
   const tabs = user?.role === 'admin' ? adminTabs : technicianTabs;
