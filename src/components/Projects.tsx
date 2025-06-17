@@ -48,7 +48,7 @@ const Projects = () => {
     hoursSpent: '',
     customerId: '',
     date: new Date().toISOString().split('T')[0],
-    status: 'in-progress' as const
+    status: 'in-progress' as Project['status']
   });
 
   const isAdmin = user?.role === 'admin';
@@ -114,7 +114,7 @@ const Projects = () => {
       const project: Project = {
         id: Date.now().toString(),
         technicianId: user?.id || '',
-        technicianName: user?.name || '',
+        technicianName: user?.fullName || '',
         customerId: newProject.customerId,
         customerName: selectedCustomer?.name || '',
         title: newProject.title,
@@ -178,11 +178,13 @@ const Projects = () => {
       return;
     }
 
-    setProjects(projects.filter(p => p.id !== projectId));
-    toast({
-      title: "Succes",
-      description: "Project succesvol verwijderd"
-    });
+    if (window.confirm('Weet je zeker dat je dit project wilt verwijderen?')) {
+      setProjects(projects.filter(p => p.id !== projectId));
+      toast({
+        title: "Succes",
+        description: "Project succesvol verwijderd"
+      });
+    }
   };
 
   const handleStatusChange = (projectId: string, newStatus: Project['status']) => {
