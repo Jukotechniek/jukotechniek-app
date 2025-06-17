@@ -11,6 +11,9 @@ const mockTechnicianData: TechnicianSummary[] = [
     technicianId: '2',
     technicianName: 'Jan de Vries',
     totalHours: 168,
+    regularHours: 140,
+    overtimeHours: 20,
+    weekendHours: 8,
     daysWorked: 21,
     lastWorked: '2024-06-15'
   },
@@ -18,6 +21,9 @@ const mockTechnicianData: TechnicianSummary[] = [
     technicianId: '3',
     technicianName: 'Pieter Jansen',
     totalHours: 152,
+    regularHours: 132,
+    overtimeHours: 12,
+    weekendHours: 8,
     daysWorked: 19,
     lastWorked: '2024-06-14'
   }
