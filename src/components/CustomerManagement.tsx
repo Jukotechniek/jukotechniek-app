@@ -8,7 +8,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { Customer } from '@/types/customers';
-import { Trash2, Edit2, Plus } from 'lucide-react';
+import { Trash2, Edit2, Plus, X, CheckCircle } from 'lucide-react';
 import CustomerTechnicianRates from './CustomerTechnicianRates';
 
 // Mock data
@@ -114,6 +114,16 @@ const CustomerManagement = () => {
   };
 
   const handleDelete = (customerId: string) => {
+    if (window.confirm('Weet je zeker dat je deze klant wilt verwijderen? Dit kan niet ongedaan worden gemaakt.')) {
+      setCustomers(customers.filter(customer => customer.id !== customerId));
+      toast({
+        title: "Succes",
+        description: "Klant succesvol verwijderd"
+      });
+    }
+  };
+
+  const handleDeactivate = (customerId: string) => {
     setCustomers(customers.map(customer =>
       customer.id === customerId 
         ? { ...customer, isActive: false }
@@ -122,6 +132,18 @@ const CustomerManagement = () => {
     toast({
       title: "Succes",
       description: "Klant succesvol gedeactiveerd"
+    });
+  };
+
+  const handleReactivate = (customerId: string) => {
+    setCustomers(customers.map(customer =>
+      customer.id === customerId 
+        ? { ...customer, isActive: true }
+        : customer
+    ));
+    toast({
+      title: "Succes",
+      description: "Klant succesvol geactiveerd"
     });
   };
 
@@ -192,7 +214,7 @@ const CustomerManagement = () => {
         <Card className="bg-white">
           <CardHeader>
             <CardTitle className="text-lg font-semibold text-gray-900">
-              Klanten ({customers.filter(c => c.isActive).length})
+              Klanten ({customers.length})
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -230,16 +252,33 @@ const CustomerManagement = () => {
                           >
                             <Edit2 className="h-4 w-4" />
                           </Button>
-                          {customer.isActive && (
+                          {customer.isActive ? (
                             <Button
                               size="sm"
                               variant="outline"
-                              onClick={() => handleDelete(customer.id)}
-                              className="h-8 w-8 p-0 border-red-300 text-red-600 hover:bg-red-50"
+                              onClick={() => handleDeactivate(customer.id)}
+                              className="h-8 w-8 p-0 border-orange-300 text-orange-600 hover:bg-orange-50"
                             >
-                              <Trash2 className="h-4 w-4" />
+                              <X className="h-4 w-4" />
+                            </Button>
+                          ) : (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleReactivate(customer.id)}
+                              className="h-8 w-8 p-0 border-green-300 text-green-600 hover:bg-green-50"
+                            >
+                              <CheckCircle className="h-4 w-4" />
                             </Button>
                           )}
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleDelete(customer.id)}
+                            className="h-8 w-8 p-0 border-red-300 text-red-600 hover:bg-red-50"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
                         </div>
                       </td>
                     </tr>

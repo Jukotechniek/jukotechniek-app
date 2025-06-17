@@ -3,12 +3,16 @@ export interface Project {
   id: string;
   technicianId: string;
   technicianName: string;
+  customerId?: string;
+  customerName?: string;
   date: string;
   title: string;
   description: string;
   images: string[];
   hoursSpent: number;
+  status: 'in-progress' | 'completed' | 'needs-review';
   createdAt: string;
+  updatedAt?: string;
 }
 
 export interface ProjectImage {

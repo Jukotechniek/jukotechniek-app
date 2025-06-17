@@ -8,19 +8,29 @@ import { Textarea } from '@/components/ui/textarea';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { Project } from '@/types/projects';
-import { Camera, X, Plus } from 'lucide-react';
+import { Camera, X, Plus, Trash2, Edit2, Save, CheckCircle, AlertCircle, Clock } from 'lucide-react';
 
-// Mock data
+// Mock customers data
+const mockCustomers = [
+  { id: '1', name: 'Gemeente Amsterdam' },
+  { id: '2', name: 'KPN Kantoor Rotterdam' },
+  { id: '3', name: 'Philips Healthcare Utrecht' }
+];
+
+// Updated mock data with customer info and status
 const mockProjects: Project[] = [
   {
     id: '1',
     technicianId: '2',
     technicianName: 'Jan de Vries',
+    customerId: '1',
+    customerName: 'Gemeente Amsterdam',
     date: '2024-06-15',
     title: 'HVAC Installation',
     description: 'Installed new HVAC system at Amsterdam office building',
     images: [],
     hoursSpent: 8,
+    status: 'completed',
     createdAt: '2024-06-15T08:00:00Z'
   }
 ];
@@ -28,19 +38,23 @@ const mockProjects: Project[] = [
 const Projects = () => {
   const { user } = useAuth();
   const { toast } = useToast();
+  const [projects, setProjects] = useState(mockProjects);
   const [showAddForm, setShowAddForm] = useState(false);
+  const [editingProject, setEditingProject] = useState<Project | null>(null);
   const [selectedImages, setSelectedImages] = useState<File[]>([]);
   const [newProject, setNewProject] = useState({
     title: '',
     description: '',
     hoursSpent: '',
-    date: new Date().toISOString().split('T')[0] // Auto-fill with today's date
+    customerId: '',
+    date: new Date().toISOString().split('T')[0],
+    status: 'in-progress' as const
   });
 
   const isAdmin = user?.role === 'admin';
   const filteredProjects = isAdmin 
-    ? mockProjects 
-    : mockProjects.filter(project => project.technicianId === user?.id);
+    ? projects 
+    : projects.filter(project => project.technicianId === user?.id);
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
@@ -57,10 +71,10 @@ const Projects = () => {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!newProject.title || !newProject.date || !newProject.hoursSpent) {
+    if (!newProject.title || !newProject.date || !newProject.hoursSpent || !newProject.customerId) {
       toast({
-        title: "Error",
-        description: "Please fill in all required fields",
+        title: "Fout",
+        description: "Vul alle verplichte velden in",
         variant: "destructive"
       });
       return;
@@ -69,26 +83,144 @@ const Projects = () => {
     const hours = parseFloat(newProject.hoursSpent);
     if (hours <= 0 || hours > 24) {
       toast({
-        title: "Error",
-        description: "Hours must be between 0 and 24",
+        title: "Fout",
+        description: "Uren moeten tussen 0 en 24 liggen",
         variant: "destructive"
       });
       return;
     }
 
-    toast({
-      title: "Success",
-      description: "Project added successfully"
-    });
+    const selectedCustomer = mockCustomers.find(c => c.id === newProject.customerId);
+    
+    if (editingProject) {
+      // Update existing project
+      setProjects(projects.map(project => 
+        project.id === editingProject.id 
+          ? { 
+              ...project, 
+              ...newProject,
+              hoursSpent: hours,
+              customerName: selectedCustomer?.name || '',
+              updatedAt: new Date().toISOString()
+            }
+          : project
+      ));
+      toast({
+        title: "Succes",
+        description: "Project succesvol bijgewerkt"
+      });
+    } else {
+      // Add new project
+      const project: Project = {
+        id: Date.now().toString(),
+        technicianId: user?.id || '',
+        technicianName: user?.name || '',
+        customerId: newProject.customerId,
+        customerName: selectedCustomer?.name || '',
+        title: newProject.title,
+        description: newProject.description,
+        date: newProject.date,
+        hoursSpent: hours,
+        status: newProject.status,
+        images: [],
+        createdAt: new Date().toISOString()
+      };
+
+      setProjects([...projects, project]);
+      toast({
+        title: "Succes",
+        description: "Project succesvol toegevoegd"
+      });
+    }
 
     setNewProject({
       title: '',
       description: '',
       hoursSpent: '',
-      date: new Date().toISOString().split('T')[0]
+      customerId: '',
+      date: new Date().toISOString().split('T')[0],
+      status: 'in-progress'
     });
     setSelectedImages([]);
     setShowAddForm(false);
+    setEditingProject(null);
+  };
+
+  const handleEdit = (project: Project) => {
+    if (!isAdmin && project.technicianId !== user?.id) {
+      toast({
+        title: "Fout",
+        description: "Je kunt alleen je eigen projecten bewerken",
+        variant: "destructive"
+      });
+      return;
+    }
+    
+    setEditingProject(project);
+    setNewProject({
+      title: project.title,
+      description: project.description,
+      hoursSpent: project.hoursSpent.toString(),
+      customerId: project.customerId || '',
+      date: project.date,
+      status: project.status
+    });
+    setShowAddForm(true);
+  };
+
+  const handleDelete = (projectId: string, project: Project) => {
+    if (!isAdmin && project.technicianId !== user?.id) {
+      toast({
+        title: "Fout",
+        description: "Je kunt alleen je eigen projecten verwijderen",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setProjects(projects.filter(p => p.id !== projectId));
+    toast({
+      title: "Succes",
+      description: "Project succesvol verwijderd"
+    });
+  };
+
+  const handleStatusChange = (projectId: string, newStatus: Project['status']) => {
+    setProjects(projects.map(project => 
+      project.id === projectId 
+        ? { ...project, status: newStatus, updatedAt: new Date().toISOString() }
+        : project
+    ));
+    
+    const statusText = newStatus === 'completed' ? 'voltooid' : 
+                     newStatus === 'needs-review' ? 'heeft controle nodig' : 'in behandeling';
+    
+    toast({
+      title: "Succes",
+      description: `Project status bijgewerkt naar: ${statusText}`
+    });
+  };
+
+  const getStatusIcon = (status: Project['status']) => {
+    switch (status) {
+      case 'completed':
+        return <CheckCircle className="h-4 w-4 text-green-600" />;
+      case 'needs-review':
+        return <AlertCircle className="h-4 w-4 text-orange-600" />;
+      default:
+        return <Clock className="h-4 w-4 text-blue-600" />;
+    }
+  };
+
+  const getStatusText = (status: Project['status']) => {
+    switch (status) {
+      case 'completed':
+        return 'Voltooid';
+      case 'needs-review':
+        return 'Controle Nodig';
+      default:
+        return 'In Behandeling';
+    }
   };
 
   return (
@@ -97,42 +229,73 @@ const Projects = () => {
         <div className="mb-8 flex justify-between items-center">
           <div>
             <h1 className="text-3xl font-bold text-gray-900 mb-2">
-              {isAdmin ? 'All Projects' : 'My Projects'}
+              {isAdmin ? 'Alle Projecten' : 'Mijn Projecten'}
             </h1>
             <p className="text-gray-600">
-              {isAdmin ? 'View all technician projects' : 'Track your daily projects and work'}
+              {isAdmin ? 'Bekijk alle monteur projecten' : 'Volg je dagelijkse projecten en werk'}
             </p>
           </div>
           <Button
-            onClick={() => setShowAddForm(!showAddForm)}
+            onClick={() => {
+              setShowAddForm(!showAddForm);
+              setEditingProject(null);
+              setNewProject({
+                title: '',
+                description: '',
+                hoursSpent: '',
+                customerId: '',
+                date: new Date().toISOString().split('T')[0],
+                status: 'in-progress'
+              });
+            }}
             className="bg-red-600 hover:bg-red-700 text-white"
           >
-            {showAddForm ? 'Cancel' : 'Add Project'}
+            <Plus className="h-4 w-4 mr-2" />
+            {showAddForm ? 'Annuleren' : 'Project Toevoegen'}
           </Button>
         </div>
 
-        {/* Add Project Form */}
+        {/* Add/Edit Project Form */}
         {showAddForm && (
           <Card className="bg-white mb-6">
             <CardHeader>
-              <CardTitle className="text-lg font-semibold text-gray-900">Add New Project</CardTitle>
+              <CardTitle className="text-lg font-semibold text-gray-900">
+                {editingProject ? 'Project Bewerken' : 'Nieuw Project Toevoegen'}
+              </CardTitle>
             </CardHeader>
             <CardContent>
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label htmlFor="title">Project Title *</Label>
+                    <Label htmlFor="title">Project Titel *</Label>
                     <Input
                       id="title"
                       value={newProject.title}
                       onChange={(e) => setNewProject({ ...newProject, title: e.target.value })}
-                      placeholder="e.g., HVAC Installation"
+                      placeholder="bv. HVAC Installatie"
                       required
                       className="focus:ring-red-500 focus:border-red-500"
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="date">Date *</Label>
+                    <Label htmlFor="customer">Klant *</Label>
+                    <select
+                      id="customer"
+                      value={newProject.customerId}
+                      onChange={(e) => setNewProject({ ...newProject, customerId: e.target.value })}
+                      className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-red-500 focus:border-red-500"
+                      required
+                    >
+                      <option value="">Selecteer Klant</option>
+                      {mockCustomers.map(customer => (
+                        <option key={customer.id} value={customer.id}>
+                          {customer.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="date">Datum *</Label>
                     <Input
                       id="date"
                       type="date"
@@ -142,31 +305,44 @@ const Projects = () => {
                       className="focus:ring-red-500 focus:border-red-500"
                     />
                   </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="hours">Bestede Uren *</Label>
+                    <Input
+                      id="hours"
+                      type="number"
+                      step="0.5"
+                      min="0.5"
+                      max="24"
+                      value={newProject.hoursSpent}
+                      onChange={(e) => setNewProject({ ...newProject, hoursSpent: e.target.value })}
+                      placeholder="8.0"
+                      required
+                      className="focus:ring-red-500 focus:border-red-500"
+                    />
+                  </div>
                 </div>
                 
                 <div className="space-y-2">
-                  <Label htmlFor="hours">Hours Spent *</Label>
-                  <Input
-                    id="hours"
-                    type="number"
-                    step="0.5"
-                    min="0.5"
-                    max="24"
-                    value={newProject.hoursSpent}
-                    onChange={(e) => setNewProject({ ...newProject, hoursSpent: e.target.value })}
-                    placeholder="8.0"
-                    required
-                    className="focus:ring-red-500 focus:border-red-500"
-                  />
+                  <Label htmlFor="status">Status</Label>
+                  <select
+                    id="status"
+                    value={newProject.status}
+                    onChange={(e) => setNewProject({ ...newProject, status: e.target.value as Project['status'] })}
+                    className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-red-500 focus:border-red-500"
+                  >
+                    <option value="in-progress">In Behandeling</option>
+                    <option value="needs-review">Controle Nodig</option>
+                    <option value="completed">Voltooid</option>
+                  </select>
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="description">Description</Label>
+                  <Label htmlFor="description">Omschrijving</Label>
                   <Textarea
                     id="description"
                     value={newProject.description}
                     onChange={(e) => setNewProject({ ...newProject, description: e.target.value })}
-                    placeholder="Describe the work performed..."
+                    placeholder="Beschrijf het uitgevoerde werk..."
                     className="focus:ring-red-500 focus:border-red-500"
                     rows={3}
                   />
@@ -174,7 +350,7 @@ const Projects = () => {
 
                 {/* Image Upload */}
                 <div className="space-y-2">
-                  <Label>Project Images (Max 5)</Label>
+                  <Label>Project Afbeeldingen (Max 5)</Label>
                   <div className="border-2 border-dashed border-gray-300 rounded-lg p-4">
                     <div className="text-center">
                       <Camera className="mx-auto h-12 w-12 text-gray-400" />
@@ -194,10 +370,10 @@ const Projects = () => {
                             selectedImages.length >= 5 ? 'opacity-50 cursor-not-allowed' : ''
                           }`}
                         >
-                          Click to upload images
+                          Klik om afbeeldingen te uploaden
                         </label>
                       </div>
-                      <p className="text-sm text-gray-500">PNG, JPG up to 10MB each</p>
+                      <p className="text-sm text-gray-500">PNG, JPG tot 10MB elk</p>
                     </div>
                   </div>
 
@@ -208,7 +384,7 @@ const Projects = () => {
                         <div key={index} className="relative">
                           <img
                             src={URL.createObjectURL(image)}
-                            alt={`Preview ${index + 1}`}
+                            alt={`Voorbeeld ${index + 1}`}
                             className="w-full h-24 object-cover rounded-lg"
                           />
                           <button
@@ -225,7 +401,7 @@ const Projects = () => {
                 </div>
 
                 <Button type="submit" className="bg-red-600 hover:bg-red-700 text-white">
-                  Add Project
+                  {editingProject ? 'Project Bijwerken' : 'Project Toevoegen'}
                 </Button>
               </form>
             </CardContent>
@@ -236,40 +412,101 @@ const Projects = () => {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {filteredProjects.length === 0 ? (
             <div className="col-span-2 text-center py-8 text-gray-500">
-              No projects found
+              Geen projecten gevonden
             </div>
           ) : (
             filteredProjects.map((project) => (
               <Card key={project.id} className="bg-white">
                 <CardHeader>
                   <div className="flex justify-between items-start">
-                    <div>
+                    <div className="flex-1">
                       <CardTitle className="text-lg font-semibold text-gray-900">
                         {project.title}
                       </CardTitle>
                       {isAdmin && (
                         <p className="text-sm text-gray-600">{project.technicianName}</p>
                       )}
+                      <p className="text-sm text-gray-600">{project.customerName}</p>
+                      <div className="flex items-center mt-2">
+                        {getStatusIcon(project.status)}
+                        <span className="ml-1 text-sm font-medium">{getStatusText(project.status)}</span>
+                      </div>
                     </div>
                     <div className="text-right">
                       <p className="text-sm text-gray-600">
-                        {new Date(project.date).toLocaleDateString()}
+                        {new Date(project.date).toLocaleDateString('nl-NL')}
                       </p>
                       <p className="text-lg font-semibold text-red-600">
-                        {project.hoursSpent}h
+                        {project.hoursSpent}u
                       </p>
+                      <div className="flex space-x-1 mt-2">
+                        {(isAdmin || project.technicianId === user?.id) && (
+                          <>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleEdit(project)}
+                              className="h-8 w-8 p-0"
+                            >
+                              <Edit2 className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleDelete(project.id, project)}
+                              className="h-8 w-8 p-0 border-red-300 text-red-600 hover:bg-red-50"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </CardHeader>
                 <CardContent>
                   <p className="text-gray-700 mb-4">{project.description}</p>
+                  
+                  {/* Status change buttons for technicians */}
+                  {project.technicianId === user?.id && (
+                    <div className="flex flex-wrap gap-2 mb-4">
+                      <Button
+                        size="sm"
+                        onClick={() => handleStatusChange(project.id, 'in-progress')}
+                        variant={project.status === 'in-progress' ? 'default' : 'outline'}
+                        className="text-xs"
+                      >
+                        <Clock className="h-3 w-3 mr-1" />
+                        In Behandeling
+                      </Button>
+                      <Button
+                        size="sm"
+                        onClick={() => handleStatusChange(project.id, 'needs-review')}
+                        variant={project.status === 'needs-review' ? 'default' : 'outline'}
+                        className="text-xs"
+                      >
+                        <AlertCircle className="h-3 w-3 mr-1" />
+                        Controle Nodig
+                      </Button>
+                      <Button
+                        size="sm"
+                        onClick={() => handleStatusChange(project.id, 'completed')}
+                        variant={project.status === 'completed' ? 'default' : 'outline'}
+                        className="text-xs"
+                      >
+                        <CheckCircle className="h-3 w-3 mr-1" />
+                        Voltooid
+                      </Button>
+                    </div>
+                  )}
+                  
                   {project.images.length > 0 && (
                     <div className="grid grid-cols-3 gap-2">
                       {project.images.map((image, index) => (
                         <img
                           key={index}
                           src={image}
-                          alt={`Project image ${index + 1}`}
+                          alt={`Project afbeelding ${index + 1}`}
                           className="w-full h-20 object-cover rounded"
                         />
                       ))}
