@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -31,6 +30,8 @@ const AIChatbot = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [webhookUrl, setWebhookUrl] = useState('');
   const [showSettings, setShowSettings] = useState(false);
+
+  const isAdmin = user?.role === 'admin';
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -112,14 +113,16 @@ const AIChatbot = () => {
             <h1 className="text-3xl font-bold text-gray-900 mb-2">AI Assistant</h1>
             <p className="text-gray-600">Get help with work hours, projects, and billing</p>
           </div>
-          <Button
-            onClick={() => setShowSettings(!showSettings)}
-            variant="outline"
-            className="border-gray-300"
-          >
-            <Settings className="h-4 w-4 mr-2" />
-            Settings
-          </Button>
+          {isAdmin && (
+            <Button
+              onClick={() => setShowSettings(!showSettings)}
+              variant="outline"
+              className="border-gray-300"
+            >
+              <Settings className="h-4 w-4 mr-2" />
+              Settings
+            </Button>
+          )}
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -192,10 +195,10 @@ const AIChatbot = () => {
 
           {/* Settings Panel */}
           <div className="space-y-6">
-            {showSettings && (
+            {showSettings && isAdmin && (
               <Card className="bg-white">
                 <CardHeader>
-                  <CardTitle className="text-lg font-semibold text-gray-900">Webhook Settings</CardTitle>
+                  <CardTitle className="text-lg font-semibold text-gray-900">Admin Settings</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div className="space-y-2">

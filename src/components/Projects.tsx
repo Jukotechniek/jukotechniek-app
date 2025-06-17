@@ -34,7 +34,7 @@ const Projects = () => {
     title: '',
     description: '',
     hoursSpent: '',
-    date: ''
+    date: new Date().toISOString().split('T')[0] // Auto-fill with today's date
   });
 
   const isAdmin = user?.role === 'admin';
@@ -85,7 +85,7 @@ const Projects = () => {
       title: '',
       description: '',
       hoursSpent: '',
-      date: ''
+      date: new Date().toISOString().split('T')[0]
     });
     setSelectedImages([]);
     setShowAddForm(false);

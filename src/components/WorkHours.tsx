@@ -52,9 +52,10 @@ const WorkHours = () => {
   const [showAddForm, setShowAddForm] = useState(false);
   const [newEntry, setNewEntry] = useState({
     technicianId: user?.role === 'technician' ? user.id : '',
-    date: '',
+    date: new Date().toISOString().split('T')[0], // Auto-fill with today's date
     hoursWorked: '',
-    description: ''
+    description: '',
+    travelExpense: ''
   });
 
   const isAdmin = user?.role === 'admin';
@@ -84,6 +85,16 @@ const WorkHours = () => {
       return;
     }
 
+    const travelExpense = newEntry.travelExpense ? parseFloat(newEntry.travelExpense) : 0;
+    if (travelExpense < 0) {
+      toast({
+        title: "Error",
+        description: "Travel expense cannot be negative",
+        variant: "destructive"
+      });
+      return;
+    }
+
     toast({
       title: "Success",
       description: "Work entry added successfully"
@@ -91,9 +102,10 @@ const WorkHours = () => {
 
     setNewEntry({
       technicianId: user?.role === 'technician' ? user.id : '',
-      date: '',
+      date: new Date().toISOString().split('T')[0],
       hoursWorked: '',
-      description: ''
+      description: '',
+      travelExpense: ''
     });
     setShowAddForm(false);
   };
@@ -165,6 +177,19 @@ const WorkHours = () => {
                     onChange={(e) => setNewEntry({ ...newEntry, hoursWorked: e.target.value })}
                     placeholder="8.0"
                     required
+                    className="focus:ring-red-500 focus:border-red-500"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="travelExpense">Travel Expense (€)</Label>
+                  <Input
+                    id="travelExpense"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={newEntry.travelExpense}
+                    onChange={(e) => setNewEntry({ ...newEntry, travelExpense: e.target.value })}
+                    placeholder="25.00"
                     className="focus:ring-red-500 focus:border-red-500"
                   />
                 </div>

@@ -7,6 +7,7 @@ export interface WorkEntry {
   hoursWorked: number;
   isManualEntry: boolean;
   description?: string;
+  travelExpense?: number;
   createdAt: string;
   createdBy: string;
 }

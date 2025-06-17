@@ -23,6 +23,12 @@ const mockTechnicianData: TechnicianSummary[] = [
   }
 ];
 
+// Mock billing data for profit calculation
+const mockBillingData = [
+  { technicianId: '2', hourlyRate: 25, billableRate: 45, travelExpenses: 125 },
+  { technicianId: '3', hourlyRate: 22, billableRate: 40, travelExpenses: 98 }
+];
+
 const weeklyData = [
   { week: 'Week 1', hours: 320 },
   { week: 'Week 2', hours: 295 },
@@ -40,6 +46,27 @@ const Dashboard = () => {
   const totalDays = mockTechnicianData.reduce((sum, tech) => sum + tech.daysWorked, 0);
   const avgHoursPerDay = totalDays > 0 ? (totalHours / totalDays).toFixed(1) : '0';
 
+  // Calculate total profit (admin only)
+  const totalProfit = isAdmin ? mockTechnicianData.reduce((sum, tech) => {
+    const billing = mockBillingData.find(b => b.technicianId === tech.technicianId);
+    if (billing) {
+      const cost = (tech.totalHours * billing.hourlyRate) + billing.travelExpenses;
+      const revenue = tech.totalHours * billing.billableRate;
+      return sum + (revenue - cost);
+    }
+    return sum;
+  }, 0) : 0;
+
+  const totalRevenue = isAdmin ? mockTechnicianData.reduce((sum, tech) => {
+    const billing = mockBillingData.find(b => b.technicianId === tech.technicianId);
+    return sum + (billing ? tech.totalHours * billing.billableRate : 0);
+  }, 0) : 0;
+
+  const totalCost = isAdmin ? mockTechnicianData.reduce((sum, tech) => {
+    const billing = mockBillingData.find(b => b.technicianId === tech.technicianId);
+    return sum + (billing ? (tech.totalHours * billing.hourlyRate) + billing.travelExpenses : 0);
+  }, 0) : 0;
+
   const currentUserData = mockTechnicianData.find(tech => tech.technicianId === user?.id);
 
   return (
@@ -50,7 +77,7 @@ const Dashboard = () => {
             {isAdmin ? 'Admin Dashboard' : 'My Dashboard'}
           </h1>
           <p className="text-gray-600">
-            {isAdmin ? 'Overview of all technician work hours' : 'Your work hour summary'}
+            {isAdmin ? 'Overview of all technician work hours and profit' : 'Your work hour summary'}
           </p>
         </div>
 
@@ -67,31 +94,33 @@ const Dashboard = () => {
                   <p className="text-xs text-gray-600">All technicians</p>
                 </CardContent>
               </Card>
-              <Card className="bg-white border-l-4 border-l-black">
+              <Card className="bg-white border-l-4 border-l-green-600">
                 <CardHeader className="pb-2">
-                  <CardTitle className="text-sm font-medium text-gray-600">Active Technicians</CardTitle>
+                  <CardTitle className="text-sm font-medium text-gray-600">Total Profit</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold text-gray-900">{mockTechnicianData.length}</div>
-                  <p className="text-xs text-gray-600">Working this month</p>
+                  <div className="text-2xl font-bold text-green-600">€{totalProfit.toFixed(2)}</div>
+                  <p className="text-xs text-gray-600">Revenue: €{totalRevenue.toFixed(2)}</p>
+                </CardContent>
+              </Card>
+              <Card className="bg-white border-l-4 border-l-black">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-medium text-gray-600">Total Cost</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold text-gray-900">€{totalCost.toFixed(2)}</div>
+                  <p className="text-xs text-gray-600">Wages + Travel</p>
                 </CardContent>
               </Card>
               <Card className="bg-white border-l-4 border-l-red-600">
                 <CardHeader className="pb-2">
-                  <CardTitle className="text-sm font-medium text-gray-600">Total Days</CardTitle>
+                  <CardTitle className="text-sm font-medium text-gray-600">Profit Margin</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold text-gray-900">{totalDays}</div>
-                  <p className="text-xs text-gray-600">Days worked</p>
-                </CardContent>
-              </Card>
-              <Card className="bg-white border-l-4 border-l-black">
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-sm font-medium text-gray-600">Avg Hours/Day</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold text-gray-900">{avgHoursPerDay}</div>
-                  <p className="text-xs text-gray-600">Per technician</p>
+                  <div className="text-2xl font-bold text-gray-900">
+                    {totalRevenue > 0 ? ((totalProfit / totalRevenue) * 100).toFixed(1) : '0'}%
+                  </div>
+                  <p className="text-xs text-gray-600">This month</p>
                 </CardContent>
               </Card>
             </>
@@ -216,20 +245,31 @@ const Dashboard = () => {
                       <th className="pb-3 text-sm font-medium text-gray-600">Technician</th>
                       <th className="pb-3 text-sm font-medium text-gray-600">Total Hours</th>
                       <th className="pb-3 text-sm font-medium text-gray-600">Days Worked</th>
-                      <th className="pb-3 text-sm font-medium text-gray-600">Avg Hours/Day</th>
-                      <th className="pb-3 text-sm font-medium text-gray-600">Last Worked</th>
+                      <th className="pb-3 text-sm font-medium text-gray-600">Cost</th>
+                      <th className="pb-3 text-sm font-medium text-gray-600">Revenue</th>
+                      <th className="pb-3 text-sm font-medium text-gray-600">Profit</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {mockTechnicianData.map((tech) => (
-                      <tr key={tech.technicianId} className="border-b border-gray-100">
-                        <td className="py-3 font-medium text-gray-900">{tech.technicianName}</td>
-                        <td className="py-3 text-gray-700">{tech.totalHours}h</td>
-                        <td className="py-3 text-gray-700">{tech.daysWorked}</td>
-                        <td className="py-3 text-gray-700">{(tech.totalHours / tech.daysWorked).toFixed(1)}h</td>
-                        <td className="py-3 text-gray-700">{new Date(tech.lastWorked).toLocaleDateString()}</td>
-                      </tr>
-                    ))}
+                    {mockTechnicianData.map((tech) => {
+                      const billing = mockBillingData.find(b => b.technicianId === tech.technicianId);
+                      const cost = billing ? (tech.totalHours * billing.hourlyRate) + billing.travelExpenses : 0;
+                      const revenue = billing ? tech.totalHours * billing.billableRate : 0;
+                      const profit = revenue - cost;
+                      
+                      return (
+                        <tr key={tech.technicianId} className="border-b border-gray-100">
+                          <td className="py-3 font-medium text-gray-900">{tech.technicianName}</td>
+                          <td className="py-3 text-gray-700">{tech.totalHours}h</td>
+                          <td className="py-3 text-gray-700">{tech.daysWorked}</td>
+                          <td className="py-3 text-gray-700">€{cost.toFixed(2)}</td>
+                          <td className="py-3 text-gray-700">€{revenue.toFixed(2)}</td>
+                          <td className={`py-3 font-medium ${profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                            €{profit.toFixed(2)}
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
