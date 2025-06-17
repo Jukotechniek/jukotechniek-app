@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -8,17 +7,32 @@ import { Textarea } from '@/components/ui/textarea';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { WorkEntry } from '@/types/workHours';
+import { calculateOvertimeHours } from '@/utils/overtimeCalculations';
 
-// Mock data
+// Mock customers data
+const mockCustomers = [
+  { id: '1', name: 'Gemeente Amsterdam', travelExpense: 25.00 },
+  { id: '2', name: 'KPN Kantoor Rotterdam', travelExpense: 35.00 },
+  { id: '3', name: 'Philips Healthcare Utrecht', travelExpense: 30.00 }
+];
+
+// Updated mock data with customer and overtime info
 const mockWorkEntries: WorkEntry[] = [
   {
     id: '1',
     technicianId: '2',
     technicianName: 'Jan de Vries',
+    customerId: '1',
+    customerName: 'Gemeente Amsterdam',
     date: '2024-06-15',
-    hoursWorked: 8,
+    hoursWorked: 9,
+    regularHours: 8,
+    overtimeHours: 1,
+    weekendHours: 0,
+    isWeekend: false,
     isManualEntry: false,
     description: 'Installation at Amsterdam office',
+    travelExpense: 25.00,
     createdAt: '2024-06-15T08:00:00Z',
     createdBy: '2'
   },
@@ -26,23 +40,19 @@ const mockWorkEntries: WorkEntry[] = [
     id: '2',
     technicianId: '3',
     technicianName: 'Pieter Jansen',
+    customerId: '2',
+    customerName: 'KPN Kantoor Rotterdam',
     date: '2024-06-14',
     hoursWorked: 7.5,
+    regularHours: 7.5,
+    overtimeHours: 0,
+    weekendHours: 0,
+    isWeekend: false,
     isManualEntry: true,
     description: 'Maintenance work Rotterdam',
+    travelExpense: 35.00,
     createdAt: '2024-06-14T09:30:00Z',
     createdBy: '1'
-  },
-  {
-    id: '3',
-    technicianId: '2',
-    technicianName: 'Jan de Vries',
-    date: '2024-06-13',
-    hoursWorked: 9,
-    isManualEntry: false,
-    description: 'Emergency repair Utrecht',
-    createdAt: '2024-06-13T07:45:00Z',
-    createdBy: '2'
   }
 ];
 
@@ -52,10 +62,10 @@ const WorkHours = () => {
   const [showAddForm, setShowAddForm] = useState(false);
   const [newEntry, setNewEntry] = useState({
     technicianId: user?.role === 'technician' ? user.id : '',
-    date: new Date().toISOString().split('T')[0], // Auto-fill with today's date
+    customerId: mockCustomers.length === 1 ? mockCustomers[0].id : '',
+    date: new Date().toISOString().split('T')[0],
     hoursWorked: '',
-    description: '',
-    travelExpense: ''
+    description: ''
   });
 
   const isAdmin = user?.role === 'admin';
@@ -66,7 +76,7 @@ const WorkHours = () => {
   const handleAddEntry = (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!newEntry.technicianId || !newEntry.date || !newEntry.hoursWorked) {
+    if (!newEntry.technicianId || !newEntry.customerId || !newEntry.date || !newEntry.hoursWorked) {
       toast({
         title: "Error",
         description: "Please fill in all required fields",
@@ -85,27 +95,23 @@ const WorkHours = () => {
       return;
     }
 
-    const travelExpense = newEntry.travelExpense ? parseFloat(newEntry.travelExpense) : 0;
-    if (travelExpense < 0) {
-      toast({
-        title: "Error",
-        description: "Travel expense cannot be negative",
-        variant: "destructive"
-      });
-      return;
-    }
-
+    // Calculate overtime hours
+    const overtimeData = calculateOvertimeHours(newEntry.date, hours);
+    
+    // Get customer travel expense (admin sees it, technician doesn't)
+    const selectedCustomer = mockCustomers.find(c => c.id === newEntry.customerId);
+    
     toast({
       title: "Success",
-      description: "Work entry added successfully"
+      description: `Work entry added successfully. ${overtimeData.overtimeHours > 0 ? `Overtime: ${overtimeData.overtimeHours}h` : ''} ${overtimeData.isWeekend ? 'Weekend rate applied' : ''}`
     });
 
     setNewEntry({
       technicianId: user?.role === 'technician' ? user.id : '',
+      customerId: mockCustomers.length === 1 ? mockCustomers[0].id : '',
       date: new Date().toISOString().split('T')[0],
       hoursWorked: '',
-      description: '',
-      travelExpense: ''
+      description: ''
     });
     setShowAddForm(false);
   };
@@ -155,6 +161,23 @@ const WorkHours = () => {
                   </div>
                 )}
                 <div className="space-y-2">
+                  <Label htmlFor="customer">Customer</Label>
+                  <select
+                    id="customer"
+                    value={newEntry.customerId}
+                    onChange={(e) => setNewEntry({ ...newEntry, customerId: e.target.value })}
+                    className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-red-500 focus:border-red-500"
+                    required
+                  >
+                    <option value="">Select Customer</option>
+                    {mockCustomers.map(customer => (
+                      <option key={customer.id} value={customer.id}>
+                        {customer.name} {isAdmin && `(€${customer.travelExpense.toFixed(2)} travel)`}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-2">
                   <Label htmlFor="date">Date</Label>
                   <Input
                     id="date"
@@ -179,19 +202,21 @@ const WorkHours = () => {
                     required
                     className="focus:ring-red-500 focus:border-red-500"
                   />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="travelExpense">Travel Expense (€)</Label>
-                  <Input
-                    id="travelExpense"
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    value={newEntry.travelExpense}
-                    onChange={(e) => setNewEntry({ ...newEntry, travelExpense: e.target.value })}
-                    placeholder="25.00"
-                    className="focus:ring-red-500 focus:border-red-500"
-                  />
+                  {newEntry.hoursWorked && (
+                    <div className="text-xs text-gray-600">
+                      {(() => {
+                        const hours = parseFloat(newEntry.hoursWorked);
+                        const overtimeData = calculateOvertimeHours(newEntry.date, hours);
+                        if (overtimeData.isWeekend) {
+                          return `Weekend: ${hours}h at 150% rate`;
+                        } else if (overtimeData.overtimeHours > 0) {
+                          return `Regular: ${overtimeData.regularHours}h, Overtime: ${overtimeData.overtimeHours}h at 125%`;
+                        } else {
+                          return `Regular hours: ${hours}h`;
+                        }
+                      })()}
+                    </div>
+                  )}
                 </div>
                 <div className="space-y-2 md:col-span-2">
                   <Label htmlFor="description">Description (Optional)</Label>
@@ -231,8 +256,11 @@ const WorkHours = () => {
                   <thead>
                     <tr className="border-b border-gray-200">
                       {isAdmin && <th className="pb-3 text-sm font-medium text-gray-600">Technician</th>}
+                      <th className="pb-3 text-sm font-medium text-gray-600">Customer</th>
                       <th className="pb-3 text-sm font-medium text-gray-600">Date</th>
                       <th className="pb-3 text-sm font-medium text-gray-600">Hours</th>
+                      <th className="pb-3 text-sm font-medium text-gray-600">Overtime</th>
+                      {isAdmin && <th className="pb-3 text-sm font-medium text-gray-600">Travel</th>}
                       <th className="pb-3 text-sm font-medium text-gray-600">Type</th>
                       <th className="pb-3 text-sm font-medium text-gray-600">Description</th>
                     </tr>
@@ -243,10 +271,39 @@ const WorkHours = () => {
                         {isAdmin && (
                           <td className="py-3 font-medium text-gray-900">{entry.technicianName}</td>
                         )}
+                        <td className="py-3 text-gray-700">{entry.customerName}</td>
                         <td className="py-3 text-gray-700">
                           {new Date(entry.date).toLocaleDateString()}
+                          {entry.isWeekend && <span className="ml-1 text-xs text-purple-600">(Weekend)</span>}
                         </td>
-                        <td className="py-3 text-gray-700 font-medium">{entry.hoursWorked}h</td>
+                        <td className="py-3 text-gray-700 font-medium">
+                          {entry.hoursWorked}h
+                          {entry.regularHours !== entry.hoursWorked && (
+                            <div className="text-xs text-gray-500">
+                              Regular: {entry.regularHours}h
+                            </div>
+                          )}
+                        </td>
+                        <td className="py-3 text-gray-700">
+                          {entry.overtimeHours > 0 && (
+                            <span className="text-orange-600 font-medium">
+                              {entry.overtimeHours}h (125%)
+                            </span>
+                          )}
+                          {entry.weekendHours > 0 && (
+                            <span className="text-purple-600 font-medium">
+                              {entry.weekendHours}h (150%)
+                            </span>
+                          )}
+                          {entry.overtimeHours === 0 && entry.weekendHours === 0 && (
+                            <span className="text-gray-400">-</span>
+                          )}
+                        </td>
+                        {isAdmin && (
+                          <td className="py-3 text-gray-700">
+                            €{entry.travelExpense?.toFixed(2) || '0.00'}
+                          </td>
+                        )}
                         <td className="py-3">
                           <span className={`px-2 py-1 rounded-full text-xs font-medium ${
                             entry.isManualEntry

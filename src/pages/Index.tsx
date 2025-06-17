@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { AuthProvider, useAuth } from '@/contexts/AuthContext';
 import LoginForm from '@/components/LoginForm';
@@ -6,6 +5,7 @@ import Navigation from '@/components/Navigation';
 import Dashboard from '@/components/Dashboard';
 import WorkHours from '@/components/WorkHours';
 import Projects from '@/components/Projects';
+import CustomerManagement from '@/components/CustomerManagement';
 import Billing from '@/components/Billing';
 import HourComparison from '@/components/HourComparison';
 import UserManagement from '@/components/UserManagement';
@@ -39,6 +39,8 @@ const AppContent = () => {
         return <WorkHours />;
       case 'projects':
         return <Projects />;
+      case 'customers':
+        return <CustomerManagement />;
       case 'billing':
         return <Billing />;
       case 'verification':

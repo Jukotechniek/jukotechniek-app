@@ -1,7 +1,7 @@
-
 import React from 'react';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
+import { BarChart3, Clock, Briefcase, Building2, DollarSign, CheckCircle, Users, FileText, Bot } from 'lucide-react';
 
 interface NavigationProps {
   activeTab: string;
@@ -10,16 +10,18 @@ interface NavigationProps {
 
 const Navigation: React.FC<NavigationProps> = ({ activeTab, onTabChange }) => {
   const { user, logout } = useAuth();
+  const isAdmin = user?.role === 'admin';
 
   const adminTabs = [
-    { id: 'dashboard', label: 'Dashboard' },
-    { id: 'hours', label: 'Work Hours' },
-    { id: 'projects', label: 'Projects' },
-    { id: 'billing', label: 'Billing' },
-    { id: 'verification', label: 'Hour Verification' },
-    { id: 'users', label: 'User Management' },
-    { id: 'reports', label: 'Reports' },
-    { id: 'chatbot', label: 'AI Assistant' }
+    { id: 'dashboard', label: 'Dashboard', icon: BarChart3 },
+    { id: 'hours', label: 'Work Hours', icon: Clock },
+    { id: 'projects', label: 'Projects', icon: Briefcase },
+    { id: 'customers', label: 'Customers', icon: Building2 },
+    { id: 'billing', label: 'Billing', icon: DollarSign },
+    { id: 'verification', label: 'Hour Verification', icon: CheckCircle },
+    { id: 'users', label: 'User Management', icon: Users },
+    { id: 'reports', label: 'Reports', icon: FileText },
+    { id: 'chatbot', label: 'AI Assistant', icon: Bot }
   ];
 
   const technicianTabs = [
@@ -29,7 +31,7 @@ const Navigation: React.FC<NavigationProps> = ({ activeTab, onTabChange }) => {
     { id: 'chatbot', label: 'AI Assistant' }
   ];
 
-  const tabs = user?.role === 'admin' ? adminTabs : technicianTabs;
+  const tabs = isAdmin ? adminTabs : technicianTabs;
 
   return (
     <nav className="bg-black text-white shadow-lg">

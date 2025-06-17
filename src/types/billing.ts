@@ -1,20 +1,25 @@
 
-export interface TechnicianRate {
+export interface TechnicianBilling {
   technicianId: string;
   technicianName: string;
   hourlyRate: number;
   billableRate: number;
-  createdAt: string;
-  updatedAt: string;
+  overtimeMultiplier: number; // 1.25 for >8 hours
+  weekendMultiplier: number; // 1.5 for weekends
 }
 
-export interface BillingReport {
-  technicianId: string;
-  technicianName: string;
+export interface BillingPeriod {
+  startDate: string;
+  endDate: string;
+  technicianBilling: TechnicianBilling[];
+}
+
+export interface CustomerBilling {
+  customerId: string;
+  customerName: string;
   totalHours: number;
-  hourlyRate: number;
-  billableRate: number;
   totalCost: number;
-  totalBillable: number;
+  totalRevenue: number;
   profit: number;
+  entries: WorkEntry[];
 }
