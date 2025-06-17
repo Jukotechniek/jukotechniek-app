@@ -9,6 +9,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { Customer } from '@/types/customers';
 import { Trash2, Edit2, Plus } from 'lucide-react';
+import CustomerTechnicianRates from './CustomerTechnicianRates';
 
 // Mock data
 const mockCustomers: Customer[] = [
@@ -16,7 +17,6 @@ const mockCustomers: Customer[] = [
     id: '1',
     name: 'Gemeente Amsterdam',
     address: 'Stadshuis, Amsterdam',
-    travelExpense: 25.00,
     createdAt: '2024-06-01T00:00:00Z',
     isActive: true
   },
@@ -24,7 +24,6 @@ const mockCustomers: Customer[] = [
     id: '2', 
     name: 'KPN Kantoor Rotterdam',
     address: 'Wilhelminakade 123, Rotterdam',
-    travelExpense: 35.00,
     createdAt: '2024-06-01T00:00:00Z',
     isActive: true
   },
@@ -32,7 +31,6 @@ const mockCustomers: Customer[] = [
     id: '3',
     name: 'Philips Healthcare Utrecht',
     address: 'Science Park, Utrecht',
-    travelExpense: 30.00,
     createdAt: '2024-06-01T00:00:00Z',
     isActive: true
   }
@@ -46,8 +44,7 @@ const CustomerManagement = () => {
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
   const [formData, setFormData] = useState({
     name: '',
-    address: '',
-    travelExpense: ''
+    address: ''
   });
 
   const isAdmin = user?.role === 'admin';
@@ -56,8 +53,8 @@ const CustomerManagement = () => {
     return (
       <div className="p-6 bg-gray-50 min-h-screen">
         <div className="max-w-7xl mx-auto text-center">
-          <h1 className="text-2xl font-bold text-gray-900">Access Denied</h1>
-          <p className="text-gray-600">Only administrators can manage customers.</p>
+          <h1 className="text-2xl font-bold text-gray-900">Toegang Geweigerd</h1>
+          <p className="text-gray-600">Alleen beheerders kunnen klanten beheren.</p>
         </div>
       </div>
     );
@@ -66,20 +63,10 @@ const CustomerManagement = () => {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!formData.name || !formData.address || !formData.travelExpense) {
+    if (!formData.name || !formData.address) {
       toast({
-        title: "Error",
-        description: "Please fill in all fields",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    const travelExpense = parseFloat(formData.travelExpense);
-    if (travelExpense < 0) {
-      toast({
-        title: "Error", 
-        description: "Travel expense cannot be negative",
+        title: "Fout",
+        description: "Vul alle velden in",
         variant: "destructive"
       });
       return;
@@ -89,12 +76,12 @@ const CustomerManagement = () => {
       // Update existing customer
       setCustomers(customers.map(customer => 
         customer.id === editingCustomer.id 
-          ? { ...customer, ...formData, travelExpense }
+          ? { ...customer, ...formData }
           : customer
       ));
       toast({
-        title: "Success",
-        description: "Customer updated successfully"
+        title: "Succes",
+        description: "Klant succesvol bijgewerkt"
       });
     } else {
       // Add new customer
@@ -102,18 +89,17 @@ const CustomerManagement = () => {
         id: Date.now().toString(),
         name: formData.name,
         address: formData.address,
-        travelExpense,
         createdAt: new Date().toISOString(),
         isActive: true
       };
       setCustomers([...customers, newCustomer]);
       toast({
-        title: "Success",
-        description: "Customer added successfully"
+        title: "Succes",
+        description: "Klant succesvol toegevoegd"
       });
     }
 
-    setFormData({ name: '', address: '', travelExpense: '' });
+    setFormData({ name: '', address: '' });
     setShowAddForm(false);
     setEditingCustomer(null);
   };
@@ -122,8 +108,7 @@ const CustomerManagement = () => {
     setEditingCustomer(customer);
     setFormData({
       name: customer.name,
-      address: customer.address,
-      travelExpense: customer.travelExpense.toString()
+      address: customer.address
     });
     setShowAddForm(true);
   };
@@ -135,8 +120,8 @@ const CustomerManagement = () => {
         : customer
     ));
     toast({
-      title: "Success",
-      description: "Customer deactivated successfully"
+      title: "Succes",
+      description: "Klant succesvol gedeactiveerd"
     });
   };
 
@@ -145,19 +130,19 @@ const CustomerManagement = () => {
       <div className="max-w-7xl mx-auto">
         <div className="mb-8 flex justify-between items-center">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">Customer Management</h1>
-            <p className="text-gray-600">Manage customers and their travel expenses</p>
+            <h1 className="text-3xl font-bold text-gray-900 mb-2">Klantenbeheer</h1>
+            <p className="text-gray-600">Beheer klanten en hun reiskosten</p>
           </div>
           <Button
             onClick={() => {
               setShowAddForm(!showAddForm);
               setEditingCustomer(null);
-              setFormData({ name: '', address: '', travelExpense: '' });
+              setFormData({ name: '', address: '' });
             }}
             className="bg-red-600 hover:bg-red-700 text-white"
           >
             <Plus className="h-4 w-4 mr-2" />
-            {showAddForm ? 'Cancel' : 'Add Customer'}
+            {showAddForm ? 'Annuleren' : 'Klant Toevoegen'}
           </Button>
         </div>
 
@@ -166,50 +151,36 @@ const CustomerManagement = () => {
           <Card className="bg-white mb-6">
             <CardHeader>
               <CardTitle className="text-lg font-semibold text-gray-900">
-                {editingCustomer ? 'Edit Customer' : 'Add New Customer'}
+                {editingCustomer ? 'Klant Bewerken' : 'Nieuwe Klant Toevoegen'}
               </CardTitle>
             </CardHeader>
             <CardContent>
               <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="name">Customer Name</Label>
+                  <Label htmlFor="name">Klantnaam</Label>
                   <Input
                     id="name"
                     value={formData.name}
                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    placeholder="Customer name"
-                    required
-                    className="focus:ring-red-500 focus:border-red-500"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="travelExpense">Travel Expense (€)</Label>
-                  <Input
-                    id="travelExpense"
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    value={formData.travelExpense}
-                    onChange={(e) => setFormData({ ...formData, travelExpense: e.target.value })}
-                    placeholder="25.00"
+                    placeholder="Klantnaam"
                     required
                     className="focus:ring-red-500 focus:border-red-500"
                   />
                 </div>
                 <div className="space-y-2 md:col-span-2">
-                  <Label htmlFor="address">Address</Label>
+                  <Label htmlFor="address">Adres</Label>
                   <Textarea
                     id="address"
                     value={formData.address}
                     onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-                    placeholder="Customer address"
+                    placeholder="Klantadres"
                     required
                     className="focus:ring-red-500 focus:border-red-500"
                   />
                 </div>
                 <div className="md:col-span-2">
                   <Button type="submit" className="bg-red-600 hover:bg-red-700 text-white mr-2">
-                    {editingCustomer ? 'Update Customer' : 'Add Customer'}
+                    {editingCustomer ? 'Klant Bijwerken' : 'Klant Toevoegen'}
                   </Button>
                 </div>
               </form>
@@ -221,7 +192,7 @@ const CustomerManagement = () => {
         <Card className="bg-white">
           <CardHeader>
             <CardTitle className="text-lg font-semibold text-gray-900">
-              Customers ({customers.filter(c => c.isActive).length})
+              Klanten ({customers.filter(c => c.isActive).length})
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -229,11 +200,10 @@ const CustomerManagement = () => {
               <table className="w-full text-left">
                 <thead>
                   <tr className="border-b border-gray-200">
-                    <th className="pb-3 text-sm font-medium text-gray-600">Customer Name</th>
-                    <th className="pb-3 text-sm font-medium text-gray-600">Address</th>
-                    <th className="pb-3 text-sm font-medium text-gray-600">Travel Expense</th>
+                    <th className="pb-3 text-sm font-medium text-gray-600">Klantnaam</th>
+                    <th className="pb-3 text-sm font-medium text-gray-600">Adres</th>
                     <th className="pb-3 text-sm font-medium text-gray-600">Status</th>
-                    <th className="pb-3 text-sm font-medium text-gray-600">Actions</th>
+                    <th className="pb-3 text-sm font-medium text-gray-600">Acties</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -241,14 +211,13 @@ const CustomerManagement = () => {
                     <tr key={customer.id} className="border-b border-gray-100 hover:bg-gray-50">
                       <td className="py-3 font-medium text-gray-900">{customer.name}</td>
                       <td className="py-3 text-gray-700 max-w-xs truncate">{customer.address}</td>
-                      <td className="py-3 text-gray-700 font-medium">€{customer.travelExpense.toFixed(2)}</td>
                       <td className="py-3">
                         <span className={`px-2 py-1 rounded-full text-xs font-medium ${
                           customer.isActive
                             ? 'bg-green-100 text-green-800'
                             : 'bg-red-100 text-red-800'
                         }`}>
-                          {customer.isActive ? 'Active' : 'Inactive'}
+                          {customer.isActive ? 'Actief' : 'Inactief'}
                         </span>
                       </td>
                       <td className="py-3">
@@ -280,6 +249,9 @@ const CustomerManagement = () => {
             </div>
           </CardContent>
         </Card>
+
+        {/* Travel Expenses per Technician per Customer */}
+        <CustomerTechnicianRates />
       </div>
     </div>
   );

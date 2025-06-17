@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { useAuth } from '@/contexts/AuthContext';
 import { TechnicianSummary } from '@/types/workHours';
+import { formatDutchDate } from '@/utils/overtimeCalculations';
 
 // Mock data for dashboard
 const mockTechnicianData: TechnicianSummary[] = [
@@ -14,6 +15,7 @@ const mockTechnicianData: TechnicianSummary[] = [
     regularHours: 140,
     overtimeHours: 20,
     weekendHours: 8,
+    sundayHours: 0,
     daysWorked: 21,
     lastWorked: '2024-06-15'
   },
@@ -24,15 +26,28 @@ const mockTechnicianData: TechnicianSummary[] = [
     regularHours: 132,
     overtimeHours: 12,
     weekendHours: 8,
+    sundayHours: 0,
     daysWorked: 19,
     lastWorked: '2024-06-14'
   }
 ];
 
-// Mock billing data for profit calculation
+// Mock billing data for profit calculation with Dutch rates
 const mockBillingData = [
-  { technicianId: '2', hourlyRate: 25, billableRate: 45, travelExpenses: 125 },
-  { technicianId: '3', hourlyRate: 22, billableRate: 40, travelExpenses: 98 }
+  { 
+    technicianId: '2', 
+    hourlyRate: 25, 
+    billableRate: 45, 
+    travelExpensesToTechnician: 125,
+    travelExpensesFromClients: 175
+  },
+  { 
+    technicianId: '3', 
+    hourlyRate: 22, 
+    billableRate: 40, 
+    travelExpensesToTechnician: 98,
+    travelExpensesFromClients: 138
+  }
 ];
 
 const weeklyData = [
@@ -52,25 +67,42 @@ const Dashboard = () => {
   const totalDays = mockTechnicianData.reduce((sum, tech) => sum + tech.daysWorked, 0);
   const avgHoursPerDay = totalDays > 0 ? (totalHours / totalDays).toFixed(1) : '0';
 
-  // Calculate total profit (admin only)
+  // Calculate total profit with enhanced overtime calculations (admin only)
   const totalProfit = isAdmin ? mockTechnicianData.reduce((sum, tech) => {
     const billing = mockBillingData.find(b => b.technicianId === tech.technicianId);
     if (billing) {
-      const cost = (tech.totalHours * billing.hourlyRate) + billing.travelExpenses;
-      const revenue = tech.totalHours * billing.billableRate;
-      return sum + (revenue - cost);
+      // Calculate wages with overtime multipliers
+      const regularPay = tech.regularHours * billing.hourlyRate;
+      const overtimePay = tech.overtimeHours * billing.hourlyRate * 1.25;
+      const weekendPay = tech.weekendHours * billing.hourlyRate * 1.5;
+      const sundayPay = tech.sundayHours * billing.hourlyRate * 2.0;
+      
+      const totalWages = regularPay + overtimePay + weekendPay + sundayPay;
+      const totalCost = totalWages + billing.travelExpensesToTechnician;
+      const totalRevenue = (tech.totalHours * billing.billableRate) + billing.travelExpensesFromClients;
+      
+      return sum + (totalRevenue - totalCost);
     }
     return sum;
   }, 0) : 0;
 
   const totalRevenue = isAdmin ? mockTechnicianData.reduce((sum, tech) => {
     const billing = mockBillingData.find(b => b.technicianId === tech.technicianId);
-    return sum + (billing ? tech.totalHours * billing.billableRate : 0);
+    return sum + (billing ? (tech.totalHours * billing.billableRate) + billing.travelExpensesFromClients : 0);
   }, 0) : 0;
 
   const totalCost = isAdmin ? mockTechnicianData.reduce((sum, tech) => {
     const billing = mockBillingData.find(b => b.technicianId === tech.technicianId);
-    return sum + (billing ? (tech.totalHours * billing.hourlyRate) + billing.travelExpenses : 0);
+    if (billing) {
+      const regularPay = tech.regularHours * billing.hourlyRate;
+      const overtimePay = tech.overtimeHours * billing.hourlyRate * 1.25;
+      const weekendPay = tech.weekendHours * billing.hourlyRate * 1.5;
+      const sundayPay = tech.sundayHours * billing.hourlyRate * 2.0;
+      
+      const totalWages = regularPay + overtimePay + weekendPay + sundayPay;
+      return sum + totalWages + billing.travelExpensesToTechnician;
+    }
+    return sum;
   }, 0) : 0;
 
   const currentUserData = mockTechnicianData.find(tech => tech.technicianId === user?.id);
@@ -80,10 +112,10 @@ const Dashboard = () => {
       <div className="max-w-7xl mx-auto">
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-gray-900 mb-2">
-            {isAdmin ? 'Admin Dashboard' : 'My Dashboard'}
+            {isAdmin ? 'Beheerder Dashboard' : 'Mijn Dashboard'}
           </h1>
           <p className="text-gray-600">
-            {isAdmin ? 'Overview of all technician work hours and profit' : 'Your work hour summary'}
+            {isAdmin ? 'Overzicht van alle monteur werkuren en winst' : 'Jouw werkuren samenvatting'}
           </p>
         </div>
 
@@ -93,40 +125,40 @@ const Dashboard = () => {
             <>
               <Card className="bg-white border-l-4 border-l-red-600">
                 <CardHeader className="pb-2">
-                  <CardTitle className="text-sm font-medium text-gray-600">Total Hours</CardTitle>
+                  <CardTitle className="text-sm font-medium text-gray-600">Totaal Uren</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className="text-2xl font-bold text-gray-900">{totalHours}</div>
-                  <p className="text-xs text-gray-600">All technicians</p>
+                  <p className="text-xs text-gray-600">Alle monteurs</p>
                 </CardContent>
               </Card>
               <Card className="bg-white border-l-4 border-l-green-600">
                 <CardHeader className="pb-2">
-                  <CardTitle className="text-sm font-medium text-gray-600">Total Profit</CardTitle>
+                  <CardTitle className="text-sm font-medium text-gray-600">Totale Winst</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className="text-2xl font-bold text-green-600">€{totalProfit.toFixed(2)}</div>
-                  <p className="text-xs text-gray-600">Revenue: €{totalRevenue.toFixed(2)}</p>
+                  <p className="text-xs text-gray-600">Omzet: €{totalRevenue.toFixed(2)}</p>
                 </CardContent>
               </Card>
               <Card className="bg-white border-l-4 border-l-black">
                 <CardHeader className="pb-2">
-                  <CardTitle className="text-sm font-medium text-gray-600">Total Cost</CardTitle>
+                  <CardTitle className="text-sm font-medium text-gray-600">Totale Kosten</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className="text-2xl font-bold text-gray-900">€{totalCost.toFixed(2)}</div>
-                  <p className="text-xs text-gray-600">Wages + Travel</p>
+                  <p className="text-xs text-gray-600">Lonen + Reiskosten</p>
                 </CardContent>
               </Card>
               <Card className="bg-white border-l-4 border-l-red-600">
                 <CardHeader className="pb-2">
-                  <CardTitle className="text-sm font-medium text-gray-600">Profit Margin</CardTitle>
+                  <CardTitle className="text-sm font-medium text-gray-600">Winstmarge</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className="text-2xl font-bold text-gray-900">
                     {totalRevenue > 0 ? ((totalProfit / totalRevenue) * 100).toFixed(1) : '0'}%
                   </div>
-                  <p className="text-xs text-gray-600">This month</p>
+                  <p className="text-xs text-gray-600">Deze maand</p>
                 </CardContent>
               </Card>
             </>
@@ -134,42 +166,42 @@ const Dashboard = () => {
             <>
               <Card className="bg-white border-l-4 border-l-red-600">
                 <CardHeader className="pb-2">
-                  <CardTitle className="text-sm font-medium text-gray-600">My Total Hours</CardTitle>
+                  <CardTitle className="text-sm font-medium text-gray-600">Mijn Totaal Uren</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className="text-2xl font-bold text-gray-900">{currentUserData?.totalHours || 0}</div>
-                  <p className="text-xs text-gray-600">This month</p>
+                  <p className="text-xs text-gray-600">Deze maand</p>
                 </CardContent>
               </Card>
               <Card className="bg-white border-l-4 border-l-black">
                 <CardHeader className="pb-2">
-                  <CardTitle className="text-sm font-medium text-gray-600">Days Worked</CardTitle>
+                  <CardTitle className="text-sm font-medium text-gray-600">Dagen Gewerkt</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className="text-2xl font-bold text-gray-900">{currentUserData?.daysWorked || 0}</div>
-                  <p className="text-xs text-gray-600">This month</p>
+                  <p className="text-xs text-gray-600">Deze maand</p>
                 </CardContent>
               </Card>
               <Card className="bg-white border-l-4 border-l-red-600">
                 <CardHeader className="pb-2">
-                  <CardTitle className="text-sm font-medium text-gray-600">Avg Hours/Day</CardTitle>
+                  <CardTitle className="text-sm font-medium text-gray-600">Gem. Uren/Dag</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className="text-2xl font-bold text-gray-900">
                     {currentUserData ? (currentUserData.totalHours / currentUserData.daysWorked).toFixed(1) : '0'}
                   </div>
-                  <p className="text-xs text-gray-600">Personal average</p>
+                  <p className="text-xs text-gray-600">Persoonlijk gemiddelde</p>
                 </CardContent>
               </Card>
               <Card className="bg-white border-l-4 border-l-black">
                 <CardHeader className="pb-2">
-                  <CardTitle className="text-sm font-medium text-gray-600">Last Worked</CardTitle>
+                  <CardTitle className="text-sm font-medium text-gray-600">Laatst Gewerkt</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className="text-lg font-bold text-gray-900">
-                    {currentUserData?.lastWorked ? new Date(currentUserData.lastWorked).toLocaleDateString() : 'N/A'}
+                    {currentUserData?.lastWorked ? formatDutchDate(currentUserData.lastWorked) : 'N.v.t.'}
                   </div>
-                  <p className="text-xs text-gray-600">Most recent entry</p>
+                  <p className="text-xs text-gray-600">Meest recente invoer</p>
                 </CardContent>
               </Card>
             </>
@@ -181,7 +213,7 @@ const Dashboard = () => {
           {isAdmin && (
             <Card className="bg-white">
               <CardHeader>
-                <CardTitle className="text-lg font-semibold text-gray-900">Weekly Hours Overview</CardTitle>
+                <CardTitle className="text-lg font-semibold text-gray-900">Wekelijks Uren Overzicht</CardTitle>
               </CardHeader>
               <CardContent>
                 <ResponsiveContainer width="100%" height={300}>
@@ -200,7 +232,7 @@ const Dashboard = () => {
           <Card className="bg-white">
             <CardHeader>
               <CardTitle className="text-lg font-semibold text-gray-900">
-                {isAdmin ? 'Hours Distribution by Technician' : 'My Work Pattern'}
+                {isAdmin ? 'Uren Verdeling per Monteur' : 'Mijn Werkpatroon'}
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -212,7 +244,7 @@ const Dashboard = () => {
                       cx="50%"
                       cy="50%"
                       labelLine={false}
-                      label={({ technicianName, totalHours }) => `${technicianName}: ${totalHours}h`}
+                      label={({ technicianName, totalHours }) => `${technicianName}: ${totalHours}u`}
                       outerRadius={80}
                       fill="#8884d8"
                       dataKey="totalHours"
@@ -241,35 +273,61 @@ const Dashboard = () => {
         {isAdmin && (
           <Card className="bg-white mt-6">
             <CardHeader>
-              <CardTitle className="text-lg font-semibold text-gray-900">Technician Summary</CardTitle>
+              <CardTitle className="text-lg font-semibold text-gray-900">Monteur Samenvatting</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="overflow-x-auto">
                 <table className="w-full text-left">
                   <thead>
                     <tr className="border-b border-gray-200">
-                      <th className="pb-3 text-sm font-medium text-gray-600">Technician</th>
-                      <th className="pb-3 text-sm font-medium text-gray-600">Total Hours</th>
-                      <th className="pb-3 text-sm font-medium text-gray-600">Days Worked</th>
-                      <th className="pb-3 text-sm font-medium text-gray-600">Cost</th>
-                      <th className="pb-3 text-sm font-medium text-gray-600">Revenue</th>
-                      <th className="pb-3 text-sm font-medium text-gray-600">Profit</th>
+                      <th className="pb-3 text-sm font-medium text-gray-600">Monteur</th>
+                      <th className="pb-3 text-sm font-medium text-gray-600">Totaal Uren</th>
+                      <th className="pb-3 text-sm font-medium text-gray-600">Dagen Gewerkt</th>
+                      <th className="pb-3 text-sm font-medium text-gray-600">Kosten</th>
+                      <th className="pb-3 text-sm font-medium text-gray-600">Omzet</th>
+                      <th className="pb-3 text-sm font-medium text-gray-600">Winst</th>
                     </tr>
                   </thead>
                   <tbody>
                     {mockTechnicianData.map((tech) => {
                       const billing = mockBillingData.find(b => b.technicianId === tech.technicianId);
-                      const cost = billing ? (tech.totalHours * billing.hourlyRate) + billing.travelExpenses : 0;
-                      const revenue = billing ? tech.totalHours * billing.billableRate : 0;
+                      if (!billing) return null;
+                      
+                      // Enhanced cost calculation with overtime
+                      const regularPay = tech.regularHours * billing.hourlyRate;
+                      const overtimePay = tech.overtimeHours * billing.hourlyRate * 1.25;
+                      const weekendPay = tech.weekendHours * billing.hourlyRate * 1.5;
+                      const sundayPay = tech.sundayHours * billing.hourlyRate * 2.0;
+                      
+                      const totalWages = regularPay + overtimePay + weekendPay + sundayPay;
+                      const cost = totalWages + billing.travelExpensesToTechnician;
+                      const revenue = (tech.totalHours * billing.billableRate) + billing.travelExpensesFromClients;
                       const profit = revenue - cost;
                       
                       return (
                         <tr key={tech.technicianId} className="border-b border-gray-100">
                           <td className="py-3 font-medium text-gray-900">{tech.technicianName}</td>
-                          <td className="py-3 text-gray-700">{tech.totalHours}h</td>
+                          <td className="py-3 text-gray-700">
+                            {tech.totalHours}u
+                            <div className="text-xs text-gray-500">
+                              {tech.overtimeHours > 0 && `Overwerk: ${tech.overtimeHours}u`}
+                              {tech.weekendHours > 0 && ` Weekend: ${tech.weekendHours}u`}
+                              {tech.sundayHours > 0 && ` Zondag: ${tech.sundayHours}u`}
+                            </div>
+                          </td>
                           <td className="py-3 text-gray-700">{tech.daysWorked}</td>
-                          <td className="py-3 text-gray-700">€{cost.toFixed(2)}</td>
-                          <td className="py-3 text-gray-700">€{revenue.toFixed(2)}</td>
+                          <td className="py-3 text-gray-700">
+                            €{cost.toFixed(2)}
+                            <div className="text-xs text-gray-500">
+                              Loon: €{totalWages.toFixed(2)} + Reis: €{billing.travelExpensesToTechnician.toFixed(2)}
+                            </div>
+                          </td>
+                          <td className="py-3 text-gray-700">
+                            €{revenue.toFixed(2)}
+                            <div className="text-xs text-gray-500">
+                              Uren: €{(tech.totalHours * billing.billableRate).toFixed(2)} + Reis: €{billing.travelExpensesFromClients.toFixed(2)}
+                            </div>
+                          </td>
                           <td className={`py-3 font-medium ${profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                             €{profit.toFixed(2)}
                           </td>

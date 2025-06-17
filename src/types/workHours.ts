@@ -9,11 +9,14 @@ export interface WorkEntry {
   hoursWorked: number;
   isManualEntry: boolean;
   description?: string;
-  travelExpense?: number;
+  travelExpenseToTechnician?: number;
+  travelExpenseFromClient?: number;
   regularHours: number;
   overtimeHours: number;
   weekendHours: number;
+  sundayHours: number;
   isWeekend: boolean;
+  isSunday: boolean;
   createdAt: string;
   createdBy: string;
 }
@@ -25,6 +28,7 @@ export interface TechnicianSummary {
   regularHours: number;
   overtimeHours: number;
   weekendHours: number;
+  sundayHours: number;
   daysWorked: number;
   lastWorked: string;
 }
@@ -33,8 +37,10 @@ export interface OvertimeCalculation {
   regularHours: number;
   overtimeHours: number;
   weekendHours: number;
+  sundayHours: number;
   regularPay: number;
   overtimePay: number;
   weekendPay: number;
+  sundayPay: number;
   totalPay: number;
 }
