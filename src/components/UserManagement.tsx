@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -16,6 +15,12 @@ const UserManagement = () => {
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingUser, setEditingUser] = useState<User | null>(null);
+  const [editingCurrentUser, setEditingCurrentUser] = useState(false);
+  const [currentUserForm, setCurrentUserForm] = useState({
+    username: currentUser?.username || '',
+    fullName: currentUser?.fullName || '',
+    email: currentUser?.email || ''
+  });
   const [newUser, setNewUser] = useState({
     username: '',
     email: '',
@@ -23,6 +28,17 @@ const UserManagement = () => {
     role: 'technician' as 'admin' | 'technician',
     password: ''
   });
+
+  // Update form when currentUser changes
+  useEffect(() => {
+    if (currentUser) {
+      setCurrentUserForm({
+        username: currentUser.username || '',
+        fullName: currentUser.fullName || '',
+        email: currentUser.email || ''
+      });
+    }
+  }, [currentUser]);
 
   // Fetch users from Supabase
   const fetchUsers = async () => {
@@ -57,6 +73,48 @@ const UserManagement = () => {
   useEffect(() => {
     fetchUsers();
   }, []);
+
+  const handleUpdateCurrentUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!currentUser) return;
+
+    try {
+      const { error } = await supabase
+        .from('profiles')
+        .update({
+          username: currentUserForm.username,
+          full_name: currentUserForm.fullName
+        })
+        .eq('id', currentUser.id);
+
+      if (error) {
+        toast({
+          title: "Error",
+          description: error.message,
+          variant: "destructive"
+        });
+        return;
+      }
+
+      toast({
+        title: "Success",
+        description: "Je gegevens zijn succesvol bijgewerkt"
+      });
+
+      setEditingCurrentUser(false);
+      fetchUsers();
+      
+      // Reload page to refresh auth context
+      window.location.reload();
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Er ging iets mis bij het bijwerken van je gegevens",
+        variant: "destructive"
+      });
+    }
+  };
 
   const handleAddUser = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -207,11 +265,92 @@ const UserManagement = () => {
   return (
     <div className="p-6 bg-gray-50 min-h-screen">
       <div className="max-w-7xl mx-auto">
-        <div className="mb-8 flex justify-between items-center">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">User Management</h1>
-            <p className="text-gray-600">Manage admin and technician accounts</p>
-          </div>
+        <div className="mb-8">
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">User Management</h1>
+          <p className="text-gray-600">Manage admin and technician accounts</p>
+        </div>
+
+        {/* Current User Profile */}
+        <Card className="bg-white mb-6">
+          <CardHeader>
+            <CardTitle className="text-lg font-semibold text-gray-900 flex items-center justify-between">
+              👤 Mijn Account ({currentUser?.role})
+              <Button
+                onClick={() => setEditingCurrentUser(!editingCurrentUser)}
+                variant="outline"
+                size="sm"
+                className="border-red-600 text-red-600 hover:bg-red-50"
+              >
+                {editingCurrentUser ? 'Annuleren' : 'Bewerken'}
+              </Button>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {editingCurrentUser ? (
+              <form onSubmit={handleUpdateCurrentUser} className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="currentFullName">Volledige Naam</Label>
+                  <Input
+                    id="currentFullName"
+                    value={currentUserForm.fullName}
+                    onChange={(e) => setCurrentUserForm({ ...currentUserForm, fullName: e.target.value })}
+                    required
+                    className="focus:ring-red-500 focus:border-red-500"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="currentUsername">Gebruikersnaam</Label>
+                  <Input
+                    id="currentUsername"
+                    value={currentUserForm.username}
+                    onChange={(e) => setCurrentUserForm({ ...currentUserForm, username: e.target.value })}
+                    required
+                    className="focus:ring-red-500 focus:border-red-500"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="currentEmail">Email (alleen-lezen)</Label>
+                  <Input
+                    id="currentEmail"
+                    value={currentUserForm.email}
+                    disabled
+                    className="bg-gray-100"
+                  />
+                </div>
+                <div className="md:col-span-2 flex space-x-2">
+                  <Button type="submit" className="bg-red-600 hover:bg-red-700 text-white">
+                    Opslaan
+                  </Button>
+                  <Button 
+                    type="button" 
+                    variant="outline"
+                    onClick={() => setEditingCurrentUser(false)}
+                  >
+                    Annuleren
+                  </Button>
+                </div>
+              </form>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <p className="text-sm text-gray-600">Volledige Naam</p>
+                  <p className="font-medium">{currentUser?.fullName}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-600">Gebruikersnaam</p>
+                  <p className="font-medium">{currentUser?.username}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-600">Email</p>
+                  <p className="font-medium">{currentUser?.email}</p>
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Add User Button and Form */}
+        <div className="mb-6 flex justify-end">
           <Button
             onClick={() => setShowAddForm(!showAddForm)}
             className="bg-red-600 hover:bg-red-700 text-white"
@@ -318,7 +457,7 @@ const UserManagement = () => {
                 </thead>
                 <tbody>
                   {users.map((user) => (
-                    <tr key={user.id} className="border-b border-gray-100 hover:bg-gray-50">
+                    <tr key={user.id} className={`border-b border-gray-100 hover:bg-gray-50 ${user.id === currentUser?.id ? 'bg-blue-50' : ''}`}>
                       <td className="py-3 font-medium text-gray-900">
                         {editingUser?.id === user.id ? (
                           <Input
@@ -327,7 +466,10 @@ const UserManagement = () => {
                             className="h-8"
                           />
                         ) : (
-                          user.fullName
+                          <>
+                            {user.fullName}
+                            {user.id === currentUser?.id && <span className="ml-2 text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">(Jij)</span>}
+                          </>
                         )}
                       </td>
                       <td className="py-3 text-gray-700">

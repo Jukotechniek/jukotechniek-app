@@ -8,15 +8,12 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 
 const LoginForm = () => {
-  const [isSignUp, setIsSignUp] = useState(false);
   const [credentials, setCredentials] = useState({ 
     username: '', 
-    password: '', 
-    email: '', 
-    fullName: '' 
+    password: ''
   });
   const [loading, setLoading] = useState(false);
-  const { login, signUp } = useAuth();
+  const { login } = useAuth();
   const { toast } = useToast();
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -24,57 +21,27 @@ const LoginForm = () => {
     setLoading(true);
 
     try {
-      let success = false;
+      const success = await login({
+        username: credentials.username,
+        password: credentials.password
+      });
       
-      if (isSignUp) {
-        if (!credentials.email || !credentials.fullName) {
-          toast({
-            title: "Error",
-            description: "Please fill in all required fields",
-            variant: "destructive"
-          });
-          setLoading(false);
-          return;
-        }
-        
-        success = await signUp({
-          username: credentials.username,
-          password: credentials.password,
-          email: credentials.email,
-          fullName: credentials.fullName
-        });
-        
-        if (success) {
-          toast({
-            title: "Account Created",
-            description: "Please check your email to confirm your account"
-          });
-        }
-      } else {
-        success = await login({
-          username: credentials.username,
-          password: credentials.password
-        });
-        
-        if (success) {
-          toast({
-            title: "Login Successful",
-            description: "Welcome to JukoTechniek Work Hours"
-          });
-        }
-      }
-      
-      if (!success) {
+      if (success) {
         toast({
-          title: isSignUp ? "Signup Failed" : "Login Failed",
-          description: isSignUp ? "Please check your information and try again" : "Invalid username or password",
+          title: "Login Successful",
+          description: "Welcome to JukoTechniek Work Hours"
+        });
+      } else {
+        toast({
+          title: "Login Failed",
+          description: "Invalid username or password",
           variant: "destructive"
         });
       }
     } catch (error) {
       toast({
         title: "Error",
-        description: `An error occurred during ${isSignUp ? 'signup' : 'login'}`,
+        description: "An error occurred during login",
         variant: "destructive"
       });
     } finally {
@@ -91,39 +58,11 @@ const LoginForm = () => {
             <div className="w-16 h-1 bg-red-600 mx-auto mt-2"></div>
           </div>
           <CardTitle className="text-xl text-gray-800">
-            {isSignUp ? 'Create Account' : 'Work Hours Tracker'}
+            Work Hours Tracker
           </CardTitle>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
-            {isSignUp && (
-              <>
-                <div className="space-y-2">
-                  <Label htmlFor="fullName">Full Name</Label>
-                  <Input
-                    id="fullName"
-                    type="text"
-                    value={credentials.fullName}
-                    onChange={(e) => setCredentials({ ...credentials, fullName: e.target.value })}
-                    placeholder="Enter your full name"
-                    required
-                    className="border-gray-300 focus:border-red-500"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="email">Email</Label>
-                  <Input
-                    id="email"
-                    type="email"
-                    value={credentials.email}
-                    onChange={(e) => setCredentials({ ...credentials, email: e.target.value })}
-                    placeholder="Enter your email"
-                    required
-                    className="border-gray-300 focus:border-red-500"
-                  />
-                </div>
-              </>
-            )}
             <div className="space-y-2">
               <Label htmlFor="username">Username</Label>
               <Input
@@ -153,18 +92,8 @@ const LoginForm = () => {
               className="w-full bg-red-600 hover:bg-red-700 text-white"
               disabled={loading}
             >
-              {loading ? (isSignUp ? 'Creating Account...' : 'Logging in...') : (isSignUp ? 'Create Account' : 'Login')}
+              {loading ? 'Logging in...' : 'Login'}
             </Button>
-            <div className="text-center">
-              <Button
-                type="button"
-                variant="ghost"
-                onClick={() => setIsSignUp(!isSignUp)}
-                className="text-red-600 hover:text-red-700"
-              >
-                {isSignUp ? 'Already have an account? Login' : "Don't have an account? Sign up"}
-              </Button>
-            </div>
           </form>
         </CardContent>
       </Card>
