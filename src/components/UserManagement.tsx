@@ -41,7 +41,7 @@ const UserManagement = () => {
         id: profile.id,
         username: profile.username || '',
         email: profile.username?.includes('@') ? profile.username : `${profile.username}@jukotechniek.nl`,
-        role: profile.role || 'technician',
+        role: (profile.role === 'admin' || profile.role === 'technician') ? profile.role : 'technician',
         fullName: profile.full_name || '',
         createdAt: profile.created_at
       }));
