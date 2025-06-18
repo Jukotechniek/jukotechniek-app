@@ -1,7 +1,8 @@
+
 import React from 'react';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
-import { BarChart3, Clock, Briefcase, Building2, DollarSign, CheckCircle, Users, FileText, Bot } from 'lucide-react';
+import { BarChart3, Clock, Briefcase, Building2, DollarSign, CheckCircle, Users, FileText, Bot, Car } from 'lucide-react';
 
 interface NavigationProps {
   activeTab: string;
@@ -18,6 +19,7 @@ const Navigation: React.FC<NavigationProps> = ({ activeTab, onTabChange }) => {
     { id: 'projects', label: 'Projects', icon: Briefcase },
     { id: 'customers', label: 'Customers', icon: Building2 },
     { id: 'billing', label: 'Billing', icon: DollarSign },
+    { id: 'travel', label: 'Travel Expenses', icon: Car },
     { id: 'verification', label: 'Hour Verification', icon: CheckCircle },
     { id: 'users', label: 'User Management', icon: Users },
     { id: 'reports', label: 'Reports', icon: FileText },
@@ -25,10 +27,10 @@ const Navigation: React.FC<NavigationProps> = ({ activeTab, onTabChange }) => {
   ];
 
   const technicianTabs = [
-    { id: 'dashboard', label: 'Dashboard' },
-    { id: 'hours', label: 'My Hours' },
-    { id: 'projects', label: 'My Projects' },
-    { id: 'chatbot', label: 'AI Assistant' }
+    { id: 'dashboard', label: 'Dashboard', icon: BarChart3 },
+    { id: 'hours', label: 'My Hours', icon: Clock },
+    { id: 'projects', label: 'My Projects', icon: Briefcase },
+    { id: 'chatbot', label: 'AI Assistant', icon: Bot }
   ];
 
   const tabs = isAdmin ? adminTabs : technicianTabs;
@@ -43,20 +45,24 @@ const Navigation: React.FC<NavigationProps> = ({ activeTab, onTabChange }) => {
               <div className="w-1 h-6 bg-red-600 ml-2"></div>
             </div>
             <div className="flex space-x-1">
-              {tabs.map((tab) => (
-                <Button
-                  key={tab.id}
-                  variant={activeTab === tab.id ? 'secondary' : 'ghost'}
-                  onClick={() => onTabChange(tab.id)}
-                  className={`${
-                    activeTab === tab.id 
-                      ? 'bg-red-600 text-white hover:bg-red-700' 
-                      : 'text-gray-300 hover:text-white hover:bg-gray-800'
-                  }`}
-                >
-                  {tab.label}
-                </Button>
-              ))}
+              {tabs.map((tab) => {
+                const Icon = tab.icon;
+                return (
+                  <Button
+                    key={tab.id}
+                    variant={activeTab === tab.id ? 'secondary' : 'ghost'}
+                    onClick={() => onTabChange(tab.id)}
+                    className={`flex items-center space-x-2 ${
+                      activeTab === tab.id 
+                        ? 'bg-red-600 text-white hover:bg-red-700' 
+                        : 'text-gray-300 hover:text-white hover:bg-gray-800'
+                    }`}
+                  >
+                    <Icon size={16} />
+                    <span>{tab.label}</span>
+                  </Button>
+                );
+              })}
             </div>
           </div>
           <div className="flex items-center space-x-4">

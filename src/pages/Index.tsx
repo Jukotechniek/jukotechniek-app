@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { AuthProvider, useAuth } from '@/contexts/AuthContext';
 import LoginForm from '@/components/LoginForm';
@@ -11,6 +12,7 @@ import HourComparison from '@/components/HourComparison';
 import UserManagement from '@/components/UserManagement';
 import Reports from '@/components/Reports';
 import AIChatbot from '@/components/AIChatbot';
+import TravelExpenseManagement from '@/components/TravelExpenseManagement';
 
 const AppContent = () => {
   const { isAuthenticated, loading } = useAuth();
@@ -43,6 +45,8 @@ const AppContent = () => {
         return <CustomerManagement />;
       case 'billing':
         return <Billing />;
+      case 'travel':
+        return <TravelExpenseManagement />;
       case 'verification':
         return <HourComparison />;
       case 'users':

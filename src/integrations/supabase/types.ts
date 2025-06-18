@@ -9,7 +9,279 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
-      [_ in never]: never
+      customer_technician_rates: {
+        Row: {
+          created_at: string | null
+          customer_id: string | null
+          id: string
+          technician_id: string | null
+          travel_expense_from_client: number | null
+          travel_expense_to_technician: number | null
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          customer_id?: string | null
+          id?: string
+          technician_id?: string | null
+          travel_expense_from_client?: number | null
+          travel_expense_to_technician?: number | null
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          customer_id?: string | null
+          id?: string
+          technician_id?: string | null
+          travel_expense_from_client?: number | null
+          travel_expense_to_technician?: number | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "customer_technician_rates_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "customer_technician_rates_technician_id_fkey"
+            columns: ["technician_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      customers: {
+        Row: {
+          address: string
+          created_at: string | null
+          id: string
+          is_active: boolean | null
+          name: string
+          updated_at: string | null
+        }
+        Insert: {
+          address: string
+          created_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          name: string
+          updated_at?: string | null
+        }
+        Update: {
+          address?: string
+          created_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          name?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      profiles: {
+        Row: {
+          created_at: string | null
+          full_name: string | null
+          id: string
+          role: string | null
+          updated_at: string | null
+          username: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          full_name?: string | null
+          id: string
+          role?: string | null
+          updated_at?: string | null
+          username?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          full_name?: string | null
+          id?: string
+          role?: string | null
+          updated_at?: string | null
+          username?: string | null
+        }
+        Relationships: []
+      }
+      projects: {
+        Row: {
+          created_at: string | null
+          customer_id: string | null
+          date: string
+          description: string | null
+          hours_spent: number
+          id: string
+          images: string[] | null
+          status: string | null
+          technician_id: string | null
+          title: string
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          customer_id?: string | null
+          date: string
+          description?: string | null
+          hours_spent: number
+          id?: string
+          images?: string[] | null
+          status?: string | null
+          technician_id?: string | null
+          title: string
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          customer_id?: string | null
+          date?: string
+          description?: string | null
+          hours_spent?: number
+          id?: string
+          images?: string[] | null
+          status?: string | null
+          technician_id?: string | null
+          title?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "projects_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "projects_technician_id_fkey"
+            columns: ["technician_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      technician_rates: {
+        Row: {
+          billable_rate: number | null
+          created_at: string | null
+          hourly_rate: number | null
+          id: string
+          technician_id: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          billable_rate?: number | null
+          created_at?: string | null
+          hourly_rate?: number | null
+          id?: string
+          technician_id?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          billable_rate?: number | null
+          created_at?: string | null
+          hourly_rate?: number | null
+          id?: string
+          technician_id?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "technician_rates_technician_id_fkey"
+            columns: ["technician_id"]
+            isOneToOne: true
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      work_hours: {
+        Row: {
+          created_at: string | null
+          created_by: string | null
+          customer_id: string | null
+          date: string
+          description: string | null
+          hours_worked: number
+          id: string
+          is_manual_entry: boolean | null
+          is_sunday: boolean | null
+          is_weekend: boolean | null
+          overtime_hours: number | null
+          regular_hours: number | null
+          sunday_hours: number | null
+          technician_id: string | null
+          travel_expense_from_client: number | null
+          travel_expense_to_technician: number | null
+          weekend_hours: number | null
+        }
+        Insert: {
+          created_at?: string | null
+          created_by?: string | null
+          customer_id?: string | null
+          date: string
+          description?: string | null
+          hours_worked: number
+          id?: string
+          is_manual_entry?: boolean | null
+          is_sunday?: boolean | null
+          is_weekend?: boolean | null
+          overtime_hours?: number | null
+          regular_hours?: number | null
+          sunday_hours?: number | null
+          technician_id?: string | null
+          travel_expense_from_client?: number | null
+          travel_expense_to_technician?: number | null
+          weekend_hours?: number | null
+        }
+        Update: {
+          created_at?: string | null
+          created_by?: string | null
+          customer_id?: string | null
+          date?: string
+          description?: string | null
+          hours_worked?: number
+          id?: string
+          is_manual_entry?: boolean | null
+          is_sunday?: boolean | null
+          is_weekend?: boolean | null
+          overtime_hours?: number | null
+          regular_hours?: number | null
+          sunday_hours?: number | null
+          technician_id?: string | null
+          travel_expense_from_client?: number | null
+          travel_expense_to_technician?: number | null
+          weekend_hours?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "work_hours_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "work_hours_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "work_hours_technician_id_fkey"
+            columns: ["technician_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never

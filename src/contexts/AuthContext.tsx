@@ -1,41 +1,16 @@
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { User, AuthState, LoginCredentials } from '@/types/auth';
+import { supabase } from '@/integrations/supabase/client';
+import { Session } from '@supabase/supabase-js';
 
 interface AuthContextType extends AuthState {
   login: (credentials: LoginCredentials) => Promise<boolean>;
   logout: () => void;
+  signUp: (credentials: LoginCredentials & { email: string; fullName: string }) => Promise<boolean>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
-
-// Mock users for demo
-const mockUsers: User[] = [
-  {
-    id: '1',
-    username: 'admin',
-    email: 'admin@jukotechniek.nl',
-    role: 'admin',
-    fullName: 'Admin User',
-    createdAt: '2024-01-01'
-  },
-  {
-    id: '2',
-    username: 'tech1',
-    email: 'jan@jukotechniek.nl',
-    role: 'technician',
-    fullName: 'Jan de Vries',
-    createdAt: '2024-01-01'
-  },
-  {
-    id: '3',
-    username: 'tech2',
-    email: 'pieter@jukotechniek.nl',
-    role: 'technician',
-    fullName: 'Pieter Jansen',
-    createdAt: '2024-01-01'
-  }
-];
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [authState, setAuthState] = useState<AuthState>({
@@ -45,69 +20,121 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   });
 
   useEffect(() => {
-    // Check for stored auth on mount
-    const storedAuth = localStorage.getItem('juko_auth');
-    const storedExpiry = localStorage.getItem('juko_auth_expiry');
-    
-    if (storedAuth && storedExpiry) {
-      const expiryTime = parseInt(storedExpiry);
-      const currentTime = Date.now();
-      
-      if (currentTime < expiryTime) {
-        const user = JSON.parse(storedAuth);
-        setAuthState({
-          user,
-          isAuthenticated: true,
-          loading: false
-        });
-      } else {
-        // Token expired, clear storage
-        localStorage.removeItem('juko_auth');
-        localStorage.removeItem('juko_auth_expiry');
+    // Set up auth state listener
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        console.log('Auth state changed:', event, session);
+        
+        if (session?.user) {
+          // Fetch user profile from our profiles table
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('id', session.user.id)
+            .single();
+
+          if (profile) {
+            const user: User = {
+              id: profile.id,
+              username: profile.username || session.user.email || '',
+              email: session.user.email || '',
+              role: profile.role || 'technician',
+              fullName: profile.full_name || '',
+              createdAt: profile.created_at
+            };
+
+            setAuthState({
+              user,
+              isAuthenticated: true,
+              loading: false
+            });
+          } else {
+            setAuthState({
+              user: null,
+              isAuthenticated: false,
+              loading: false
+            });
+          }
+        } else {
+          setAuthState({
+            user: null,
+            isAuthenticated: false,
+            loading: false
+          });
+        }
+      }
+    );
+
+    // Check for existing session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!session) {
         setAuthState(prev => ({ ...prev, loading: false }));
       }
-    } else {
-      setAuthState(prev => ({ ...prev, loading: false }));
-    }
+    });
+
+    return () => subscription.unsubscribe();
   }, []);
 
   const login = async (credentials: LoginCredentials): Promise<boolean> => {
     console.log('Login attempt for:', credentials.username);
     
-    // Mock authentication
-    const user = mockUsers.find(u => 
-      u.username === credentials.username && 
-      (credentials.password === 'admin123' || credentials.password === 'tech123')
-    );
-
-    if (user) {
-      setAuthState({
-        user,
-        isAuthenticated: true,
-        loading: false
+    try {
+      // Try to sign in with email/password first
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: credentials.username.includes('@') ? credentials.username : `${credentials.username}@jukotechniek.nl`,
+        password: credentials.password
       });
-      
-      // Store auth with 30-day expiry
-      const expiryTime = Date.now() + (30 * 24 * 60 * 60 * 1000);
-      localStorage.setItem('juko_auth', JSON.stringify(user));
-      localStorage.setItem('juko_auth_expiry', expiryTime.toString());
-      return true;
+
+      if (error) {
+        console.error('Login error:', error);
+        return false;
+      }
+
+      return !!data.user;
+    } catch (error) {
+      console.error('Login error:', error);
+      return false;
     }
-    return false;
   };
 
-  const logout = () => {
+  const signUp = async (credentials: LoginCredentials & { email: string; fullName: string }): Promise<boolean> => {
+    try {
+      const { data, error } = await supabase.auth.signUp({
+        email: credentials.email,
+        password: credentials.password,
+        options: {
+          data: {
+            username: credentials.username,
+            full_name: credentials.fullName,
+            role: 'technician'
+          },
+          emailRedirectTo: `${window.location.origin}/`
+        }
+      });
+
+      if (error) {
+        console.error('Signup error:', error);
+        return false;
+      }
+
+      return !!data.user;
+    } catch (error) {
+      console.error('Signup error:', error);
+      return false;
+    }
+  };
+
+  const logout = async () => {
+    await supabase.auth.signOut();
     setAuthState({
       user: null,
       isAuthenticated: false,
       loading: false
     });
-    localStorage.removeItem('juko_auth');
-    localStorage.removeItem('juko_auth_expiry');
   };
 
   return (
-    <AuthContext.Provider value={{ ...authState, login, logout }}>
+    <AuthContext.Provider value={{ ...authState, login, logout, signUp }}>
       {children}
     </AuthContext.Provider>
   );
