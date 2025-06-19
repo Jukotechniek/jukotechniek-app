@@ -1,4 +1,3 @@
-
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { User, AuthState, LoginCredentials } from '@/types/auth';
 import { supabase } from '@/integrations/supabase/client';
@@ -24,9 +23,77 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     
     let mounted = true;
 
+    const handleAuthChange = async (session: Session | null) => {
+      console.log('handleAuthChange called with session:', session?.user?.id || 'null');
+      
+      if (!session?.user) {
+        console.log('No session, setting unauthenticated state');
+        if (mounted) {
+          setAuthState({
+            user: null,
+            isAuthenticated: false,
+            loading: false
+          });
+        }
+        return;
+      }
+
+      // Create basic user from session
+      const basicUser: User = {
+        id: session.user.id,
+        username: session.user.email || '',
+        email: session.user.email || '',
+        role: 'technician',
+        fullName: session.user.email || '',
+        createdAt: new Date().toISOString()
+      };
+
+      // Set authenticated state immediately with basic user
+      if (mounted) {
+        setAuthState({
+          user: basicUser,
+          isAuthenticated: true,
+          loading: false
+        });
+      }
+
+      // Try to fetch enhanced profile in background (non-blocking)
+      try {
+        console.log('Attempting to fetch profile for user:', session.user.id);
+        
+        const { data: profile, error } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', session.user.id)
+          .single();
+
+        if (!error && profile && mounted) {
+          const enhancedUser: User = {
+            id: profile.id,
+            username: profile.username || session.user.email || '',
+            email: session.user.email || '',
+            role: (profile.role === 'admin' || profile.role === 'technician') ? profile.role : 'technician',
+            fullName: profile.full_name || session.user.email || '',
+            createdAt: profile.created_at
+          };
+
+          console.log('Profile fetched successfully, updating user:', enhancedUser.id, enhancedUser.role);
+          setAuthState(prev => ({
+            ...prev,
+            user: enhancedUser
+          }));
+        } else {
+          console.log('Profile fetch failed or no profile found, using basic user');
+        }
+      } catch (error) {
+        console.log('Profile fetch error (non-blocking):', error);
+        // Don't update state on error - keep the basic user
+      }
+    };
+
     const initializeAuth = async () => {
       try {
-        // Get initial session
+        console.log('Getting initial session');
         const { data: { session }, error } = await supabase.auth.getSession();
         
         if (error) {
@@ -41,8 +108,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           return;
         }
 
-        console.log('Initial session:', session?.user?.id || 'No session');
-        
+        console.log('Initial session result:', session?.user?.id || 'No session');
         if (mounted) {
           await handleAuthChange(session);
         }
@@ -76,87 +142,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       subscription.unsubscribe();
     };
   }, []);
-
-  const handleAuthChange = async (session: Session | null) => {
-    if (!session?.user) {
-      console.log('No session, setting unauthenticated state');
-      setAuthState({
-        user: null,
-        isAuthenticated: false,
-        loading: false
-      });
-      return;
-    }
-
-    try {
-      console.log('Fetching profile for user:', session.user.id);
-      
-      // Fetch user profile with timeout
-      const { data: profile, error } = await Promise.race([
-        supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', session.user.id)
-          .single(),
-        new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('Timeout')), 5000)
-        )
-      ]) as any;
-
-      if (error) {
-        console.error('Error fetching profile:', error);
-        // Still authenticate with basic user data
-        const basicUser: User = {
-          id: session.user.id,
-          username: session.user.email || '',
-          email: session.user.email || '',
-          role: 'technician',
-          fullName: session.user.email || '',
-          createdAt: new Date().toISOString()
-        };
-
-        setAuthState({
-          user: basicUser,
-          isAuthenticated: true,
-          loading: false
-        });
-        return;
-      }
-
-      const user: User = {
-        id: profile.id,
-        username: profile.username || session.user.email || '',
-        email: session.user.email || '',
-        role: (profile.role === 'admin' || profile.role === 'technician') ? profile.role : 'technician',
-        fullName: profile.full_name || '',
-        createdAt: profile.created_at
-      };
-
-      console.log('Setting authenticated user:', user.id, user.role);
-      setAuthState({
-        user,
-        isAuthenticated: true,
-        loading: false
-      });
-    } catch (error) {
-      console.error('Profile fetch error:', error);
-      // Fallback to basic authentication
-      const basicUser: User = {
-        id: session.user.id,
-        username: session.user.email || '',
-        email: session.user.email || '',
-        role: 'technician',
-        fullName: session.user.email || '',
-        createdAt: new Date().toISOString()
-      };
-
-      setAuthState({
-        user: basicUser,
-        isAuthenticated: true,
-        loading: false
-      });
-    }
-  };
 
   const login = async (credentials: LoginCredentials): Promise<boolean> => {
     console.log('Login attempt for:', credentials.username);
