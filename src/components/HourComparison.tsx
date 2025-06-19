@@ -44,12 +44,19 @@ const HourComparisonComponent = () => {
         .from('hour_imports')
         .select(`
           *,
-          profiles!hour_imports_technician_id_fkey(full_name)
+          profiles(full_name)
         `)
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      setHourImports(data || []);
+      
+      // Transform the data to match our interface
+      const transformedData = data?.map(item => ({
+        ...item,
+        profiles: item.profiles ? { full_name: item.profiles.full_name } : { full_name: 'Onbekend' }
+      })) || [];
+      
+      setHourImports(transformedData);
     } catch (error) {
       console.error('Error fetching hour imports:', error);
       toast({
