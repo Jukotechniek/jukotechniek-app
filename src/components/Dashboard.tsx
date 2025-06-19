@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
@@ -14,51 +13,93 @@ const Dashboard = () => {
   const [technicianData, setTechnicianData] = useState<TechnicianSummary[]>([]);
   const [weeklyData, setWeeklyData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const isAdmin = user?.role === 'admin';
 
   useEffect(() => {
-    fetchDashboardData();
-  }, []);
+    let isMounted = true;
 
-  const fetchDashboardData = async () => {
-    try {
-      // Fetch work hours data
-      const { data: workHours, error: hoursError } = await supabase
-        .from('work_hours')
-        .select(`
-          *,
-          profiles!work_hours_technician_id_fkey(full_name)
-        `);
-
-      if (hoursError) {
-        console.error('Error fetching work hours:', hoursError);
+    const fetchDashboardData = async () => {
+      if (!user?.id) {
+        console.log('No user ID available, skipping fetch');
+        if (isMounted) {
+          setLoading(false);
+        }
         return;
       }
 
-      // Fetch technician rates
-      const { data: rates, error: ratesError } = await supabase
-        .from('technician_rates')
-        .select('*');
+      try {
+        setLoading(true);
+        setError(null);
 
-      if (ratesError) {
-        console.error('Error fetching rates:', ratesError);
+        // Fetch work hours data
+        const { data: workHours, error: hoursError } = await supabase
+          .from('work_hours')
+          .select('*')
+          .limit(1000); // Add reasonable limit
+
+        if (hoursError) {
+          console.error('Error fetching work hours:', hoursError);
+          if (isMounted) {
+            setError('Failed to load work hours data');
+            setLoading(false);
+          }
+          return;
+        }
+
+        // Fetch profiles separately
+        const { data: profiles, error: profilesError } = await supabase
+          .from('profiles')
+          .select('id, full_name')
+          .limit(100);
+
+        if (profilesError) {
+          console.error('Error fetching profiles:', profilesError);
+        }
+
+        // Fetch technician rates
+        const { data: rates, error: ratesError } = await supabase
+          .from('technician_rates')
+          .select('*')
+          .limit(100);
+
+        if (ratesError) {
+          console.error('Error fetching rates:', ratesError);
+        }
+
+        if (isMounted && workHours) {
+          // Combine work hours with profile data
+          const workHoursWithProfiles = workHours.map(hour => ({
+            ...hour,
+            profiles: profiles?.find(p => p.id === hour.technician_id)
+          }));
+
+          // Process data for technician summaries
+          const technicianSummaries = processTechnicianData(workHoursWithProfiles, rates || []);
+          setTechnicianData(technicianSummaries);
+
+          // Process weekly data
+          const weekly = processWeeklyData(workHoursWithProfiles);
+          setWeeklyData(weekly);
+        }
+      } catch (error) {
+        console.error('Error fetching dashboard data:', error);
+        if (isMounted) {
+          setError('Failed to load dashboard data');
+        }
+      } finally {
+        if (isMounted) {
+          setLoading(false);
+        }
       }
+    };
 
-      // Process data for technician summaries
-      if (workHours) {
-        const technicianSummaries = processTechnicianData(workHours, rates || []);
-        setTechnicianData(technicianSummaries);
+    fetchDashboardData();
 
-        // Process weekly data
-        const weekly = processWeeklyData(workHours);
-        setWeeklyData(weekly);
-      }
-    } catch (error) {
-      console.error('Error fetching dashboard data:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
+    return () => {
+      isMounted = false;
+    };
+  }, [user?.id]); // Only depend on user ID
 
   const processTechnicianData = (workHours: any[], rates: any[]): TechnicianSummary[] => {
     const technicianMap = new Map();
@@ -130,11 +171,36 @@ const Dashboard = () => {
 
   const currentUserData = technicianData.find(tech => tech.technicianId === user?.id);
 
+  if (error) {
+    return (
+      <div className="p-6 bg-gray-50 min-h-screen">
+        <div className="max-w-7xl mx-auto">
+          <div className="flex items-center justify-center h-64">
+            <div className="text-center">
+              <p className="text-red-600 mb-4">{error}</p>
+              <button 
+                onClick={() => window.location.reload()} 
+                className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
+              >
+                Probeer opnieuw
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (loading) {
     return (
       <div className="p-6 bg-gray-50 min-h-screen">
-        <div className="flex items-center justify-center h-64">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-red-600"></div>
+        <div className="max-w-7xl mx-auto">
+          <div className="flex items-center justify-center h-64">
+            <div className="text-center">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-red-600 mx-auto mb-4"></div>
+              <p className="text-gray-600">Dashboard laden...</p>
+            </div>
+          </div>
         </div>
       </div>
     );
