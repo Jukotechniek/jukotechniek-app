@@ -15,10 +15,13 @@ import AIChatbot from '@/components/AIChatbot';
 import TravelExpenseManagement from '@/components/TravelExpenseManagement';
 
 const AppContent = () => {
-  const { isAuthenticated, loading } = useAuth();
+  const { isAuthenticated, loading, user } = useAuth();
   const [activeTab, setActiveTab] = useState('dashboard');
 
+  console.log('AppContent render - loading:', loading, 'isAuthenticated:', isAuthenticated, 'user:', user?.id);
+
   if (loading) {
+    console.log('Showing loading screen');
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-100">
         <div className="text-center">
@@ -30,8 +33,11 @@ const AppContent = () => {
   }
 
   if (!isAuthenticated) {
+    console.log('Showing login form');
     return <LoginForm />;
   }
+
+  console.log('Showing authenticated app with activeTab:', activeTab);
 
   const renderContent = () => {
     switch (activeTab) {
@@ -69,6 +75,7 @@ const AppContent = () => {
 };
 
 const Index = () => {
+  console.log('Index component render');
   return (
     <AuthProvider>
       <AppContent />
