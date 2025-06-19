@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -7,99 +7,128 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
+import { supabase } from '@/integrations/supabase/client';
 import { WorkEntry } from '@/types/workHours';
 import { calculateOvertimeHours, formatDutchDate } from '@/utils/overtimeCalculations';
 import { Trash2, Edit2, Save, X } from 'lucide-react';
 
-// Mock customers data
-const mockCustomers = [
-  { id: '1', name: 'Gemeente Amsterdam' },
-  { id: '2', name: 'KPN Kantoor Rotterdam' },
-  { id: '3', name: 'Philips Healthcare Utrecht' }
-];
-
-// Mock travel expenses per technician per customer
-const mockTravelExpenses = [
-  { customerId: '1', technicianId: '2', toTechnician: 25.00, fromClient: 35.00 },
-  { customerId: '2', technicianId: '2', toTechnician: 35.00, fromClient: 45.00 },
-  { customerId: '3', technicianId: '2', toTechnician: 30.00, fromClient: 40.00 },
-  { customerId: '1', technicianId: '3', toTechnician: 25.00, fromClient: 35.00 },
-  { customerId: '2', technicianId: '3', toTechnician: 35.00, fromClient: 45.00 },
-  { customerId: '3', technicianId: '3', toTechnician: 30.00, fromClient: 40.00 }
-];
-
-// Updated mock data with customer and overtime info
-const mockWorkEntries: WorkEntry[] = [
-  {
-    id: '1',
-    technicianId: '2',
-    technicianName: 'Jan de Vries',
-    customerId: '1',
-    customerName: 'Gemeente Amsterdam',
-    date: '2024-06-15',
-    hoursWorked: 9,
-    regularHours: 8,
-    overtimeHours: 1,
-    weekendHours: 0,
-    sundayHours: 0,
-    isWeekend: false,
-    isSunday: false,
-    isManualEntry: false,
-    description: 'Installatie op kantoor Amsterdam',
-    travelExpenseToTechnician: 25.00,
-    travelExpenseFromClient: 35.00,
-    createdAt: '2024-06-15T08:00:00Z',
-    createdBy: '2'
-  },
-  {
-    id: '2',
-    technicianId: '3',
-    technicianName: 'Pieter Jansen',
-    customerId: '2',
-    customerName: 'KPN Kantoor Rotterdam',
-    date: '2024-06-14',
-    hoursWorked: 7.5,
-    regularHours: 7.5,
-    overtimeHours: 0,
-    weekendHours: 0,
-    sundayHours: 0,
-    isWeekend: false,
-    isSunday: false,
-    isManualEntry: true,
-    description: 'Onderhoudswerkzaamheden Rotterdam',
-    travelExpenseToTechnician: 35.00,
-    travelExpenseFromClient: 45.00,
-    createdAt: '2024-06-14T09:30:00Z',
-    createdBy: '1'
-  }
-];
-
 const WorkHours = () => {
   const { user } = useAuth();
   const { toast } = useToast();
-  const [workEntries, setWorkEntries] = useState(mockWorkEntries);
+  const [workEntries, setWorkEntries] = useState<WorkEntry[]>([]);
+  const [customers, setCustomers] = useState<any[]>([]);
+  const [technicians, setTechnicians] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingEntry, setEditingEntry] = useState<WorkEntry | null>(null);
   const [newEntry, setNewEntry] = useState({
     technicianId: user?.role === 'technician' ? user.id : '',
-    customerId: mockCustomers.length === 1 ? mockCustomers[0].id : '',
+    customerId: '',
     date: new Date().toISOString().split('T')[0],
     hoursWorked: '',
     description: ''
   });
 
   const isAdmin = user?.role === 'admin';
-  const filteredEntries = isAdmin 
-    ? workEntries 
-    : workEntries.filter(entry => entry.technicianId === user?.id);
 
-  const getTravelExpenses = (customerId: string, technicianId: string) => {
-    return mockTravelExpenses.find(
-      exp => exp.customerId === customerId && exp.technicianId === technicianId
-    ) || { toTechnician: 0, fromClient: 0 };
+  useEffect(() => {
+    fetchData();
+  }, [user]);
+
+  const fetchData = async () => {
+    try {
+      setLoading(true);
+
+      // Fetch customers
+      const { data: customersData, error: customersError } = await supabase
+        .from('customers')
+        .select('*')
+        .eq('is_active', true);
+
+      if (customersError) throw customersError;
+      setCustomers(customersData || []);
+
+      // Fetch technicians (profiles)
+      const { data: techniciansData, error: techniciansError } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('role', 'technician');
+
+      if (techniciansError) throw techniciansError;
+      setTechnicians(techniciansData || []);
+
+      // Fetch work hours with related data
+      let query = supabase
+        .from('work_hours')
+        .select(`
+          *,
+          profiles!work_hours_technician_id_fkey(full_name),
+          customers!work_hours_customer_id_fkey(name)
+        `)
+        .order('date', { ascending: false });
+
+      if (!isAdmin && user?.id) {
+        query = query.eq('technician_id', user.id);
+      }
+
+      const { data: workHoursData, error: workHoursError } = await query;
+
+      if (workHoursError) throw workHoursError;
+
+      const formattedEntries: WorkEntry[] = (workHoursData || []).map(entry => ({
+        id: entry.id,
+        technicianId: entry.technician_id,
+        technicianName: entry.profiles?.full_name || 'Unknown',
+        customerId: entry.customer_id,
+        customerName: entry.customers?.name || 'Unknown',
+        date: entry.date,
+        hoursWorked: Number(entry.hours_worked),
+        regularHours: Number(entry.regular_hours || 0),
+        overtimeHours: Number(entry.overtime_hours || 0),
+        weekendHours: Number(entry.weekend_hours || 0),
+        sundayHours: Number(entry.sunday_hours || 0),
+        isWeekend: entry.is_weekend || false,
+        isSunday: entry.is_sunday || false,
+        isManualEntry: entry.is_manual_entry || true,
+        description: entry.description || '',
+        travelExpenseToTechnician: Number(entry.travel_expense_to_technician || 0),
+        travelExpenseFromClient: Number(entry.travel_expense_from_client || 0),
+        createdAt: entry.created_at,
+        createdBy: entry.created_by
+      }));
+
+      setWorkEntries(formattedEntries);
+    } catch (error) {
+      console.error('Error fetching data:', error);
+      toast({
+        title: "Fout",
+        description: "Kon gegevens niet laden",
+        variant: "destructive"
+      });
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleAddEntry = (e: React.FormEvent) => {
+  const getTravelExpenses = async (customerId: string, technicianId: string) => {
+    const { data, error } = await supabase
+      .from('customer_technician_rates')
+      .select('travel_expense_to_technician, travel_expense_from_client')
+      .eq('customer_id', customerId)
+      .eq('technician_id', technicianId)
+      .single();
+
+    if (error || !data) {
+      return { toTechnician: 0, fromClient: 0 };
+    }
+
+    return {
+      toTechnician: Number(data.travel_expense_to_technician || 0),
+      fromClient: Number(data.travel_expense_from_client || 0)
+    };
+  };
+
+  const handleAddEntry = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (!newEntry.technicianId || !newEntry.customerId || !newEntry.date || !newEntry.hoursWorked) {
@@ -121,54 +150,63 @@ const WorkHours = () => {
       return;
     }
 
-    // Calculate overtime hours
-    const overtimeData = calculateOvertimeHours(newEntry.date, hours);
-    
-    // Get travel expenses
-    const travelExpenses = getTravelExpenses(newEntry.customerId, newEntry.technicianId);
-    const selectedCustomer = mockCustomers.find(c => c.id === newEntry.customerId);
-    
-    const entry: WorkEntry = {
-      id: Date.now().toString(),
-      technicianId: newEntry.technicianId,
-      technicianName: newEntry.technicianId === '2' ? 'Jan de Vries' : 'Pieter Jansen',
-      customerId: newEntry.customerId,
-      customerName: selectedCustomer?.name || '',
-      date: newEntry.date,
-      hoursWorked: hours,
-      ...overtimeData,
-      isManualEntry: true,
-      description: newEntry.description,
-      travelExpenseToTechnician: travelExpenses.toTechnician,
-      travelExpenseFromClient: travelExpenses.fromClient,
-      createdAt: new Date().toISOString(),
-      createdBy: user?.id || ''
-    };
+    try {
+      const overtimeData = calculateOvertimeHours(newEntry.date, hours);
+      const travelExpenses = await getTravelExpenses(newEntry.customerId, newEntry.technicianId);
 
-    setWorkEntries([...workEntries, entry]);
-    
-    let overtimeMessage = '';
-    if (overtimeData.isSunday) {
-      overtimeMessage = ` Zondag: ${overtimeData.sundayHours}u tegen 200%`;
-    } else if (overtimeData.isWeekend) {
-      overtimeMessage = ` Weekend: ${overtimeData.weekendHours}u tegen 150%`;
-    } else if (overtimeData.overtimeHours > 0) {
-      overtimeMessage = ` Overwerk: ${overtimeData.overtimeHours}u tegen 125%`;
+      const { error } = await supabase
+        .from('work_hours')
+        .insert({
+          technician_id: newEntry.technicianId,
+          customer_id: newEntry.customerId,
+          date: newEntry.date,
+          hours_worked: hours,
+          regular_hours: overtimeData.regularHours,
+          overtime_hours: overtimeData.overtimeHours,
+          weekend_hours: overtimeData.weekendHours,
+          sunday_hours: overtimeData.sundayHours,
+          is_weekend: overtimeData.isWeekend,
+          is_sunday: overtimeData.isSunday,
+          is_manual_entry: true,
+          description: newEntry.description,
+          travel_expense_to_technician: travelExpenses.toTechnician,
+          travel_expense_from_client: travelExpenses.fromClient,
+          created_by: user?.id
+        });
+
+      if (error) throw error;
+
+      let overtimeMessage = '';
+      if (overtimeData.isSunday) {
+        overtimeMessage = ` Zondag: ${overtimeData.sundayHours}u tegen 200%`;
+      } else if (overtimeData.isWeekend) {
+        overtimeMessage = ` Weekend: ${overtimeData.weekendHours}u tegen 150%`;
+      } else if (overtimeData.overtimeHours > 0) {
+        overtimeMessage = ` Overwerk: ${overtimeData.overtimeHours}u tegen 125%`;
+      }
+      
+      toast({
+        title: "Succes",
+        description: `Werkuren succesvol toegevoegd.${overtimeMessage}`
+      });
+
+      setNewEntry({
+        technicianId: user?.role === 'technician' ? user.id : '',
+        customerId: '',
+        date: new Date().toISOString().split('T')[0],
+        hoursWorked: '',
+        description: ''
+      });
+      setShowAddForm(false);
+      fetchData();
+    } catch (error) {
+      console.error('Error adding entry:', error);
+      toast({
+        title: "Fout",
+        description: "Kon werkuren niet toevoegen",
+        variant: "destructive"
+      });
     }
-    
-    toast({
-      title: "Succes",
-      description: `Werkuren succesvol toegevoegd.${overtimeMessage}`
-    });
-
-    setNewEntry({
-      technicianId: user?.role === 'technician' ? user.id : '',
-      customerId: mockCustomers.length === 1 ? mockCustomers[0].id : '',
-      date: new Date().toISOString().split('T')[0],
-      hoursWorked: '',
-      description: ''
-    });
-    setShowAddForm(false);
   };
 
   const handleEdit = (entry: WorkEntry) => {
@@ -183,7 +221,7 @@ const WorkHours = () => {
     setEditingEntry(entry);
   };
 
-  const handleSaveEdit = () => {
+  const handleSaveEdit = async () => {
     if (!editingEntry) return;
 
     const hours = editingEntry.hoursWorked;
@@ -196,22 +234,42 @@ const WorkHours = () => {
       return;
     }
 
-    const overtimeData = calculateOvertimeHours(editingEntry.date, hours);
-    
-    setWorkEntries(workEntries.map(entry => 
-      entry.id === editingEntry.id 
-        ? { ...editingEntry, ...overtimeData }
-        : entry
-    ));
-    
-    setEditingEntry(null);
-    toast({
-      title: "Succes",
-      description: "Werkuren succesvol bijgewerkt"
-    });
+    try {
+      const overtimeData = calculateOvertimeHours(editingEntry.date, hours);
+
+      const { error } = await supabase
+        .from('work_hours')
+        .update({
+          hours_worked: hours,
+          regular_hours: overtimeData.regularHours,
+          overtime_hours: overtimeData.overtimeHours,
+          weekend_hours: overtimeData.weekendHours,
+          sunday_hours: overtimeData.sundayHours,
+          is_weekend: overtimeData.isWeekend,
+          is_sunday: overtimeData.isSunday,
+          description: editingEntry.description
+        })
+        .eq('id', editingEntry.id);
+
+      if (error) throw error;
+
+      setEditingEntry(null);
+      toast({
+        title: "Succes",
+        description: "Werkuren succesvol bijgewerkt"
+      });
+      fetchData();
+    } catch (error) {
+      console.error('Error updating entry:', error);
+      toast({
+        title: "Fout",
+        description: "Kon werkuren niet bijwerken",
+        variant: "destructive"
+      });
+    }
   };
 
-  const handleDelete = (entryId: string, entry: WorkEntry) => {
+  const handleDelete = async (entryId: string, entry: WorkEntry) => {
     if (!isAdmin && entry.technicianId !== user?.id) {
       toast({
         title: "Fout",
@@ -221,12 +279,38 @@ const WorkHours = () => {
       return;
     }
 
-    setWorkEntries(workEntries.filter(e => e.id !== entryId));
-    toast({
-      title: "Succes",
-      description: "Werkuren succesvol verwijderd"
-    });
+    try {
+      const { error } = await supabase
+        .from('work_hours')
+        .delete()
+        .eq('id', entryId);
+
+      if (error) throw error;
+
+      toast({
+        title: "Succes",
+        description: "Werkuren succesvol verwijderd"
+      });
+      fetchData();
+    } catch (error) {
+      console.error('Error deleting entry:', error);
+      toast({
+        title: "Fout",
+        description: "Kon werkuren niet verwijderen",
+        variant: "destructive"
+      });
+    }
   };
+
+  if (loading) {
+    return (
+      <div className="p-6 bg-gray-50 min-h-screen">
+        <div className="flex items-center justify-center h-64">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-red-600"></div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 bg-gray-50 min-h-screen">
@@ -267,8 +351,11 @@ const WorkHours = () => {
                       required
                     >
                       <option value="">Selecteer Monteur</option>
-                      <option value="2">Jan de Vries</option>
-                      <option value="3">Pieter Jansen</option>
+                      {technicians.map(tech => (
+                        <option key={tech.id} value={tech.id}>
+                          {tech.full_name}
+                        </option>
+                      ))}
                     </select>
                   </div>
                 )}
@@ -282,14 +369,11 @@ const WorkHours = () => {
                     required
                   >
                     <option value="">Selecteer Klant</option>
-                    {mockCustomers.map(customer => {
-                      const travelExpenses = getTravelExpenses(customer.id, newEntry.technicianId);
-                      return (
-                        <option key={customer.id} value={customer.id}>
-                          {customer.name} {isAdmin && `(€${travelExpenses.toTechnician.toFixed(2)} reis)`}
-                        </option>
-                      );
-                    })}
+                    {customers.map(customer => (
+                      <option key={customer.id} value={customer.id}>
+                        {customer.name}
+                      </option>
+                    ))}
                   </select>
                 </div>
                 <div className="space-y-2">
@@ -359,11 +443,11 @@ const WorkHours = () => {
         <Card className="bg-white">
           <CardHeader>
             <CardTitle className="text-lg font-semibold text-gray-900">
-              Werkuren ({filteredEntries.length})
+              Werkuren ({workEntries.length})
             </CardTitle>
           </CardHeader>
           <CardContent>
-            {filteredEntries.length === 0 ? (
+            {workEntries.length === 0 ? (
               <div className="text-center py-8 text-gray-500">
                 Geen werkuren gevonden
               </div>
@@ -384,7 +468,7 @@ const WorkHours = () => {
                     </tr>
                   </thead>
                   <tbody>
-                    {filteredEntries.map((entry) => (
+                    {workEntries.map((entry) => (
                       <tr key={entry.id} className="border-b border-gray-100 hover:bg-gray-50">
                         {isAdmin && (
                           <td className="py-3 font-medium text-gray-900">{entry.technicianName}</td>

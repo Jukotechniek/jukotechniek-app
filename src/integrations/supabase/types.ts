@@ -81,6 +81,42 @@ export type Database = {
         }
         Relationships: []
       }
+      hour_imports: {
+        Row: {
+          created_at: string
+          date: string
+          difference: number | null
+          id: string
+          manual_hours: number | null
+          status: string
+          technician_id: string
+          updated_at: string
+          webhook_hours: number
+        }
+        Insert: {
+          created_at?: string
+          date: string
+          difference?: number | null
+          id?: string
+          manual_hours?: number | null
+          status?: string
+          technician_id: string
+          updated_at?: string
+          webhook_hours: number
+        }
+        Update: {
+          created_at?: string
+          date?: string
+          difference?: number | null
+          id?: string
+          manual_hours?: number | null
+          status?: string
+          technician_id?: string
+          updated_at?: string
+          webhook_hours?: number
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           created_at: string | null
@@ -200,6 +236,36 @@ export type Database = {
           },
         ]
       }
+      webhook_hours: {
+        Row: {
+          created_at: string
+          date: string
+          hours_worked: number
+          id: string
+          received_at: string
+          technician_id: string
+          verified: boolean
+        }
+        Insert: {
+          created_at?: string
+          date: string
+          hours_worked: number
+          id?: string
+          received_at?: string
+          technician_id: string
+          verified?: boolean
+        }
+        Update: {
+          created_at?: string
+          date?: string
+          hours_worked?: number
+          id?: string
+          received_at?: string
+          technician_id?: string
+          verified?: boolean
+        }
+        Relationships: []
+      }
       work_hours: {
         Row: {
           created_at: string | null
@@ -287,7 +353,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      process_webhook_hours: {
+        Args: { p_technician_id: string; p_date: string; p_hours: number }
+        Returns: Json
+      }
     }
     Enums: {
       [_ in never]: never

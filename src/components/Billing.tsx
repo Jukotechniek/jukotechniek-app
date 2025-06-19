@@ -1,62 +1,45 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
-import { TechnicianRate, BillingReport } from '@/types/billing';
+import { supabase } from '@/integrations/supabase/client';
 import { Euro, Calculator, TrendingUp } from 'lucide-react';
 
-// Mock data
-const mockRates: TechnicianRate[] = [
-  {
-    technicianId: '2',
-    technicianName: 'Jan de Vries',
-    hourlyRate: 25,
-    billableRate: 65,
-    createdAt: '2024-01-01',
-    updatedAt: '2024-01-01'
-  },
-  {
-    technicianId: '3',
-    technicianName: 'Pieter Jansen',
-    hourlyRate: 28,
-    billableRate: 70,
-    createdAt: '2024-01-01',
-    updatedAt: '2024-01-01'
-  }
-];
+interface TechnicianRate {
+  id: string;
+  technician_id: string;
+  hourly_rate: number;
+  billable_rate: number;
+  profiles?: { full_name: string };
+}
 
-const mockBillingReports: BillingReport[] = [
-  {
-    technicianId: '2',
-    technicianName: 'Jan de Vries',
-    totalHours: 160,
-    hourlyRate: 25,
-    billableRate: 65,
-    totalCost: 4000,
-    totalBillable: 10400,
-    profit: 6400
-  },
-  {
-    technicianId: '3',
-    technicianName: 'Pieter Jansen',
-    totalHours: 152,
-    hourlyRate: 28,
-    billableRate: 70,
-    totalCost: 4256,
-    totalBillable: 10640,
-    profit: 6384
-  }
-];
+interface BillingReport {
+  technicianId: string;
+  technicianName: string;
+  totalHours: number;
+  regularHours: number;
+  overtimeHours: number;
+  weekendHours: number;
+  sundayHours: number;
+  hourlyRate: number;
+  billableRate: number;
+  totalCost: number;
+  totalBillable: number;
+  profit: number;
+}
 
 const Billing = () => {
   const { user } = useAuth();
   const { toast } = useToast();
+  const [rates, setRates] = useState<TechnicianRate[]>([]);
+  const [billingReports, setBillingReports] = useState<BillingReport[]>([]);
+  const [technicians, setTechnicians] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
   const [showAddForm, setShowAddForm] = useState(false);
-  const [editingRate, setEditingRate] = useState<string | null>(null);
   const [newRate, setNewRate] = useState({
     technicianId: '',
     hourlyRate: '',
@@ -65,28 +48,131 @@ const Billing = () => {
 
   const isAdmin = user?.role === 'admin';
 
-  if (!isAdmin) {
-    return (
-      <div className="p-6 bg-gray-50 min-h-screen">
-        <div className="max-w-7xl mx-auto">
-          <Card className="bg-white">
-            <CardContent className="p-8 text-center">
-              <h2 className="text-2xl font-bold text-gray-900 mb-4">Access Denied</h2>
-              <p className="text-gray-600">Only administrators can access billing information.</p>
-            </CardContent>
-          </Card>
-        </div>
-      </div>
-    );
-  }
+  useEffect(() => {
+    if (isAdmin) {
+      fetchData();
+    }
+  }, [isAdmin]);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const fetchData = async () => {
+    try {
+      setLoading(true);
+
+      // Fetch technicians
+      const { data: techniciansData, error: techniciansError } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('role', 'technician');
+
+      if (techniciansError) throw techniciansError;
+      setTechnicians(techniciansData || []);
+
+      // Fetch technician rates
+      const { data: ratesData, error: ratesError } = await supabase
+        .from('technician_rates')
+        .select(`
+          *,
+          profiles!technician_rates_technician_id_fkey(full_name)
+        `);
+
+      if (ratesError) throw ratesError;
+      setRates(ratesData || []);
+
+      // Fetch work hours for billing calculation
+      const { data: workHoursData, error: workHoursError } = await supabase
+        .from('work_hours')
+        .select(`
+          technician_id,
+          hours_worked,
+          regular_hours,
+          overtime_hours,
+          weekend_hours,
+          sunday_hours,
+          profiles!work_hours_technician_id_fkey(full_name)
+        `);
+
+      if (workHoursError) throw workHoursError;
+
+      // Calculate billing reports
+      const billingMap = new Map();
+
+      (workHoursData || []).forEach(entry => {
+        const techId = entry.technician_id;
+        const techName = entry.profiles?.full_name || 'Unknown';
+
+        if (!billingMap.has(techId)) {
+          const rate = ratesData?.find(r => r.technician_id === techId);
+          billingMap.set(techId, {
+            technicianId: techId,
+            technicianName: techName,
+            totalHours: 0,
+            regularHours: 0,
+            overtimeHours: 0,
+            weekendHours: 0,
+            sundayHours: 0,
+            hourlyRate: Number(rate?.hourly_rate || 0),
+            billableRate: Number(rate?.billable_rate || 0),
+            totalCost: 0,
+            totalBillable: 0,
+            profit: 0
+          });
+        }
+
+        const billing = billingMap.get(techId);
+        const regularH = Number(entry.regular_hours || 0);
+        const overtimeH = Number(entry.overtime_hours || 0);
+        const weekendH = Number(entry.weekend_hours || 0);
+        const sundayH = Number(entry.sunday_hours || 0);
+
+        billing.totalHours += Number(entry.hours_worked || 0);
+        billing.regularHours += regularH;
+        billing.overtimeHours += overtimeH;
+        billing.weekendHours += weekendH;
+        billing.sundayHours += sundayH;
+
+        // Calculate costs with multipliers
+        const regularCost = regularH * billing.hourlyRate;
+        const overtimeCost = overtimeH * billing.hourlyRate * 1.25;
+        const weekendCost = weekendH * billing.hourlyRate * 1.5;
+        const sundayCost = sundayH * billing.hourlyRate * 2.0;
+
+        billing.totalCost += regularCost + overtimeCost + weekendCost + sundayCost;
+
+        // Calculate billable with same multipliers
+        const regularBillable = regularH * billing.billableRate;
+        const overtimeBillable = overtimeH * billing.billableRate * 1.25;
+        const weekendBillable = weekendH * billing.billableRate * 1.5;
+        const sundayBillable = sundayH * billing.billableRate * 2.0;
+
+        billing.totalBillable += regularBillable + overtimeBillable + weekendBillable + sundayBillable;
+      });
+
+      // Calculate profit for each technician
+      const reports = Array.from(billingMap.values()).map(billing => ({
+        ...billing,
+        profit: billing.totalBillable - billing.totalCost
+      }));
+
+      setBillingReports(reports);
+    } catch (error) {
+      console.error('Error fetching billing data:', error);
+      toast({
+        title: "Fout",
+        description: "Kon factureringsgegevens niet laden",
+        variant: "destructive"
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (!newRate.technicianId || !newRate.hourlyRate || !newRate.billableRate) {
       toast({
-        title: "Error",
-        description: "Please fill in all required fields",
+        title: "Fout",
+        description: "Vul alle verplichte velden in",
         variant: "destructive"
       });
       return;
@@ -97,8 +183,8 @@ const Billing = () => {
 
     if (hourlyRate <= 0 || billableRate <= 0) {
       toast({
-        title: "Error",
-        description: "Rates must be greater than 0",
+        title: "Fout",
+        description: "Tarieven moeten groter zijn dan 0",
         variant: "destructive"
       });
       return;
@@ -106,42 +192,89 @@ const Billing = () => {
 
     if (billableRate <= hourlyRate) {
       toast({
-        title: "Warning",
-        description: "Billable rate should be higher than hourly rate for profit",
+        title: "Waarschuwing",
+        description: "Factuurtarief zou hoger moeten zijn dan uurtarief voor winst",
         variant: "destructive"
       });
     }
 
-    toast({
-      title: "Success",
-      description: "Technician rate updated successfully"
-    });
+    try {
+      const { error } = await supabase
+        .from('technician_rates')
+        .upsert({
+          technician_id: newRate.technicianId,
+          hourly_rate: hourlyRate,
+          billable_rate: billableRate
+        }, {
+          onConflict: 'technician_id'
+        });
 
-    setNewRate({
-      technicianId: '',
-      hourlyRate: '',
-      billableRate: ''
-    });
-    setShowAddForm(false);
+      if (error) throw error;
+
+      toast({
+        title: "Succes",
+        description: "Monteur tarief succesvol bijgewerkt"
+      });
+
+      setNewRate({
+        technicianId: '',
+        hourlyRate: '',
+        billableRate: ''
+      });
+      setShowAddForm(false);
+      fetchData();
+    } catch (error) {
+      console.error('Error updating rate:', error);
+      toast({
+        title: "Fout",
+        description: "Kon tarief niet bijwerken",
+        variant: "destructive"
+      });
+    }
   };
 
-  const totalProfit = mockBillingReports.reduce((sum, report) => sum + report.profit, 0);
-  const totalBillable = mockBillingReports.reduce((sum, report) => sum + report.totalBillable, 0);
-  const totalCost = mockBillingReports.reduce((sum, report) => sum + report.totalCost, 0);
+  if (!isAdmin) {
+    return (
+      <div className="p-6 bg-gray-50 min-h-screen">
+        <div className="max-w-7xl mx-auto">
+          <Card className="bg-white">
+            <CardContent className="p-8 text-center">
+              <h2 className="text-2xl font-bold text-gray-900 mb-4">Toegang Geweigerd</h2>
+              <p className="text-gray-600">Alleen beheerders kunnen toegang krijgen tot factureringsinformatie.</p>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    );
+  }
+
+  if (loading) {
+    return (
+      <div className="p-6 bg-gray-50 min-h-screen">
+        <div className="flex items-center justify-center h-64">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-red-600"></div>
+        </div>
+      </div>
+    );
+  }
+
+  const totalProfit = billingReports.reduce((sum, report) => sum + report.profit, 0);
+  const totalBillable = billingReports.reduce((sum, report) => sum + report.totalBillable, 0);
+  const totalCost = billingReports.reduce((sum, report) => sum + report.totalCost, 0);
 
   return (
     <div className="p-6 bg-gray-50 min-h-screen">
       <div className="max-w-7xl mx-auto">
         <div className="mb-8 flex justify-between items-center">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">Billing & Profit Analysis</h1>
-            <p className="text-gray-600">Manage technician rates and track profitability</p>
+            <h1 className="text-3xl font-bold text-gray-900 mb-2">Facturering & Winst Analyse</h1>
+            <p className="text-gray-600">Beheer monteur tarieven en volg winstgevendheid</p>
           </div>
           <Button
             onClick={() => setShowAddForm(!showAddForm)}
             className="bg-red-600 hover:bg-red-700 text-white"
           >
-            {showAddForm ? 'Cancel' : 'Update Rates'}
+            {showAddForm ? 'Annuleren' : 'Tarieven Bijwerken'}
           </Button>
         </div>
 
@@ -152,8 +285,8 @@ const Billing = () => {
               <div className="flex items-center">
                 <Euro className="h-8 w-8 text-green-600" />
                 <div className="ml-4">
-                  <p className="text-sm font-medium text-gray-600">Total Profit</p>
-                  <p className="text-2xl font-bold text-green-600">€{totalProfit.toLocaleString()}</p>
+                  <p className="text-sm font-medium text-gray-600">Totale Winst</p>
+                  <p className="text-2xl font-bold text-green-600">€{totalProfit.toFixed(2)}</p>
                 </div>
               </div>
             </CardContent>
@@ -164,8 +297,8 @@ const Billing = () => {
               <div className="flex items-center">
                 <Calculator className="h-8 w-8 text-blue-600" />
                 <div className="ml-4">
-                  <p className="text-sm font-medium text-gray-600">Total Billable</p>
-                  <p className="text-2xl font-bold text-blue-600">€{totalBillable.toLocaleString()}</p>
+                  <p className="text-sm font-medium text-gray-600">Totaal Factureerbaar</p>
+                  <p className="text-2xl font-bold text-blue-600">€{totalBillable.toFixed(2)}</p>
                 </div>
               </div>
             </CardContent>
@@ -176,7 +309,7 @@ const Billing = () => {
               <div className="flex items-center">
                 <TrendingUp className="h-8 w-8 text-red-600" />
                 <div className="ml-4">
-                  <p className="text-sm font-medium text-gray-600">Profit Margin</p>
+                  <p className="text-sm font-medium text-gray-600">Winstmarge</p>
                   <p className="text-2xl font-bold text-red-600">
                     {totalBillable > 0 ? Math.round((totalProfit / totalBillable) * 100) : 0}%
                   </p>
@@ -190,12 +323,12 @@ const Billing = () => {
         {showAddForm && (
           <Card className="bg-white mb-6">
             <CardHeader>
-              <CardTitle className="text-lg font-semibold text-gray-900">Update Technician Rates</CardTitle>
+              <CardTitle className="text-lg font-semibold text-gray-900">Monteur Tarieven Bijwerken</CardTitle>
             </CardHeader>
             <CardContent>
               <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="technician">Technician</Label>
+                  <Label htmlFor="technician">Monteur</Label>
                   <select
                     id="technician"
                     value={newRate.technicianId}
@@ -203,13 +336,16 @@ const Billing = () => {
                     className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-red-500 focus:border-red-500"
                     required
                   >
-                    <option value="">Select Technician</option>
-                    <option value="2">Jan de Vries</option>
-                    <option value="3">Pieter Jansen</option>
+                    <option value="">Selecteer Monteur</option>
+                    {technicians.map(tech => (
+                      <option key={tech.id} value={tech.id}>
+                        {tech.full_name}
+                      </option>
+                    ))}
                   </select>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="hourlyRate">Hourly Rate (€)</Label>
+                  <Label htmlFor="hourlyRate">Uurtarief (€)</Label>
                   <Input
                     id="hourlyRate"
                     type="number"
@@ -223,7 +359,7 @@ const Billing = () => {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="billableRate">Billable Rate (€)</Label>
+                  <Label htmlFor="billableRate">Factuurtarief (€)</Label>
                   <Input
                     id="billableRate"
                     type="number"
@@ -238,7 +374,7 @@ const Billing = () => {
                 </div>
                 <div className="md:col-span-3">
                   <Button type="submit" className="bg-red-600 hover:bg-red-700 text-white">
-                    Update Rate
+                    Tarief Bijwerken
                   </Button>
                 </div>
               </form>
@@ -249,70 +385,93 @@ const Billing = () => {
         {/* Current Rates */}
         <Card className="bg-white mb-6">
           <CardHeader>
-            <CardTitle className="text-lg font-semibold text-gray-900">Current Rates</CardTitle>
+            <CardTitle className="text-lg font-semibold text-gray-900">Huidige Tarieven</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="overflow-x-auto">
-              <table className="w-full text-left">
-                <thead>
-                  <tr className="border-b border-gray-200">
-                    <th className="pb-3 text-sm font-medium text-gray-600">Technician</th>
-                    <th className="pb-3 text-sm font-medium text-gray-600">Hourly Rate</th>
-                    <th className="pb-3 text-sm font-medium text-gray-600">Billable Rate</th>
-                    <th className="pb-3 text-sm font-medium text-gray-600">Margin</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {mockRates.map((rate) => (
-                    <tr key={rate.technicianId} className="border-b border-gray-100 hover:bg-gray-50">
-                      <td className="py-3 font-medium text-gray-900">{rate.technicianName}</td>
-                      <td className="py-3 text-gray-700">€{rate.hourlyRate}</td>
-                      <td className="py-3 text-gray-700">€{rate.billableRate}</td>
-                      <td className="py-3 text-green-600 font-medium">
-                        €{(rate.billableRate - rate.hourlyRate).toFixed(2)}/hr
-                      </td>
+            {rates.length === 0 ? (
+              <div className="text-center py-8 text-gray-500">
+                Geen tarieven geconfigureerd
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left">
+                  <thead>
+                    <tr className="border-b border-gray-200">
+                      <th className="pb-3 text-sm font-medium text-gray-600">Monteur</th>
+                      <th className="pb-3 text-sm font-medium text-gray-600">Uurtarief</th>
+                      <th className="pb-3 text-sm font-medium text-gray-600">Factuurtarief</th>
+                      <th className="pb-3 text-sm font-medium text-gray-600">Marge</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody>
+                    {rates.map((rate) => (
+                      <tr key={rate.id} className="border-b border-gray-100 hover:bg-gray-50">
+                        <td className="py-3 font-medium text-gray-900">
+                          {rate.profiles?.full_name || 'Onbekend'}
+                        </td>
+                        <td className="py-3 text-gray-700">€{Number(rate.hourly_rate).toFixed(2)}</td>
+                        <td className="py-3 text-gray-700">€{Number(rate.billable_rate).toFixed(2)}</td>
+                        <td className="py-3 text-green-600 font-medium">
+                          €{(Number(rate.billable_rate) - Number(rate.hourly_rate)).toFixed(2)}/uur
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </CardContent>
         </Card>
 
         {/* Billing Reports */}
         <Card className="bg-white">
           <CardHeader>
-            <CardTitle className="text-lg font-semibold text-gray-900">Monthly Profit Report</CardTitle>
+            <CardTitle className="text-lg font-semibold text-gray-900">Maandelijks Winst Rapport</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="overflow-x-auto">
-              <table className="w-full text-left">
-                <thead>
-                  <tr className="border-b border-gray-200">
-                    <th className="pb-3 text-sm font-medium text-gray-600">Technician</th>
-                    <th className="pb-3 text-sm font-medium text-gray-600">Hours</th>
-                    <th className="pb-3 text-sm font-medium text-gray-600">Cost</th>
-                    <th className="pb-3 text-sm font-medium text-gray-600">Billable</th>
-                    <th className="pb-3 text-sm font-medium text-gray-600">Profit</th>
-                    <th className="pb-3 text-sm font-medium text-gray-600">Margin %</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {mockBillingReports.map((report) => (
-                    <tr key={report.technicianId} className="border-b border-gray-100 hover:bg-gray-50">
-                      <td className="py-3 font-medium text-gray-900">{report.technicianName}</td>
-                      <td className="py-3 text-gray-700">{report.totalHours}h</td>
-                      <td className="py-3 text-red-600">€{report.totalCost.toLocaleString()}</td>
-                      <td className="py-3 text-blue-600">€{report.totalBillable.toLocaleString()}</td>
-                      <td className="py-3 text-green-600 font-medium">€{report.profit.toLocaleString()}</td>
-                      <td className="py-3 text-gray-700">
-                        {Math.round((report.profit / report.totalBillable) * 100)}%
-                      </td>
+            {billingReports.length === 0 ? (
+              <div className="text-center py-8 text-gray-500">
+                Geen factureringsgegevens beschikbaar
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left">
+                  <thead>
+                    <tr className="border-b border-gray-200">
+                      <th className="pb-3 text-sm font-medium text-gray-600">Monteur</th>
+                      <th className="pb-3 text-sm font-medium text-gray-600">Uren</th>
+                      <th className="pb-3 text-sm font-medium text-gray-600">Kosten</th>
+                      <th className="pb-3 text-sm font-medium text-gray-600">Factureerbaar</th>
+                      <th className="pb-3 text-sm font-medium text-gray-600">Winst</th>
+                      <th className="pb-3 text-sm font-medium text-gray-600">Marge %</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody>
+                    {billingReports.map((report) => (
+                      <tr key={report.technicianId} className="border-b border-gray-100 hover:bg-gray-50">
+                        <td className="py-3 font-medium text-gray-900">{report.technicianName}</td>
+                        <td className="py-3 text-gray-700">
+                          {report.totalHours.toFixed(1)}u
+                          {(report.overtimeHours > 0 || report.weekendHours > 0 || report.sundayHours > 0) && (
+                            <div className="text-xs text-gray-500">
+                              {report.overtimeHours > 0 && `Overwerk: ${report.overtimeHours.toFixed(1)}u `}
+                              {report.weekendHours > 0 && `Weekend: ${report.weekendHours.toFixed(1)}u `}
+                              {report.sundayHours > 0 && `Zondag: ${report.sundayHours.toFixed(1)}u`}
+                            </div>
+                          )}
+                        </td>
+                        <td className="py-3 text-red-600">€{report.totalCost.toFixed(2)}</td>
+                        <td className="py-3 text-blue-600">€{report.totalBillable.toFixed(2)}</td>
+                        <td className="py-3 text-green-600 font-medium">€{report.profit.toFixed(2)}</td>
+                        <td className="py-3 text-gray-700">
+                          {report.totalBillable > 0 ? Math.round((report.profit / report.totalBillable) * 100) : 0}%
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>

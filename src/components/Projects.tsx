@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -7,71 +7,109 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
+import { supabase } from '@/integrations/supabase/client';
 import { Project } from '@/types/projects';
-import { Camera, X, Plus, Trash2, Edit2, Save, CheckCircle, AlertCircle, Clock } from 'lucide-react';
-
-// Mock customers data
-const mockCustomers = [
-  { id: '1', name: 'Gemeente Amsterdam' },
-  { id: '2', name: 'KPN Kantoor Rotterdam' },
-  { id: '3', name: 'Philips Healthcare Utrecht' }
-];
-
-// Updated mock data with customer info and status
-const mockProjects: Project[] = [
-  {
-    id: '1',
-    technicianId: '2',
-    technicianName: 'Jan de Vries',
-    customerId: '1',
-    customerName: 'Gemeente Amsterdam',
-    date: '2024-06-15',
-    title: 'HVAC Installation',
-    description: 'Installed new HVAC system at Amsterdam office building',
-    images: [],
-    hoursSpent: 8,
-    status: 'completed',
-    createdAt: '2024-06-15T08:00:00Z'
-  }
-];
+import { formatDutchDate } from '@/utils/overtimeCalculations';
+import { Trash2, Edit2, Save, X, Eye, Clock, CheckCircle, AlertCircle } from 'lucide-react';
 
 const Projects = () => {
   const { user } = useAuth();
   const { toast } = useToast();
-  const [projects, setProjects] = useState(mockProjects);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [customers, setCustomers] = useState<any[]>([]);
+  const [technicians, setTechnicians] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingProject, setEditingProject] = useState<Project | null>(null);
-  const [selectedImages, setSelectedImages] = useState<File[]>([]);
   const [newProject, setNewProject] = useState({
+    technicianId: user?.role === 'technician' ? user.id : '',
+    customerId: '',
+    date: new Date().toISOString().split('T')[0],
     title: '',
     description: '',
     hoursSpent: '',
-    customerId: '',
-    date: new Date().toISOString().split('T')[0],
-    status: 'in-progress' as Project['status']
+    status: 'in-progress' as 'in-progress' | 'completed' | 'needs-review'
   });
 
   const isAdmin = user?.role === 'admin';
-  const filteredProjects = isAdmin 
-    ? projects 
-    : projects.filter(project => project.technicianId === user?.id);
 
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (files) {
-      const newImages = Array.from(files).slice(0, 5 - selectedImages.length);
-      setSelectedImages(prev => [...prev, ...newImages]);
+  useEffect(() => {
+    fetchData();
+  }, [user]);
+
+  const fetchData = async () => {
+    try {
+      setLoading(true);
+
+      // Fetch customers
+      const { data: customersData, error: customersError } = await supabase
+        .from('customers')
+        .select('*')
+        .eq('is_active', true);
+
+      if (customersError) throw customersError;
+      setCustomers(customersData || []);
+
+      // Fetch technicians (profiles)
+      const { data: techniciansData, error: techniciansError } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('role', 'technician');
+
+      if (techniciansError) throw techniciansError;
+      setTechnicians(techniciansData || []);
+
+      // Fetch projects with related data
+      let query = supabase
+        .from('projects')
+        .select(`
+          *,
+          profiles!projects_technician_id_fkey(full_name),
+          customers!projects_customer_id_fkey(name)
+        `)
+        .order('date', { ascending: false });
+
+      if (!isAdmin && user?.id) {
+        query = query.eq('technician_id', user.id);
+      }
+
+      const { data: projectsData, error: projectsError } = await query;
+
+      if (projectsError) throw projectsError;
+
+      const formattedProjects: Project[] = (projectsData || []).map(project => ({
+        id: project.id,
+        technicianId: project.technician_id,
+        technicianName: project.profiles?.full_name || 'Unknown',
+        customerId: project.customer_id,
+        customerName: project.customers?.name || 'Unknown',
+        date: project.date,
+        title: project.title,
+        description: project.description || '',
+        images: project.images || [],
+        hoursSpent: Number(project.hours_spent),
+        status: project.status,
+        createdAt: project.created_at,
+        updatedAt: project.updated_at
+      }));
+
+      setProjects(formattedProjects);
+    } catch (error) {
+      console.error('Error fetching data:', error);
+      toast({
+        title: "Fout",
+        description: "Kon gegevens niet laden",
+        variant: "destructive"
+      });
+    } finally {
+      setLoading(false);
     }
   };
 
-  const removeImage = (index: number) => {
-    setSelectedImages(prev => prev.filter((_, i) => i !== index));
-  };
-
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleAddProject = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!newProject.title || !newProject.date || !newProject.hoursSpent || !newProject.customerId) {
+    if (!newProject.technicianId || !newProject.customerId || !newProject.date || !newProject.title || !newProject.hoursSpent) {
       toast({
         title: "Fout",
         description: "Vul alle verplichte velden in",
@@ -90,60 +128,46 @@ const Projects = () => {
       return;
     }
 
-    const selectedCustomer = mockCustomers.find(c => c.id === newProject.customerId);
-    
-    if (editingProject) {
-      // Update existing project
-      setProjects(projects.map(project => 
-        project.id === editingProject.id 
-          ? { 
-              ...project, 
-              ...newProject,
-              hoursSpent: hours,
-              customerName: selectedCustomer?.name || '',
-              updatedAt: new Date().toISOString()
-            }
-          : project
-      ));
-      toast({
-        title: "Succes",
-        description: "Project succesvol bijgewerkt"
-      });
-    } else {
-      // Add new project
-      const project: Project = {
-        id: Date.now().toString(),
-        technicianId: user?.id || '',
-        technicianName: user?.fullName || '',
-        customerId: newProject.customerId,
-        customerName: selectedCustomer?.name || '',
-        title: newProject.title,
-        description: newProject.description,
-        date: newProject.date,
-        hoursSpent: hours,
-        status: newProject.status,
-        images: [],
-        createdAt: new Date().toISOString()
-      };
+    try {
+      const { error } = await supabase
+        .from('projects')
+        .insert({
+          technician_id: newProject.technicianId,
+          customer_id: newProject.customerId,
+          date: newProject.date,
+          title: newProject.title,
+          description: newProject.description,
+          hours_spent: hours,
+          status: newProject.status,
+          images: []
+        });
 
-      setProjects([...projects, project]);
+      if (error) throw error;
+
       toast({
         title: "Succes",
         description: "Project succesvol toegevoegd"
       });
-    }
 
-    setNewProject({
-      title: '',
-      description: '',
-      hoursSpent: '',
-      customerId: '',
-      date: new Date().toISOString().split('T')[0],
-      status: 'in-progress'
-    });
-    setSelectedImages([]);
-    setShowAddForm(false);
-    setEditingProject(null);
+      setNewProject({
+        technicianId: user?.role === 'technician' ? user.id : '',
+        customerId: '',
+        date: new Date().toISOString().split('T')[0],
+        title: '',
+        description: '',
+        hoursSpent: '',
+        status: 'in-progress'
+      });
+      setShowAddForm(false);
+      fetchData();
+    } catch (error) {
+      console.error('Error adding project:', error);
+      toast({
+        title: "Fout",
+        description: "Kon project niet toevoegen",
+        variant: "destructive"
+      });
+    }
   };
 
   const handleEdit = (project: Project) => {
@@ -155,20 +179,53 @@ const Projects = () => {
       });
       return;
     }
-    
     setEditingProject(project);
-    setNewProject({
-      title: project.title,
-      description: project.description,
-      hoursSpent: project.hoursSpent.toString(),
-      customerId: project.customerId || '',
-      date: project.date,
-      status: project.status
-    });
-    setShowAddForm(true);
   };
 
-  const handleDelete = (projectId: string, project: Project) => {
+  const handleSaveEdit = async () => {
+    if (!editingProject) return;
+
+    const hours = editingProject.hoursSpent;
+    if (hours <= 0 || hours > 24) {
+      toast({
+        title: "Fout",
+        description: "Uren moeten tussen 0 en 24 liggen",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from('projects')
+        .update({
+          title: editingProject.title,
+          description: editingProject.description,
+          hours_spent: hours,
+          status: editingProject.status,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', editingProject.id);
+
+      if (error) throw error;
+
+      setEditingProject(null);
+      toast({
+        title: "Succes",
+        description: "Project succesvol bijgewerkt"
+      });
+      fetchData();
+    } catch (error) {
+      console.error('Error updating project:', error);
+      toast({
+        title: "Fout",
+        description: "Kon project niet bijwerken",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const handleDelete = async (projectId: string, project: Project) => {
     if (!isAdmin && project.technicianId !== user?.id) {
       toast({
         title: "Fout",
@@ -178,52 +235,71 @@ const Projects = () => {
       return;
     }
 
-    if (window.confirm('Weet je zeker dat je dit project wilt verwijderen?')) {
-      setProjects(projects.filter(p => p.id !== projectId));
+    try {
+      const { error } = await supabase
+        .from('projects')
+        .delete()
+        .eq('id', projectId);
+
+      if (error) throw error;
+
       toast({
         title: "Succes",
         description: "Project succesvol verwijderd"
       });
+      fetchData();
+    } catch (error) {
+      console.error('Error deleting project:', error);
+      toast({
+        title: "Fout",
+        description: "Kon project niet verwijderen",
+        variant: "destructive"
+      });
     }
   };
 
-  const handleStatusChange = (projectId: string, newStatus: Project['status']) => {
-    setProjects(projects.map(project => 
-      project.id === projectId 
-        ? { ...project, status: newStatus, updatedAt: new Date().toISOString() }
-        : project
-    ));
-    
-    const statusText = newStatus === 'completed' ? 'voltooid' : 
-                     newStatus === 'needs-review' ? 'heeft controle nodig' : 'in behandeling';
-    
-    toast({
-      title: "Succes",
-      description: `Project status bijgewerkt naar: ${statusText}`
-    });
-  };
-
-  const getStatusIcon = (status: Project['status']) => {
+  const getStatusIcon = (status: string) => {
     switch (status) {
       case 'completed':
         return <CheckCircle className="h-4 w-4 text-green-600" />;
       case 'needs-review':
-        return <AlertCircle className="h-4 w-4 text-orange-600" />;
+        return <AlertCircle className="h-4 w-4 text-yellow-600" />;
       default:
         return <Clock className="h-4 w-4 text-blue-600" />;
     }
   };
 
-  const getStatusText = (status: Project['status']) => {
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'completed':
+        return 'bg-green-100 text-green-800';
+      case 'needs-review':
+        return 'bg-yellow-100 text-yellow-800';
+      default:
+        return 'bg-blue-100 text-blue-800';
+    }
+  };
+
+  const getStatusText = (status: string) => {
     switch (status) {
       case 'completed':
         return 'Voltooid';
       case 'needs-review':
         return 'Controle Nodig';
       default:
-        return 'In Behandeling';
+        return 'In Uitvoering';
     }
   };
+
+  if (loading) {
+    return (
+      <div className="p-6 bg-gray-50 min-h-screen">
+        <div className="flex items-center justify-center h-64">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-red-600"></div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 bg-gray-50 min-h-screen">
@@ -231,294 +307,286 @@ const Projects = () => {
         <div className="mb-8 flex justify-between items-center">
           <div>
             <h1 className="text-3xl font-bold text-gray-900 mb-2">
-              {isAdmin ? 'Alle Projecten' : 'Mijn Projecten'}
+              {isAdmin ? 'Projecten Beheer' : 'Mijn Projecten'}
             </h1>
             <p className="text-gray-600">
-              {isAdmin ? 'Bekijk alle monteur projecten' : 'Volg je dagelijkse projecten en werk'}
+              {isAdmin ? 'Beheer en volg alle projecten' : 'Bekijk en beheer jouw projecten'}
             </p>
           </div>
           <Button
-            onClick={() => {
-              setShowAddForm(!showAddForm);
-              setEditingProject(null);
-              setNewProject({
-                title: '',
-                description: '',
-                hoursSpent: '',
-                customerId: '',
-                date: new Date().toISOString().split('T')[0],
-                status: 'in-progress'
-              });
-            }}
+            onClick={() => setShowAddForm(!showAddForm)}
             className="bg-red-600 hover:bg-red-700 text-white"
           >
-            <Plus className="h-4 w-4 mr-2" />
             {showAddForm ? 'Annuleren' : 'Project Toevoegen'}
           </Button>
         </div>
 
-        {/* Add/Edit Project Form */}
+        {/* Add Project Form */}
         {showAddForm && (
           <Card className="bg-white mb-6">
             <CardHeader>
-              <CardTitle className="text-lg font-semibold text-gray-900">
-                {editingProject ? 'Project Bewerken' : 'Nieuw Project Toevoegen'}
-              </CardTitle>
+              <CardTitle className="text-lg font-semibold text-gray-900">Project Toevoegen</CardTitle>
             </CardHeader>
             <CardContent>
-              <form onSubmit={handleSubmit} className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <form onSubmit={handleAddProject} className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {isAdmin && (
                   <div className="space-y-2">
-                    <Label htmlFor="title">Project Titel *</Label>
-                    <Input
-                      id="title"
-                      value={newProject.title}
-                      onChange={(e) => setNewProject({ ...newProject, title: e.target.value })}
-                      placeholder="bv. HVAC Installatie"
-                      required
-                      className="focus:ring-red-500 focus:border-red-500"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="customer">Klant *</Label>
+                    <Label htmlFor="technician">Monteur</Label>
                     <select
-                      id="customer"
-                      value={newProject.customerId}
-                      onChange={(e) => setNewProject({ ...newProject, customerId: e.target.value })}
+                      id="technician"
+                      value={newProject.technicianId}
+                      onChange={(e) => setNewProject({ ...newProject, technicianId: e.target.value })}
                       className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-red-500 focus:border-red-500"
                       required
                     >
-                      <option value="">Selecteer Klant</option>
-                      {mockCustomers.map(customer => (
-                        <option key={customer.id} value={customer.id}>
-                          {customer.name}
+                      <option value="">Selecteer Monteur</option>
+                      {technicians.map(tech => (
+                        <option key={tech.id} value={tech.id}>
+                          {tech.full_name}
                         </option>
                       ))}
                     </select>
                   </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="date">Datum *</Label>
-                    <Input
-                      id="date"
-                      type="date"
-                      value={newProject.date}
-                      onChange={(e) => setNewProject({ ...newProject, date: e.target.value })}
-                      required
-                      className="focus:ring-red-500 focus:border-red-500"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="hours">Bestede Uren *</Label>
-                    <Input
-                      id="hours"
-                      type="number"
-                      step="0.5"
-                      min="0.5"
-                      max="24"
-                      value={newProject.hoursSpent}
-                      onChange={(e) => setNewProject({ ...newProject, hoursSpent: e.target.value })}
-                      placeholder="8.0"
-                      required
-                      className="focus:ring-red-500 focus:border-red-500"
-                    />
-                  </div>
+                )}
+                <div className="space-y-2">
+                  <Label htmlFor="customer">Klant</Label>
+                  <select
+                    id="customer"
+                    value={newProject.customerId}
+                    onChange={(e) => setNewProject({ ...newProject, customerId: e.target.value })}
+                    className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-red-500 focus:border-red-500"
+                    required
+                  >
+                    <option value="">Selecteer Klant</option>
+                    {customers.map(customer => (
+                      <option key={customer.id} value={customer.id}>
+                        {customer.name}
+                      </option>
+                    ))}
+                  </select>
                 </div>
-                
+                <div className="space-y-2">
+                  <Label htmlFor="date">Datum</Label>
+                  <Input
+                    id="date"
+                    type="date"
+                    value={newProject.date}
+                    onChange={(e) => setNewProject({ ...newProject, date: e.target.value })}
+                    required
+                    className="focus:ring-red-500 focus:border-red-500"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="hours">Bestede Uren</Label>
+                  <Input
+                    id="hours"
+                    type="number"
+                    step="0.5"
+                    min="0.5"
+                    max="24"
+                    value={newProject.hoursSpent}
+                    onChange={(e) => setNewProject({ ...newProject, hoursSpent: e.target.value })}
+                    placeholder="8.0"
+                    required
+                    className="focus:ring-red-500 focus:border-red-500"
+                  />
+                </div>
+                <div className="space-y-2 md:col-span-2">
+                  <Label htmlFor="title">Project Titel</Label>
+                  <Input
+                    id="title"
+                    value={newProject.title}
+                    onChange={(e) => setNewProject({ ...newProject, title: e.target.value })}
+                    placeholder="Korte beschrijving van het project"
+                    required
+                    className="focus:ring-red-500 focus:border-red-500"
+                  />
+                </div>
                 <div className="space-y-2">
                   <Label htmlFor="status">Status</Label>
                   <select
                     id="status"
                     value={newProject.status}
-                    onChange={(e) => setNewProject({ ...newProject, status: e.target.value as Project['status'] })}
+                    onChange={(e) => setNewProject({ ...newProject, status: e.target.value as any })}
                     className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-red-500 focus:border-red-500"
+                    required
                   >
-                    <option value="in-progress">In Behandeling</option>
-                    <option value="needs-review">Controle Nodig</option>
+                    <option value="in-progress">In Uitvoering</option>
                     <option value="completed">Voltooid</option>
+                    <option value="needs-review">Controle Nodig</option>
                   </select>
                 </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="description">Omschrijving</Label>
+                <div className="space-y-2 md:col-span-2">
+                  <Label htmlFor="description">Uitgebreide Beschrijving</Label>
                   <Textarea
                     id="description"
                     value={newProject.description}
                     onChange={(e) => setNewProject({ ...newProject, description: e.target.value })}
-                    placeholder="Beschrijf het uitgevoerde werk..."
+                    placeholder="Uitgebreide beschrijving van uitgevoerde werkzaamheden"
                     className="focus:ring-red-500 focus:border-red-500"
-                    rows={3}
+                    rows={4}
                   />
                 </div>
-
-                {/* Image Upload */}
-                <div className="space-y-2">
-                  <Label>Project Afbeeldingen (Max 5)</Label>
-                  <div className="border-2 border-dashed border-gray-300 rounded-lg p-4">
-                    <div className="text-center">
-                      <Camera className="mx-auto h-12 w-12 text-gray-400" />
-                      <div className="mt-2">
-                        <input
-                          type="file"
-                          multiple
-                          accept="image/*"
-                          onChange={handleImageUpload}
-                          className="hidden"
-                          id="image-upload"
-                          disabled={selectedImages.length >= 5}
-                        />
-                        <label
-                          htmlFor="image-upload"
-                          className={`cursor-pointer text-red-600 hover:text-red-700 ${
-                            selectedImages.length >= 5 ? 'opacity-50 cursor-not-allowed' : ''
-                          }`}
-                        >
-                          Klik om afbeeldingen te uploaden
-                        </label>
-                      </div>
-                      <p className="text-sm text-gray-500">PNG, JPG tot 10MB elk</p>
-                    </div>
-                  </div>
-
-                  {/* Image Preview */}
-                  {selectedImages.length > 0 && (
-                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 mt-4">
-                      {selectedImages.map((image, index) => (
-                        <div key={index} className="relative">
-                          <img
-                            src={URL.createObjectURL(image)}
-                            alt={`Voorbeeld ${index + 1}`}
-                            className="w-full h-24 object-cover rounded-lg"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => removeImage(index)}
-                            className="absolute -top-2 -right-2 bg-red-600 text-white rounded-full p-1 hover:bg-red-700"
-                          >
-                            <X size={16} />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
+                <div className="md:col-span-2">
+                  <Button type="submit" className="bg-red-600 hover:bg-red-700 text-white">
+                    Project Toevoegen
+                  </Button>
                 </div>
-
-                <Button type="submit" className="bg-red-600 hover:bg-red-700 text-white">
-                  {editingProject ? 'Project Bijwerken' : 'Project Toevoegen'}
-                </Button>
               </form>
             </CardContent>
           </Card>
         )}
 
-        {/* Projects List */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {filteredProjects.length === 0 ? (
-            <div className="col-span-2 text-center py-8 text-gray-500">
-              Geen projecten gevonden
-            </div>
-          ) : (
-            filteredProjects.map((project) => (
-              <Card key={project.id} className="bg-white">
-                <CardHeader>
-                  <div className="flex justify-between items-start">
-                    <div className="flex-1">
-                      <CardTitle className="text-lg font-semibold text-gray-900">
-                        {project.title}
-                      </CardTitle>
-                      {isAdmin && (
-                        <p className="text-sm text-gray-600">{project.technicianName}</p>
-                      )}
-                      <p className="text-sm text-gray-600">{project.customerName}</p>
-                      <div className="flex items-center mt-2">
-                        {getStatusIcon(project.status)}
-                        <span className="ml-1 text-sm font-medium">{getStatusText(project.status)}</span>
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-sm text-gray-600">
-                        {new Date(project.date).toLocaleDateString('nl-NL')}
-                      </p>
-                      <p className="text-lg font-semibold text-red-600">
-                        {project.hoursSpent}u
-                      </p>
-                      <div className="flex space-x-1 mt-2">
-                        {(isAdmin || project.technicianId === user?.id) && (
-                          <>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => handleEdit(project)}
-                              className="h-8 w-8 p-0"
-                            >
-                              <Edit2 className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => handleDelete(project.id, project)}
-                              className="h-8 w-8 p-0 border-red-300 text-red-600 hover:bg-red-50"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </>
+        {/* Projects Table */}
+        <Card className="bg-white">
+          <CardHeader>
+            <CardTitle className="text-lg font-semibold text-gray-900">
+              Projecten ({projects.length})
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {projects.length === 0 ? (
+              <div className="text-center py-8 text-gray-500">
+                Geen projecten gevonden
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left">
+                  <thead>
+                    <tr className="border-b border-gray-200">
+                      {isAdmin && <th className="pb-3 text-sm font-medium text-gray-600">Monteur</th>}
+                      <th className="pb-3 text-sm font-medium text-gray-600">Klant</th>
+                      <th className="pb-3 text-sm font-medium text-gray-600">Datum</th>
+                      <th className="pb-3 text-sm font-medium text-gray-600">Titel</th>
+                      <th className="pb-3 text-sm font-medium text-gray-600">Uren</th>
+                      <th className="pb-3 text-sm font-medium text-gray-600">Status</th>
+                      <th className="pb-3 text-sm font-medium text-gray-600">Acties</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {projects.map((project) => (
+                      <tr key={project.id} className="border-b border-gray-100 hover:bg-gray-50">
+                        {isAdmin && (
+                          <td className="py-3 font-medium text-gray-900">{project.technicianName}</td>
                         )}
-                      </div>
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-gray-700 mb-4">{project.description}</p>
-                  
-                  {/* Status change buttons for technicians */}
-                  {project.technicianId === user?.id && (
-                    <div className="flex flex-wrap gap-2 mb-4">
-                      <Button
-                        size="sm"
-                        onClick={() => handleStatusChange(project.id, 'in-progress')}
-                        variant={project.status === 'in-progress' ? 'default' : 'outline'}
-                        className="text-xs"
-                      >
-                        <Clock className="h-3 w-3 mr-1" />
-                        In Behandeling
-                      </Button>
-                      <Button
-                        size="sm"
-                        onClick={() => handleStatusChange(project.id, 'needs-review')}
-                        variant={project.status === 'needs-review' ? 'default' : 'outline'}
-                        className="text-xs"
-                      >
-                        <AlertCircle className="h-3 w-3 mr-1" />
-                        Controle Nodig
-                      </Button>
-                      <Button
-                        size="sm"
-                        onClick={() => handleStatusChange(project.id, 'completed')}
-                        variant={project.status === 'completed' ? 'default' : 'outline'}
-                        className="text-xs"
-                      >
-                        <CheckCircle className="h-3 w-3 mr-1" />
-                        Voltooid
-                      </Button>
-                    </div>
-                  )}
-                  
-                  {project.images.length > 0 && (
-                    <div className="grid grid-cols-3 gap-2">
-                      {project.images.map((image, index) => (
-                        <img
-                          key={index}
-                          src={image}
-                          alt={`Project afbeelding ${index + 1}`}
-                          className="w-full h-20 object-cover rounded"
-                        />
-                      ))}
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            ))
-          )}
-        </div>
+                        <td className="py-3 text-gray-700">{project.customerName}</td>
+                        <td className="py-3 text-gray-700">
+                          {editingProject?.id === project.id ? (
+                            <Input
+                              type="date"
+                              value={editingProject.date}
+                              onChange={(e) => setEditingProject({...editingProject, date: e.target.value})}
+                              className="w-32"
+                            />
+                          ) : (
+                            formatDutchDate(project.date)
+                          )}
+                        </td>
+                        <td className="py-3 text-gray-700 font-medium max-w-xs">
+                          {editingProject?.id === project.id ? (
+                            <Input
+                              value={editingProject.title}
+                              onChange={(e) => setEditingProject({...editingProject, title: e.target.value})}
+                              className="w-48"
+                            />
+                          ) : (
+                            <div>
+                              <div className="truncate">{project.title}</div>
+                              {project.description && (
+                                <div className="text-xs text-gray-500 truncate">{project.description}</div>
+                              )}
+                            </div>
+                          )}
+                        </td>
+                        <td className="py-3 text-gray-700 font-medium">
+                          {editingProject?.id === project.id ? (
+                            <Input
+                              type="number"
+                              step="0.5"
+                              min="0.5"
+                              max="24"
+                              value={editingProject.hoursSpent}
+                              onChange={(e) => setEditingProject({...editingProject, hoursSpent: parseFloat(e.target.value)})}
+                              className="w-20"
+                            />
+                          ) : (
+                            `${project.hoursSpent}u`
+                          )}
+                        </td>
+                        <td className="py-3">
+                          {editingProject?.id === project.id ? (
+                            <select
+                              value={editingProject.status}
+                              onChange={(e) => setEditingProject({...editingProject, status: e.target.value as any})}
+                              className="w-32 p-1 border border-gray-300 rounded text-sm"
+                            >
+                              <option value="in-progress">In Uitvoering</option>
+                              <option value="completed">Voltooid</option>
+                              <option value="needs-review">Controle Nodig</option>
+                            </select>
+                          ) : (
+                            <div className="flex items-center space-x-2">
+                              {getStatusIcon(project.status)}
+                              <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(project.status)}`}>
+                                {getStatusText(project.status)}
+                              </span>
+                            </div>
+                          )}
+                        </td>
+                        <td className="py-3">
+                          <div className="flex space-x-2">
+                            {editingProject?.id === project.id ? (
+                              <>
+                                <Button
+                                  size="sm"
+                                  onClick={handleSaveEdit}
+                                  className="h-8 w-8 p-0 bg-green-600 hover:bg-green-700"
+                                >
+                                  <Save className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => setEditingProject(null)}
+                                  className="h-8 w-8 p-0"
+                                >
+                                  <X className="h-4 w-4" />
+                                </Button>
+                              </>
+                            ) : (
+                              <>
+                                {(isAdmin || project.technicianId === user?.id) && (
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => handleEdit(project)}
+                                    className="h-8 w-8 p-0"
+                                  >
+                                    <Edit2 className="h-4 w-4" />
+                                  </Button>
+                                )}
+                                {(isAdmin || project.technicianId === user?.id) && (
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => handleDelete(project.id, project)}
+                                    className="h-8 w-8 p-0 border-red-300 text-red-600 hover:bg-red-50"
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
+                                )}
+                              </>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </CardContent>
+        </Card>
       </div>
     </div>
   );
