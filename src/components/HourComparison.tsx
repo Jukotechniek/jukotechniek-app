@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -18,7 +17,7 @@ interface HourImport {
   difference: number;
   status: string;
   created_at: string;
-  profiles?: { full_name: string };
+  technician_name?: string;
 }
 
 const HourComparisonComponent = () => {
@@ -40,21 +39,30 @@ const HourComparisonComponent = () => {
   const fetchHourImports = async () => {
     try {
       setIsLoading(true);
-      const { data, error } = await supabase
+      
+      // First get hour imports
+      const { data: hourImportsData, error: hourImportsError } = await supabase
         .from('hour_imports')
-        .select(`
-          *,
-          profiles(full_name)
-        `)
+        .select('*')
         .order('created_at', { ascending: false });
 
-      if (error) throw error;
-      
-      // Transform the data to match our interface
-      const transformedData = data?.map(item => ({
-        ...item,
-        profiles: item.profiles ? { full_name: item.profiles.full_name } : { full_name: 'Onbekend' }
-      })) || [];
+      if (hourImportsError) throw hourImportsError;
+
+      // Then get profiles separately
+      const { data: profilesData, error: profilesError } = await supabase
+        .from('profiles')
+        .select('id, full_name');
+
+      if (profilesError) throw profilesError;
+
+      // Combine the data
+      const transformedData = hourImportsData?.map(item => {
+        const profile = profilesData?.find(p => p.id === item.technician_id);
+        return {
+          ...item,
+          technician_name: profile?.full_name || 'Onbekend'
+        };
+      }) || [];
       
       setHourImports(transformedData);
     } catch (error) {
@@ -332,7 +340,7 @@ const HourComparisonComponent = () => {
                           </div>
                         </td>
                         <td className="py-3 font-medium text-gray-900">
-                          {item.profiles?.full_name || 'Onbekend'}
+                          {item.technician_name || 'Onbekend'}
                         </td>
                         <td className="py-3 text-gray-700">
                           {new Date(item.date).toLocaleDateString('nl-NL')}
