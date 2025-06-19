@@ -20,6 +20,19 @@ const AppContent = () => {
 
   console.log('AppContent render - loading:', loading, 'isAuthenticated:', isAuthenticated, 'user:', user?.id);
 
+  // Force timeout after 3 seconds of loading
+  React.useEffect(() => {
+    if (loading) {
+      const timeout = setTimeout(() => {
+        console.log('Loading timeout - forcing to show login');
+        // This will force a re-render and should break the loading loop
+        window.location.reload();
+      }, 3000);
+      
+      return () => clearTimeout(timeout);
+    }
+  }, [loading]);
+
   if (loading) {
     console.log('Showing loading screen');
     return (
@@ -27,6 +40,7 @@ const AppContent = () => {
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-red-600 mx-auto mb-4"></div>
           <p className="text-gray-600">Loading JukoTechniek...</p>
+          <p className="text-xs text-gray-400 mt-2">If this takes too long, please refresh the page</p>
         </div>
       </div>
     );

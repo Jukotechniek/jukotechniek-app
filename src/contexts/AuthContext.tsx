@@ -20,34 +20,59 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   });
 
   useEffect(() => {
-    console.log('AuthProvider: Setting up auth listener');
+    console.log('AuthProvider: Initializing auth');
     
+    let mounted = true;
+
+    const initializeAuth = async () => {
+      try {
+        // Get initial session
+        const { data: { session }, error } = await supabase.auth.getSession();
+        
+        if (error) {
+          console.error('Error getting session:', error);
+          if (mounted) {
+            setAuthState({
+              user: null,
+              isAuthenticated: false,
+              loading: false
+            });
+          }
+          return;
+        }
+
+        console.log('Initial session:', session?.user?.id || 'No session');
+        
+        if (mounted) {
+          await handleAuthChange(session);
+        }
+      } catch (error) {
+        console.error('Error initializing auth:', error);
+        if (mounted) {
+          setAuthState({
+            user: null,
+            isAuthenticated: false,
+            loading: false
+          });
+        }
+      }
+    };
+
     // Set up auth state listener
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
-        console.log('Auth state changed:', event, session?.user?.id);
-        await handleAuthChange(session);
+        console.log('Auth state changed:', event, session?.user?.id || 'No session');
+        if (mounted) {
+          await handleAuthChange(session);
+        }
       }
     );
 
-    // Get initial session
-    supabase.auth.getSession().then(({ data: { session }, error }) => {
-      if (error) {
-        console.error('Error getting initial session:', error);
-        setAuthState({
-          user: null,
-          isAuthenticated: false,
-          loading: false
-        });
-        return;
-      }
-      
-      console.log('Initial session:', session?.user?.id);
-      handleAuthChange(session);
-    });
+    // Initialize auth
+    initializeAuth();
 
     return () => {
-      console.log('AuthProvider: Cleaning up auth listener');
+      mounted = false;
       subscription.unsubscribe();
     };
   }, []);
@@ -66,18 +91,33 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       console.log('Fetching profile for user:', session.user.id);
       
-      // Fetch user profile
-      const { data: profile, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', session.user.id)
-        .single();
+      // Fetch user profile with timeout
+      const { data: profile, error } = await Promise.race([
+        supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', session.user.id)
+          .single(),
+        new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Timeout')), 5000)
+        )
+      ]) as any;
 
       if (error) {
         console.error('Error fetching profile:', error);
+        // Still authenticate with basic user data
+        const basicUser: User = {
+          id: session.user.id,
+          username: session.user.email || '',
+          email: session.user.email || '',
+          role: 'technician',
+          fullName: session.user.email || '',
+          createdAt: new Date().toISOString()
+        };
+
         setAuthState({
-          user: null,
-          isAuthenticated: false,
+          user: basicUser,
+          isAuthenticated: true,
           loading: false
         });
         return;
@@ -100,9 +140,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       });
     } catch (error) {
       console.error('Profile fetch error:', error);
+      // Fallback to basic authentication
+      const basicUser: User = {
+        id: session.user.id,
+        username: session.user.email || '',
+        email: session.user.email || '',
+        role: 'technician',
+        fullName: session.user.email || '',
+        createdAt: new Date().toISOString()
+      };
+
       setAuthState({
-        user: null,
-        isAuthenticated: false,
+        user: basicUser,
+        isAuthenticated: true,
         loading: false
       });
     }
@@ -159,11 +209,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const logout = async () => {
     console.log('Logging out user');
     await supabase.auth.signOut();
-    setAuthState({
-      user: null,
-      isAuthenticated: false,
-      loading: false
-    });
   };
 
   console.log('AuthProvider render - loading:', authState.loading, 'isAuthenticated:', authState.isAuthenticated);
