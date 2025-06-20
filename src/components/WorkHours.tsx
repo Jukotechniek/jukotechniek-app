@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -240,6 +239,7 @@ const WorkHours = () => {
       setWorkEntries([...workEntries, formatted]);
     }
     
+    // Only show overtime message to admins
     let overtimeMessage = '';
     if (isAdmin) {
       if (overtimeData.isSunday) {
@@ -441,6 +441,7 @@ const WorkHours = () => {
                     required
                     className="focus:ring-red-500 focus:border-red-500"
                   />
+                  {/* Only show overtime calculations to admins */}
                   {isAdmin && newEntry.hoursWorked && (
                     <div className="text-xs text-gray-600">
                       {(() => {
@@ -487,170 +488,136 @@ const WorkHours = () => {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            {filteredEntries.length === 0 ? (
-              <div className="text-center py-8 text-gray-500">
-                Geen werkuren gevonden
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-left">
-                  <thead>
-                    <tr className="border-b border-gray-200">
-                      {isAdmin && <th className="pb-3 text-sm font-medium text-gray-600">Monteur</th>}
-                      <th className="pb-3 text-sm font-medium text-gray-600">Klant</th>
-                      <th className="pb-3 text-sm font-medium text-gray-600">Datum</th>
-                      <th className="pb-3 text-sm font-medium text-gray-600">Uren</th>
-                      {isAdmin && <th className="pb-3 text-sm font-medium text-gray-600">Overwerk</th>}
-                      {isAdmin && <th className="pb-3 text-sm font-medium text-gray-600">Reis</th>}
-                      <th className="pb-3 text-sm font-medium text-gray-600">Type</th>
-                      <th className="pb-3 text-sm font-medium text-gray-600">Omschrijving</th>
-                      <th className="pb-3 text-sm font-medium text-gray-600">Acties</th>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left">
+                <thead>
+                  <tr className="border-b border-gray-200">
+                    {isAdmin && <th className="pb-3 text-sm font-medium text-gray-600">Monteur</th>}
+                    <th className="pb-3 text-sm font-medium text-gray-600">Klant</th>
+                    <th className="pb-3 text-sm font-medium text-gray-600">Datum</th>
+                    <th className="pb-3 text-sm font-medium text-gray-600">Uren</th>
+                    {/* Only show overtime columns to admins */}
+                    {isAdmin && (
+                      <>
+                        <th className="pb-3 text-sm font-medium text-gray-600">Normaal</th>
+                        <th className="pb-3 text-sm font-medium text-gray-600">Overwerk</th>
+                        <th className="pb-3 text-sm font-medium text-gray-600">Weekend</th>
+                        <th className="pb-3 text-sm font-medium text-gray-600">Zondag</th>
+                      </>
+                    )}
+                    <th className="pb-3 text-sm font-medium text-gray-600">Omschrijving</th>
+                    <th className="pb-3 text-sm font-medium text-gray-600">Acties</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredEntries.map((entry) => (
+                    <tr key={entry.id} className="border-b border-gray-100 hover:bg-gray-50">
+                      {isAdmin && (
+                        <td className="py-3 font-medium text-gray-900">{entry.technicianName}</td>
+                      )}
+                      <td className="py-3 text-gray-700">{entry.customerName}</td>
+                      <td className="py-3 text-gray-700">
+                        {editingEntry?.id === entry.id ? (
+                          <Input
+                            type="date"
+                            value={editingEntry.date}
+                            onChange={(e) => setEditingEntry({ ...editingEntry, date: e.target.value })}
+                            className="h-8"
+                          />
+                        ) : (
+                          new Date(entry.date).toLocaleDateString('nl-NL')
+                        )}
+                      </td>
+                      <td className="py-3 text-gray-700">
+                        {editingEntry?.id === entry.id ? (
+                          <Input
+                            type="number"
+                            step="0.5"
+                            min="0.5"
+                            max="24"
+                            value={editingEntry.hoursWorked}
+                            onChange={(e) => setEditingEntry({ ...editingEntry, hoursWorked: parseFloat(e.target.value) })}
+                            className="h-8 w-20"
+                          />
+                        ) : (
+                          `${entry.hoursWorked}h`
+                        )}
+                      </td>
+                      {/* Only show overtime columns to admins */}
+                      {isAdmin && (
+                        <>
+                          <td className="py-3 text-gray-700">{entry.regularHours.toFixed(1)}h</td>
+                          <td className="py-3 text-orange-600">{entry.overtimeHours.toFixed(1)}h</td>
+                          <td className="py-3 text-orange-600">{entry.weekendHours.toFixed(1)}h</td>
+                          <td className="py-3 text-purple-600">{entry.sundayHours.toFixed(1)}h</td>
+                        </>
+                      )}
+                      <td className="py-3 text-gray-700 max-w-xs truncate">
+                        {editingEntry?.id === entry.id ? (
+                          <Input
+                            value={editingEntry.description || ''}
+                            onChange={(e) => setEditingEntry({ ...editingEntry, description: e.target.value })}
+                            className="h-8"
+                          />
+                        ) : (
+                          entry.description || '-'
+                        )}
+                      </td>
+                      <td className="py-3">
+                        <div className="flex space-x-2">
+                          {editingEntry?.id === entry.id ? (
+                            <>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={handleSaveEdit}
+                                className="h-8 w-8 p-0 border-green-300 text-green-600 hover:bg-green-50"
+                              >
+                                <Save className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => setEditingEntry(null)}
+                                className="h-8 w-8 p-0"
+                              >
+                                <X className="h-4 w-4" />
+                              </Button>
+                            </>
+                          ) : (
+                            <>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => handleEdit(entry)}
+                                className="h-8 w-8 p-0"
+                              >
+                                <Edit2 className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => handleDelete(entry.id, entry)}
+                                className="h-8 w-8 p-0 border-red-300 text-red-600 hover:bg-red-50"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </>
+                          )}
+                        </div>
+                      </td>
                     </tr>
-                  </thead>
-                  <tbody>
-                    {filteredEntries.map((entry) => (
-                      <tr key={entry.id} className="border-b border-gray-100 hover:bg-gray-50">
-                        {isAdmin && (
-                          <td className="py-3 font-medium text-gray-900">{entry.technicianName}</td>
-                        )}
-                        <td className="py-3 text-gray-700">{entry.customerName}</td>
-                        <td className="py-3 text-gray-700">
-                          {editingEntry?.id === entry.id ? (
-                            <Input
-                              type="date"
-                              value={editingEntry.date}
-                              onChange={(e) => setEditingEntry({...editingEntry, date: e.target.value})}
-                              className="w-32"
-                            />
-                          ) : (
-                            <>
-                              {formatDutchDate(entry.date)}
-                              {entry.isSunday && <span className="ml-1 text-xs text-purple-600">(Zondag)</span>}
-                              {entry.isWeekend && <span className="ml-1 text-xs text-orange-600">(Zaterdag)</span>}
-                            </>
-                          )}
-                        </td>
-                        <td className="py-3 text-gray-700 font-medium">
-                          {editingEntry?.id === entry.id ? (
-                            <Input
-                              type="number"
-                              step="0.5"
-                              min="0.5"
-                              max="24"
-                              value={editingEntry.hoursWorked}
-                              onChange={(e) => setEditingEntry({...editingEntry, hoursWorked: parseFloat(e.target.value)})}
-                              className="w-20"
-                            />
-                          ) : (
-                            <>
-                              {entry.hoursWorked}u
-                              {isAdmin && entry.regularHours !== entry.hoursWorked && (
-                                <div className="text-xs text-gray-500">
-                                  Normaal: {entry.regularHours}u
-                                </div>
-                              )}
-                            </>
-                          )}
-                        </td>
-                        {isAdmin && (
-                          <td className="py-3 text-gray-700">
-                            {entry.overtimeHours > 0 && (
-                              <span className="text-orange-600 font-medium">
-                                {entry.overtimeHours}u (125%)
-                              </span>
-                            )}
-                            {entry.weekendHours > 0 && (
-                              <span className="text-orange-600 font-medium">
-                                {entry.weekendHours}u (150%)
-                              </span>
-                            )}
-                            {entry.sundayHours > 0 && (
-                              <span className="text-purple-600 font-medium">
-                                {entry.sundayHours}u (200%)
-                              </span>
-                            )}
-                            {entry.overtimeHours === 0 && entry.weekendHours === 0 && entry.sundayHours === 0 && (
-                              <span className="text-gray-400">-</span>
-                            )}
-                          </td>
-                        )}
-                        {isAdmin && (
-                          <td className="py-3 text-gray-700">
-                            €{entry.travelExpenseToTechnician?.toFixed(2) || '0.00'}
-                          </td>
-                        )}
-                        <td className="py-3">
-                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                            entry.isManualEntry
-                              ? 'bg-yellow-100 text-yellow-800'
-                              : 'bg-green-100 text-green-800'
-                          }`}>
-                            {entry.isManualEntry ? 'Handmatig' : 'Geregistreerd'}
-                          </span>
-                        </td>
-                        <td className="py-3 text-gray-700 max-w-xs truncate">
-                          {editingEntry?.id === entry.id ? (
-                            <Input
-                              value={editingEntry.description || ''}
-                              onChange={(e) => setEditingEntry({...editingEntry, description: e.target.value})}
-                              className="w-32"
-                            />
-                          ) : (
-                            entry.description || 'Geen omschrijving'
-                          )}
-                        </td>
-                        <td className="py-3">
-                          <div className="flex space-x-2">
-                            {editingEntry?.id === entry.id ? (
-                              <>
-                                <Button
-                                  size="sm"
-                                  onClick={handleSaveEdit}
-                                  className="h-8 w-8 p-0 bg-green-600 hover:bg-green-700"
-                                >
-                                  <Save className="h-4 w-4" />
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() => setEditingEntry(null)}
-                                  className="h-8 w-8 p-0"
-                                >
-                                  <X className="h-4 w-4" />
-                                </Button>
-                              </>
-                            ) : (
-                              <>
-                                {(isAdmin || entry.technicianId === user?.id) && (
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={() => handleEdit(entry)}
-                                    className="h-8 w-8 p-0"
-                                  >
-                                    <Edit2 className="h-4 w-4" />
-                                  </Button>
-                                )}
-                                {(isAdmin || entry.technicianId === user?.id) && (
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={() => handleDelete(entry.id, entry)}
-                                    className="h-8 w-8 p-0 border-red-300 text-red-600 hover:bg-red-50"
-                                  >
-                                    <Trash2 className="h-4 w-4" />
-                                  </Button>
-                                )}
-                              </>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
+                  ))}
+                  {filteredEntries.length === 0 && (
+                    <tr>
+                      <td colSpan={isAdmin ? 9 : 5} className="py-8 text-center text-gray-500">
+                        Geen werkuren gevonden
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
           </CardContent>
         </Card>
       </div>

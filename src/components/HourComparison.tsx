@@ -2,15 +2,30 @@
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { CheckCircle, AlertTriangle, XCircle, RefreshCw, Check } from 'lucide-react';
+import { CheckCircle, AlertTriangle, XCircle, RefreshCw, Check, X } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { HourComparison } from '@/types/webhook';
 import { useToast } from '@/hooks/use-toast';
+import { useAuth } from '@/contexts/AuthContext';
 
 const HourComparisonComponent: React.FC = () => {
   const [comparisons, setComparisons] = useState<HourComparison[]>([]);
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
+  const { user } = useAuth();
+
+  const isAdmin = user?.role === 'admin';
+
+  if (!isAdmin) {
+    return (
+      <div className="p-6 bg-gray-50 min-h-screen">
+        <div className="max-w-7xl mx-auto text-center">
+          <h1 className="text-2xl font-bold text-gray-900">Toegang Geweigerd</h1>
+          <p className="text-gray-600">Alleen beheerders kunnen urenvergelijking bekijken.</p>
+        </div>
+      </div>
+    );
+  }
 
   const fetchComparisons = async () => {
     setLoading(true);
@@ -122,12 +137,16 @@ const HourComparisonComponent: React.FC = () => {
           : 'discrepancy'
       }));
 
-      // Auto-verify exact matches
+      // Auto-verify exact matches ONLY
       for (const c of comps) {
         if (c.status === 'match' && c.webhookIds && c.webhookIds.length > 0 && !c.verified) {
           const { error: updateError } = await supabase
             .from('webhook_hours')
-            .update({ verified: true })
+            .update({ 
+              verified: true,
+              verified_by: user?.id,
+              verified_at: new Date().toISOString()
+            })
             .in('id', c.webhookIds);
           
           if (!updateError) {
@@ -159,7 +178,7 @@ const HourComparisonComponent: React.FC = () => {
     fetchComparisons();
   };
 
-  const handleAgree = async (comp: HourComparison) => {
+  const handleVerify = async (comp: HourComparison) => {
     if (!comp.webhookIds || comp.webhookIds.length === 0) {
       toast({
         title: "Error",
@@ -170,15 +189,19 @@ const HourComparisonComponent: React.FC = () => {
     }
 
     try {
-      console.log('Agreeing to webhook hours for', comp.technicianName, 'on', comp.date);
+      console.log('Manually verifying webhook hours for', comp.technicianName, 'on', comp.date);
       
       const { error } = await supabase
         .from('webhook_hours')
-        .update({ verified: true })
+        .update({ 
+          verified: true,
+          verified_by: user?.id,
+          verified_at: new Date().toISOString()
+        })
         .in('id', comp.webhookIds);
 
       if (error) {
-        console.error('Error updating webhook hours:', error);
+        console.error('Error verifying webhook hours:', error);
         toast({
           title: "Error",
           description: "Failed to verify hours",
@@ -195,7 +218,7 @@ const HourComparisonComponent: React.FC = () => {
       // Refresh the data
       fetchComparisons();
     } catch (error) {
-      console.error('Error in handleAgree:', error);
+      console.error('Error in handleVerify:', error);
       toast({
         title: "Error",
         description: "Failed to verify hours",
@@ -204,29 +227,33 @@ const HourComparisonComponent: React.FC = () => {
     }
   };
 
-  const handleManualVerify = async (comp: HourComparison) => {
+  const handleUnverify = async (comp: HourComparison) => {
     if (!comp.webhookIds || comp.webhookIds.length === 0) {
       toast({
         title: "Error",
-        description: "No webhook hours to manually verify",
+        description: "No webhook hours to unverify",
         variant: "destructive"
       });
       return;
     }
 
     try {
-      console.log('Manually verifying webhook hours for', comp.technicianName, 'on', comp.date);
+      console.log('Unverifying webhook hours for', comp.technicianName, 'on', comp.date);
       
       const { error } = await supabase
         .from('webhook_hours')
-        .update({ verified: true })
+        .update({ 
+          verified: false,
+          verified_by: null,
+          verified_at: null
+        })
         .in('id', comp.webhookIds);
 
       if (error) {
-        console.error('Error manually verifying webhook hours:', error);
+        console.error('Error unverifying webhook hours:', error);
         toast({
           title: "Error",
-          description: "Failed to manually verify hours",
+          description: "Failed to unverify hours",
           variant: "destructive"
         });
         return;
@@ -234,16 +261,16 @@ const HourComparisonComponent: React.FC = () => {
 
       toast({
         title: "Success",
-        description: `Hours manually verified for ${comp.technicianName}`,
+        description: `Hours unverified for ${comp.technicianName}`,
       });
 
       // Refresh the data
       fetchComparisons();
     } catch (error) {
-      console.error('Error in handleManualVerify:', error);
+      console.error('Error in handleUnverify:', error);
       toast({
         title: "Error",
-        description: "Failed to manually verify hours",
+        description: "Failed to unverify hours",
         variant: "destructive"
       });
     }
@@ -388,33 +415,31 @@ const HourComparisonComponent: React.FC = () => {
                       </td>
                       <td className="py-3">
                         {c.verified ? (
-                          <span className="text-green-700 font-medium flex items-center">
-                            <CheckCircle className="h-4 w-4 mr-1" />
-                            Verified
-                          </span>
-                        ) : c.webhookIds && c.webhookIds.length > 0 ? (
-                          <div className="flex space-x-2">
-                            {c.status === 'match' ? (
-                              <Button 
-                                variant="outline" 
-                                size="sm"
-                                onClick={() => handleAgree(c)}
-                                className="border-green-600 text-green-600 hover:bg-green-50"
-                              >
-                                Agree
-                              </Button>
-                            ) : (
-                              <Button 
-                                variant="outline" 
-                                size="sm"
-                                onClick={() => handleManualVerify(c)}
-                                className="border-blue-600 text-blue-600 hover:bg-blue-50"
-                              >
-                                <Check className="h-4 w-4 mr-1" />
-                                Manual Verify
-                              </Button>
-                            )}
+                          <div className="flex items-center space-x-2">
+                            <span className="text-green-700 font-medium flex items-center">
+                              <CheckCircle className="h-4 w-4 mr-1" />
+                              Verified
+                            </span>
+                            <Button 
+                              variant="outline" 
+                              size="sm"
+                              onClick={() => handleUnverify(c)}
+                              className="border-red-600 text-red-600 hover:bg-red-50"
+                            >
+                              <X className="h-4 w-4 mr-1" />
+                              Unverify
+                            </Button>
                           </div>
+                        ) : c.webhookIds && c.webhookIds.length > 0 ? (
+                          <Button 
+                            variant="outline" 
+                            size="sm"
+                            onClick={() => handleVerify(c)}
+                            className="border-blue-600 text-blue-600 hover:bg-blue-50"
+                          >
+                            <Check className="h-4 w-4 mr-1" />
+                            Verify
+                          </Button>
                         ) : (
                           <span className="text-gray-500">No webhook data</span>
                         )}

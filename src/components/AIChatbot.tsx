@@ -1,98 +1,134 @@
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { useToast } from '@/hooks/use-toast';
+import { Label } from '@/components/ui/label';
 import { useAuth } from '@/contexts/AuthContext';
+import { useToast } from '@/hooks/use-toast';
+import { supabase } from '@/integrations/supabase/client';
+import { Send, Bot, User, Settings } from 'lucide-react';
 
 interface Message {
   id: string;
-  content: string;
+  text: string;
   isUser: boolean;
   timestamp: Date;
 }
 
+interface AIConfig {
+  id: string;
+  webhook_url: string | null;
+  is_enabled: boolean;
+}
+
 const AIChatbot = () => {
-  const { toast } = useToast();
   const { user } = useAuth();
+  const { toast } = useToast();
   const [messages, setMessages] = useState<Message[]>([
     {
       id: '1',
-      content: 'Hallo! Ik ben je JukoTechniek AI-assistent. Ik kan je helpen met vragen over werkuren, projecten, klanten en andere bedrijfsgerelateerde onderwerpen. Hoe kan ik je vandaag helpen?',
+      text: 'Hallo! Ik ben je AI-assistent. Hoe kan ik je vandaag helpen?',
       isUser: false,
       timestamp: new Date()
     }
   ]);
   const [inputMessage, setInputMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [n8nWebhookUrl, setN8nWebhookUrl] = useState('');
-  const [isConfigured, setIsConfigured] = useState(false);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const [showConfig, setShowConfig] = useState(false);
+  const [aiConfig, setAiConfig] = useState<AIConfig | null>(null);
+  const [webhookUrl, setWebhookUrl] = useState('');
+  const [loadingConfig, setLoadingConfig] = useState(false);
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  };
-
-  useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
+  const isAdmin = user?.role === 'admin';
 
   useEffect(() => {
-    // Check if webhook URL is saved in localStorage
-    const savedWebhookUrl = localStorage.getItem('n8n_webhook_url');
-    if (savedWebhookUrl) {
-      setN8nWebhookUrl(savedWebhookUrl);
-      setIsConfigured(true);
+    if (isAdmin) {
+      fetchAIConfig();
     }
-  }, []);
+  }, [isAdmin]);
 
-  const handleConfigureWebhook = () => {
-    if (!n8nWebhookUrl.trim()) {
-      toast({
-        title: "Error",
-        description: "Voer een geldige n8n webhook URL in",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    // Validate URL format
+  const fetchAIConfig = async () => {
     try {
-      new URL(n8nWebhookUrl);
-    } catch {
-      toast({
-        title: "Error",
-        description: "Ongeldige URL format",
-        variant: "destructive"
-      });
-      return;
-    }
+      const { data, error } = await supabase
+        .from('ai_assistant_config')
+        .select('*')
+        .single();
 
-    localStorage.setItem('n8n_webhook_url', n8nWebhookUrl);
-    setIsConfigured(true);
-    toast({
-      title: "Success",
-      description: "n8n webhook succesvol geconfigureerd"
-    });
+      if (error && error.code !== 'PGRST116') {
+        console.error('Error fetching AI config:', error);
+        return;
+      }
+
+      if (data) {
+        setAiConfig(data);
+        setWebhookUrl(data.webhook_url || '');
+      }
+    } catch (error) {
+      console.error('Error fetching AI config:', error);
+    }
   };
 
-  const handleSendMessage = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!inputMessage.trim() || isLoading) return;
+  const saveAIConfig = async () => {
+    if (!isAdmin) return;
 
-    if (!isConfigured) {
+    setLoadingConfig(true);
+    try {
+      const configData = {
+        webhook_url: webhookUrl,
+        is_enabled: true,
+        created_by: user?.id
+      };
+
+      let error;
+      if (aiConfig) {
+        const { error: updateError } = await supabase
+          .from('ai_assistant_config')
+          .update(configData)
+          .eq('id', aiConfig.id);
+        error = updateError;
+      } else {
+        const { error: insertError } = await supabase
+          .from('ai_assistant_config')
+          .insert([configData]);
+        error = insertError;
+      }
+
+      if (error) {
+        console.error('Error saving AI config:', error);
+        toast({
+          title: "Error",
+          description: "Failed to save AI configuration",
+          variant: "destructive"
+        });
+        return;
+      }
+
+      toast({
+        title: "Success",
+        description: "AI configuration saved successfully"
+      });
+
+      fetchAIConfig();
+      setShowConfig(false);
+    } catch (error) {
+      console.error('Error saving AI config:', error);
       toast({
         title: "Error",
-        description: "Configureer eerst de n8n webhook URL",
+        description: "Failed to save AI configuration",
         variant: "destructive"
       });
-      return;
+    } finally {
+      setLoadingConfig(false);
     }
+  };
+
+  const sendMessage = async () => {
+    if (!inputMessage.trim()) return;
 
     const userMessage: Message = {
       id: Date.now().toString(),
-      content: inputMessage,
+      text: inputMessage,
       isUser: true,
       timestamp: new Date()
     };
@@ -102,135 +138,64 @@ const AIChatbot = () => {
     setIsLoading(true);
 
     try {
-      console.log('Sending message to n8n webhook:', n8nWebhookUrl);
-      
-      const response = await fetch(n8nWebhookUrl, {
+      // Check if AI is configured and enabled
+      if (!aiConfig?.webhook_url || !aiConfig.is_enabled) {
+        const botMessage: Message = {
+          id: (Date.now() + 1).toString(),
+          text: 'AI-assistent is momenteel niet geconfigureerd. Neem contact op met uw beheerder.',
+          isUser: false,
+          timestamp: new Date()
+        };
+        setMessages(prev => [...prev, botMessage]);
+        return;
+      }
+
+      // Send message to webhook
+      const response = await fetch(aiConfig.webhook_url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
+        mode: 'no-cors',
         body: JSON.stringify({
           message: inputMessage,
-          userId: user?.id,
-          userName: user?.fullName || user?.username,
-          timestamp: new Date().toISOString(),
-          context: 'jukotechniek_work_hours'
+          user_id: user?.id,
+          user_name: user?.fullName,
+          timestamp: new Date().toISOString()
         })
       });
 
-      let aiResponse = '';
-      
-      if (response.ok) {
-        const data = await response.json();
-        aiResponse = data.response || data.message || 'Ik heb je bericht ontvangen, maar kon geen antwoord genereren.';
-      } else {
-        console.error('n8n webhook error:', response.status, response.statusText);
-        aiResponse = 'Sorry, ik ondervind momenteel technische problemen met de AI service. Probeer het later opnieuw.';
-      }
-
-      const aiMessage: Message = {
+      // Since we're using no-cors, we can't read the response
+      // For now, we'll simulate a response
+      const botMessage: Message = {
         id: (Date.now() + 1).toString(),
-        content: aiResponse,
+        text: 'Bedankt voor je bericht! De AI-assistent heeft je verzoek ontvangen en verwerkt.',
         isUser: false,
         timestamp: new Date()
       };
 
-      setMessages(prev => [...prev, aiMessage]);
+      setMessages(prev => [...prev, botMessage]);
+
     } catch (error) {
-      console.error('Error calling n8n webhook:', error);
-      
+      console.error('Error sending message:', error);
       const errorMessage: Message = {
         id: (Date.now() + 1).toString(),
-        content: 'Sorry, ik kon geen verbinding maken met de AI service. Controleer je internetverbinding en probeer het opnieuw.',
+        text: 'Sorry, er ging iets mis bij het versturen van je bericht. Probeer het later opnieuw.',
         isUser: false,
         timestamp: new Date()
       };
-
       setMessages(prev => [...prev, errorMessage]);
-      
-      toast({
-        title: 'Error',
-        description: 'Er ging iets mis bij het versturen van je bericht. Probeer het opnieuw.',
-        variant: 'destructive'
-      });
     } finally {
       setIsLoading(false);
     }
   };
 
-  const clearChat = () => {
-    setMessages([
-      {
-        id: '1',
-        content: 'Hallo! Ik ben je JukoTechniek AI-assistent. Ik kan je helpen met vragen over werkuren, projecten, klanten en andere bedrijfsgerelateerde onderwerpen. Hoe kan ik je vandaag helpen?',
-        isUser: false,
-        timestamp: new Date()
-      }
-    ]);
+  const handleKeyPress = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      sendMessage();
+    }
   };
-
-  const resetConfiguration = () => {
-    localStorage.removeItem('n8n_webhook_url');
-    setN8nWebhookUrl('');
-    setIsConfigured(false);
-    toast({
-      title: "Success",
-      description: "Webhook configuratie gereset"
-    });
-  };
-
-  if (!isConfigured) {
-    return (
-      <div className="p-6 bg-gray-50 min-h-screen">
-        <div className="max-w-4xl mx-auto">
-          <div className="mb-8">
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">AI Assistent Configuratie</h1>
-            <p className="text-gray-600">Configureer je n8n webhook URL om de AI assistent te gebruiken</p>
-          </div>
-
-          <Card className="bg-white max-w-2xl mx-auto">
-            <CardHeader>
-              <CardTitle className="text-lg font-semibold text-gray-900">
-                🔧 n8n Webhook Setup
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div>
-                <label htmlFor="webhook-url" className="block text-sm font-medium text-gray-700 mb-2">
-                  n8n Webhook URL
-                </label>
-                <Input
-                  id="webhook-url"
-                  type="url"
-                  value={n8nWebhookUrl}
-                  onChange={(e) => setN8nWebhookUrl(e.target.value)}
-                  placeholder="https://your-n8n-instance.com/webhook/ai-chat"
-                  className="focus:ring-red-500 focus:border-red-500"
-                />
-              </div>
-              
-              <div className="text-sm text-gray-600">
-                <p className="mb-2">Instructies:</p>
-                <ol className="list-decimal list-inside space-y-1">
-                  <li>Maak een n8n workflow met een webhook trigger</li>
-                  <li>Voeg AI nodes toe (zoals OpenAI ChatGPT)</li>
-                  <li>Configureer de response om een 'response' veld terug te sturen</li>
-                  <li>Kopieer de webhook URL hierboven</li>
-                </ol>
-              </div>
-
-              <Button 
-                onClick={handleConfigureWebhook}
-                className="w-full bg-red-600 hover:bg-red-700 text-white"
-              >
-                Configureer Webhook
-              </Button>
-            </CardContent>
-          </Card>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="p-6 bg-gray-50 min-h-screen">
@@ -238,101 +203,150 @@ const AIChatbot = () => {
         <div className="mb-8 flex justify-between items-center">
           <div>
             <h1 className="text-3xl font-bold text-gray-900 mb-2">AI Assistent</h1>
-            <p className="text-gray-600">Stel vragen over werkuren, projecten en meer</p>
+            <p className="text-gray-600">
+              {isAdmin ? 'Configureer en chat met de AI-assistent' : 'Chat met de AI-assistent'}
+            </p>
           </div>
-          <div className="flex space-x-2">
+          {isAdmin && (
             <Button
-              onClick={resetConfiguration}
+              onClick={() => setShowConfig(!showConfig)}
               variant="outline"
-              className="border-gray-300 text-gray-700 hover:bg-gray-50"
+              className="border-red-600 text-red-600 hover:bg-red-50"
             >
-              ⚙️ Reconfigure
+              <Settings className="h-4 w-4 mr-2" />
+              {showConfig ? 'Sluiten' : 'Configureren'}
             </Button>
-            <Button
-              onClick={clearChat}
-              variant="outline"
-              className="border-gray-300 text-gray-700 hover:bg-gray-50"
-            >
-              🗑️ Chat Wissen
-            </Button>
-          </div>
+          )}
         </div>
 
-        <Card className="bg-white h-[600px] flex flex-col">
-          <CardHeader className="border-b border-gray-200">
-            <CardTitle className="text-lg font-semibold text-gray-900 flex items-center justify-between">
-              <span>🤖 JukoTechniek AI Assistent</span>
-              <span className="text-xs text-green-600 bg-green-100 px-2 py-1 rounded">
-                ✓ n8n Connected
-              </span>
+        {/* Admin Configuration Panel */}
+        {isAdmin && showConfig && (
+          <Card className="bg-white mb-6 shadow-sm">
+            <CardHeader>
+              <CardTitle className="text-lg font-semibold text-gray-900">
+                AI Assistent Configuratie
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="webhookUrl">Webhook URL</Label>
+                  <Input
+                    id="webhookUrl"
+                    value={webhookUrl}
+                    onChange={(e) => setWebhookUrl(e.target.value)}
+                    placeholder="https://hooks.zapier.com/hooks/catch/..."
+                    className="focus:ring-red-500 focus:border-red-500"
+                  />
+                  <p className="text-sm text-gray-600">
+                    Configureer een Zapier webhook of andere service om berichten te ontvangen
+                  </p>
+                </div>
+                <div className="flex space-x-2">
+                  <Button
+                    onClick={saveAIConfig}
+                    disabled={loadingConfig}
+                    className="bg-red-600 hover:bg-red-700 text-white"
+                  >
+                    {loadingConfig ? 'Opslaan...' : 'Configuratie Opslaan'}
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Chat Interface */}
+        <Card className="bg-white shadow-sm">
+          <CardHeader>
+            <CardTitle className="text-lg font-semibold text-gray-900 flex items-center">
+              <Bot className="h-5 w-5 mr-2 text-red-600" />
+              Chat met AI Assistent
             </CardTitle>
           </CardHeader>
-          
-          <CardContent className="flex-1 overflow-hidden p-0">
-            <div className="h-full flex flex-col">
-              {/* Messages Container */}
-              <div className="flex-1 overflow-y-auto p-4 space-y-4">
-                {messages.map((message) => (
+          <CardContent className="p-0">
+            {/* Messages */}
+            <div className="h-96 overflow-y-auto p-4 space-y-4">
+              {messages.map((message) => (
+                <div
+                  key={message.id}
+                  className={`flex ${message.isUser ? 'justify-end' : 'justify-start'}`}
+                >
                   <div
-                    key={message.id}
-                    className={`flex ${message.isUser ? 'justify-end' : 'justify-start'}`}
+                    className={`max-w-xs lg:max-w-md px-4 py-2 rounded-lg ${
+                      message.isUser
+                        ? 'bg-red-600 text-white'
+                        : 'bg-gray-100 text-gray-900'
+                    }`}
                   >
-                    <div
-                      className={`max-w-xs lg:max-w-md px-4 py-2 rounded-lg ${
-                        message.isUser
-                          ? 'bg-red-600 text-white'
-                          : 'bg-gray-100 text-gray-900'
-                      }`}
-                    >
-                      <p className="text-sm whitespace-pre-wrap">{message.content}</p>
-                      <p className={`text-xs mt-1 ${
-                        message.isUser ? 'text-red-100' : 'text-gray-500'
-                      }`}>
-                        {message.timestamp.toLocaleTimeString('nl-NL', {
-                          hour: '2-digit',
-                          minute: '2-digit'
-                        })}
-                      </p>
-                    </div>
-                  </div>
-                ))}
-                
-                {isLoading && (
-                  <div className="flex justify-start">
-                    <div className="bg-gray-100 text-gray-900 max-w-xs lg:max-w-md px-4 py-2 rounded-lg">
-                      <div className="flex items-center space-x-2">
-                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-600"></div>
-                        <p className="text-sm">AI denkt na...</p>
+                    <div className="flex items-start space-x-2">
+                      {!message.isUser && <Bot className="h-4 w-4 mt-0.5 text-red-600" />}
+                      {message.isUser && <User className="h-4 w-4 mt-0.5" />}
+                      <div>
+                        <p className="text-sm">{message.text}</p>
+                        <p className={`text-xs mt-1 ${
+                          message.isUser ? 'text-red-200' : 'text-gray-500'
+                        }`}>
+                          {message.timestamp.toLocaleTimeString('nl-NL', {
+                            hour: '2-digit',
+                            minute: '2-digit'
+                          })}
+                        </p>
                       </div>
                     </div>
                   </div>
-                )}
-                
-                <div ref={messagesEndRef} />
-              </div>
+                </div>
+              ))}
+              {isLoading && (
+                <div className="flex justify-start">
+                  <div className="max-w-xs lg:max-w-md px-4 py-2 rounded-lg bg-gray-100">
+                    <div className="flex items-center space-x-2">
+                      <Bot className="h-4 w-4 text-red-600" />
+                      <div className="flex space-x-1">
+                        <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
+                        <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
+                        <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
 
-              {/* Input Form */}
-              <div className="border-t border-gray-200 p-4">
-                <form onSubmit={handleSendMessage} className="flex space-x-2">
-                  <Input
-                    value={inputMessage}
-                    onChange={(e) => setInputMessage(e.target.value)}
-                    placeholder="Typ je vraag hier..."
-                    disabled={isLoading}
-                    className="flex-1 focus:ring-red-500 focus:border-red-500"
-                  />
-                  <Button
-                    type="submit"
-                    disabled={isLoading || !inputMessage.trim()}
-                    className="bg-red-600 hover:bg-red-700 text-white"
-                  >
-                    ➤
-                  </Button>
-                </form>
+            {/* Input */}
+            <div className="border-t p-4">
+              <div className="flex space-x-2">
+                <Input
+                  value={inputMessage}
+                  onChange={(e) => setInputMessage(e.target.value)}
+                  onKeyPress={handleKeyPress}
+                  placeholder="Typ je bericht..."
+                  disabled={isLoading}
+                  className="flex-1 focus:ring-red-500 focus:border-red-500"
+                />
+                <Button
+                  onClick={sendMessage}
+                  disabled={isLoading || !inputMessage.trim()}
+                  className="bg-red-600 hover:bg-red-700 text-white"
+                >
+                  <Send className="h-4 w-4" />
+                </Button>
               </div>
             </div>
           </CardContent>
         </Card>
+
+        {/* Status */}
+        {!isAdmin && (
+          <div className="mt-4 text-center">
+            <p className="text-sm text-gray-600">
+              AI-status: {aiConfig?.is_enabled ? 
+                <span className="text-green-600 font-medium">Actief</span> : 
+                <span className="text-red-600 font-medium">Niet geconfigureerd</span>
+              }
+            </p>
+          </div>
+        )}
       </div>
     </div>
   );

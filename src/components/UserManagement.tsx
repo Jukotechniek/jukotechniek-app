@@ -41,37 +41,50 @@ const UserManagement = () => {
     }
   }, [currentUser]);
 
-  // Fetch users from Supabase
+  // Fetch users from Supabase auth.users and profiles
   const fetchUsers = async () => {
     setLoading(true);
     try {
-      console.log('Fetching users from profiles table...');
+      console.log('Fetching users from auth and profiles...');
       
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      if (error) {
-        console.error('Error fetching users:', error);
+      // Get all users from auth.users table via RPC or admin API
+      const { data: authUsers, error: authError } = await supabase.auth.admin.listUsers();
+      
+      if (authError) {
+        console.error('Error fetching auth users:', authError);
         toast({
           title: "Error",
-          description: "Failed to fetch users",
+          description: "Failed to fetch users from authentication",
           variant: "destructive"
         });
         return;
       }
 
-      const formattedUsers: User[] = (data || []).map(profile => ({
-        id: profile.id,
-        username: profile.username || '',
-        email: profile.username?.includes('@') ? profile.username : `${profile.username}@jukotechniek.nl`,
-        role: (profile.role === 'admin' || profile.role === 'technician') ? profile.role : 'technician',
-        fullName: profile.full_name || '',
-        createdAt: profile.created_at
-      }));
+      // Get profiles data
+      const { data: profiles, error: profilesError } = await supabase
+        .from('profiles')
+        .select('*');
 
-      console.log('Fetched', formattedUsers.length, 'users');
+      if (profilesError) {
+        console.error('Error fetching profiles:', profilesError);
+      }
+
+      // Merge auth users with profiles
+      const profilesMap = new Map((profiles || []).map(p => [p.id, p]));
+      
+      const formattedUsers: User[] = (authUsers.users || []).map(authUser => {
+        const profile = profilesMap.get(authUser.id);
+        return {
+          id: authUser.id,
+          username: profile?.username || authUser.email || '',
+          email: authUser.email || '',
+          role: (profile?.role === 'admin' || profile?.role === 'technician') ? profile.role : 'technician',
+          fullName: profile?.full_name || authUser.user_metadata?.full_name || '',
+          createdAt: authUser.created_at
+        };
+      });
+
+      console.log('Fetched', formattedUsers.length, 'users from auth and profiles');
       setUsers(formattedUsers);
     } catch (error) {
       console.error('Error fetching users:', error);
@@ -86,8 +99,12 @@ const UserManagement = () => {
   };
 
   useEffect(() => {
-    fetchUsers();
-  }, []);
+    if (currentUser?.role === 'admin') {
+      fetchUsers();
+    } else {
+      setLoading(false);
+    }
+  }, [currentUser]);
 
   const handleUpdateCurrentUser = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -121,7 +138,9 @@ const UserManagement = () => {
       });
 
       setEditingCurrentUser(false);
-      fetchUsers();
+      if (currentUser?.role === 'admin') {
+        fetchUsers();
+      }
       
       // Refresh auth context by signing out and back in
       setTimeout(() => {
@@ -152,7 +171,7 @@ const UserManagement = () => {
     try {
       console.log('Creating new user:', newUser.email);
       
-      // First create the auth user
+      // Create the auth user
       const { data: authData, error: authError } = await supabase.auth.admin.createUser({
         email: newUser.email,
         password: newUser.password,
@@ -183,7 +202,7 @@ const UserManagement = () => {
         return;
       }
 
-      // Create or update the profile (the trigger should handle this, but let's be sure)
+      // Create/update the profile (the trigger should handle this, but let's be sure)
       const { error: profileError } = await supabase
         .from('profiles')
         .upsert({
@@ -232,7 +251,8 @@ const UserManagement = () => {
     try {
       console.log('Updating user:', editingUser.id);
       
-      const { error } = await supabase
+      // Update profile
+      const { error: profileError } = await supabase
         .from('profiles')
         .update({
           username: editingUser.username,
@@ -241,14 +261,31 @@ const UserManagement = () => {
         })
         .eq('id', editingUser.id);
 
-      if (error) {
-        console.error('Error updating user:', error);
+      if (profileError) {
+        console.error('Error updating profile:', profileError);
         toast({
           title: "Error",
-          description: error.message,
+          description: profileError.message,
           variant: "destructive"
         });
         return;
+      }
+
+      // Update auth user metadata
+      const { error: authError } = await supabase.auth.admin.updateUserById(
+        editingUser.id,
+        {
+          user_metadata: {
+            username: editingUser.username,
+            full_name: editingUser.fullName,
+            role: editingUser.role
+          }
+        }
+      );
+
+      if (authError) {
+        console.error('Error updating auth user:', authError);
+        // Don't fail completely, profile update was successful
       }
 
       toast({
@@ -410,9 +447,10 @@ const UserManagement = () => {
           </CardContent>
         </Card>
 
-        {/* Add User Button and Form */}
+        {/* Admin-only sections */}
         {currentUser?.role === 'admin' && (
           <>
+            {/* Add User Button and Form */}
             <div className="mb-6 flex justify-end">
               <Button
                 onClick={() => setShowAddForm(!showAddForm)}
@@ -498,143 +536,139 @@ const UserManagement = () => {
                 </CardContent>
               </Card>
             )}
-          </>
-        )}
 
-        {/* Users Table */}
-        <Card className="bg-white shadow-sm">
-          <CardHeader>
-            <CardTitle className="text-lg font-semibold text-gray-900">
-              Gebruikers ({users.length})
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="overflow-x-auto">
-              <table className="w-full text-left">
-                <thead>
-                  <tr className="border-b border-gray-200">
-                    <th className="pb-3 text-sm font-medium text-gray-600">Naam</th>
-                    <th className="pb-3 text-sm font-medium text-gray-600">Gebruikersnaam</th>
-                    <th className="pb-3 text-sm font-medium text-gray-600">Email</th>
-                    <th className="pb-3 text-sm font-medium text-gray-600">Rol</th>
-                    <th className="pb-3 text-sm font-medium text-gray-600">Aangemaakt</th>
-                    {currentUser?.role === 'admin' && (
-                      <th className="pb-3 text-sm font-medium text-gray-600">Acties</th>
-                    )}
-                  </tr>
-                </thead>
-                <tbody>
-                  {users.map((user) => (
-                    <tr key={user.id} className={`border-b border-gray-100 hover:bg-gray-50 ${user.id === currentUser?.id ? 'bg-blue-50' : ''}`}>
-                      <td className="py-3 font-medium text-gray-900">
-                        {editingUser?.id === user.id ? (
-                          <Input
-                            value={editingUser.fullName}
-                            onChange={(e) => setEditingUser({ ...editingUser, fullName: e.target.value })}
-                            className="h-8"
-                          />
-                        ) : (
-                          <>
-                            {user.fullName}
-                            {user.id === currentUser?.id && <span className="ml-2 text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">(Jij)</span>}
-                          </>
-                        )}
-                      </td>
-                      <td className="py-3 text-gray-700">
-                        {editingUser?.id === user.id ? (
-                          <Input
-                            value={editingUser.username}
-                            onChange={(e) => setEditingUser({ ...editingUser, username: e.target.value })}
-                            className="h-8"
-                          />
-                        ) : (
-                          user.username
-                        )}
-                      </td>
-                      <td className="py-3 text-gray-700">{user.email}</td>
-                      <td className="py-3">
-                        {editingUser?.id === user.id ? (
-                          <select
-                            value={editingUser.role}
-                            onChange={(e) => setEditingUser({ ...editingUser, role: e.target.value as 'admin' | 'technician' })}
-                            className="h-8 px-2 border border-gray-300 rounded text-sm"
-                          >
-                            <option value="technician">Monteur</option>
-                            <option value="admin">Admin</option>
-                          </select>
-                        ) : (
-                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                            user.role === 'admin'
-                              ? 'bg-red-100 text-red-800'
-                              : 'bg-blue-100 text-blue-800'
-                          }`}>
-                            {user.role === 'admin' ? 'Admin' : 'Monteur'}
-                          </span>
-                        )}
-                      </td>
-                      <td className="py-3 text-gray-700">
-                        {new Date(user.createdAt).toLocaleDateString('nl-NL')}
-                      </td>
-                      {currentUser?.role === 'admin' && (
-                        <td className="py-3">
-                          <div className="flex space-x-2">
+            {/* Users Table */}
+            <Card className="bg-white shadow-sm">
+              <CardHeader>
+                <CardTitle className="text-lg font-semibold text-gray-900">
+                  Gebruikers ({users.length})
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left">
+                    <thead>
+                      <tr className="border-b border-gray-200">
+                        <th className="pb-3 text-sm font-medium text-gray-600">Naam</th>
+                        <th className="pb-3 text-sm font-medium text-gray-600">Gebruikersnaam</th>
+                        <th className="pb-3 text-sm font-medium text-gray-600">Email</th>
+                        <th className="pb-3 text-sm font-medium text-gray-600">Rol</th>
+                        <th className="pb-3 text-sm font-medium text-gray-600">Aangemaakt</th>
+                        <th className="pb-3 text-sm font-medium text-gray-600">Acties</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {users.map((user) => (
+                        <tr key={user.id} className={`border-b border-gray-100 hover:bg-gray-50 ${user.id === currentUser?.id ? 'bg-blue-50' : ''}`}>
+                          <td className="py-3 font-medium text-gray-900">
                             {editingUser?.id === user.id ? (
-                              <>
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={handleEditUser}
-                                  className="text-green-600 hover:text-green-800 border-green-600"
-                                >
-                                  Opslaan
-                                </Button>
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => setEditingUser(null)}
-                                  className="text-gray-600 hover:text-gray-800"
-                                >
-                                  Annuleren
-                                </Button>
-                              </>
+                              <Input
+                                value={editingUser.fullName}
+                                onChange={(e) => setEditingUser({ ...editingUser, fullName: e.target.value })}
+                                className="h-8"
+                              />
                             ) : (
                               <>
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => setEditingUser(user)}
-                                  className="text-gray-600 hover:text-gray-800"
-                                >
-                                  Bewerken
-                                </Button>
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => handleDeleteUser(user.id, user.fullName)}
-                                  className="text-red-600 hover:text-red-800 hover:border-red-600"
-                                  disabled={user.id === currentUser?.id}
-                                >
-                                  Verwijderen
-                                </Button>
+                                {user.fullName}
+                                {user.id === currentUser?.id && <span className="ml-2 text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">(Jij)</span>}
                               </>
                             )}
-                          </div>
-                        </td>
+                          </td>
+                          <td className="py-3 text-gray-700">
+                            {editingUser?.id === user.id ? (
+                              <Input
+                                value={editingUser.username}
+                                onChange={(e) => setEditingUser({ ...editingUser, username: e.target.value })}
+                                className="h-8"
+                              />
+                            ) : (
+                              user.username
+                            )}
+                          </td>
+                          <td className="py-3 text-gray-700">{user.email}</td>
+                          <td className="py-3">
+                            {editingUser?.id === user.id ? (
+                              <select
+                                value={editingUser.role}
+                                onChange={(e) => setEditingUser({ ...editingUser, role: e.target.value as 'admin' | 'technician' })}
+                                className="h-8 px-2 border border-gray-300 rounded text-sm"
+                              >
+                                <option value="technician">Monteur</option>
+                                <option value="admin">Admin</option>
+                              </select>
+                            ) : (
+                              <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                                user.role === 'admin'
+                                  ? 'bg-red-100 text-red-800'
+                                  : 'bg-blue-100 text-blue-800'
+                              }`}>
+                                {user.role === 'admin' ? 'Admin' : 'Monteur'}
+                              </span>
+                            )}
+                          </td>
+                          <td className="py-3 text-gray-700">
+                            {new Date(user.createdAt).toLocaleDateString('nl-NL')}
+                          </td>
+                          <td className="py-3">
+                            <div className="flex space-x-2">
+                              {editingUser?.id === user.id ? (
+                                <>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={handleEditUser}
+                                    className="text-green-600 hover:text-green-800 border-green-600"
+                                  >
+                                    Opslaan
+                                  </Button>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => setEditingUser(null)}
+                                    className="text-gray-600 hover:text-gray-800"
+                                  >
+                                    Annuleren
+                                  </Button>
+                                </>
+                              ) : (
+                                <>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => setEditingUser(user)}
+                                    className="text-gray-600 hover:text-gray-800"
+                                  >
+                                    Bewerken
+                                  </Button>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => handleDeleteUser(user.id, user.fullName)}
+                                    className="text-red-600 hover:text-red-800 hover:border-red-600"
+                                    disabled={user.id === currentUser?.id}
+                                  >
+                                    Verwijderen
+                                  </Button>
+                                </>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                      {users.length === 0 && (
+                        <tr>
+                          <td colSpan={6} className="py-8 text-center text-gray-500">
+                            Geen gebruikers gevonden
+                          </td>
+                        </tr>
                       )}
-                    </tr>
-                  ))}
-                  {users.length === 0 && (
-                    <tr>
-                      <td colSpan={6} className="py-8 text-center text-gray-500">
-                        Geen gebruikers gevonden
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </CardContent>
-        </Card>
+                    </tbody>
+                  </table>
+                </div>
+              </CardContent>
+            </Card>
+          </>
+        )}
       </div>
     </div>
   );
