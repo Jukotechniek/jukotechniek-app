@@ -47,11 +47,13 @@ const UserManagement = () => {
     try {
       console.log('Fetching users from auth and profiles...');
       
-      // Get all users from auth.users table via RPC or admin API
-      const { data: authUsers, error: authError } = await supabase.auth.admin.listUsers();
-      
-      if (authError) {
-        console.error('Error fetching auth users:', authError);
+      // Get all users through the admin-users edge function
+      const { data: adminData, error: adminError } = await supabase.functions.invoke('admin-users', {
+        body: { action: 'listUsers' }
+      });
+
+      if (adminError) {
+        console.error('Error fetching auth users:', adminError);
         toast({
           title: "Error",
           description: "Failed to fetch users from authentication",
@@ -59,6 +61,8 @@ const UserManagement = () => {
         });
         return;
       }
+
+      const authUsers = adminData as { users: any[] };
 
       // Get profiles data
       const { data: profiles, error: profilesError } = await supabase
@@ -171,29 +175,31 @@ const UserManagement = () => {
     try {
       console.log('Creating new user:', newUser.email);
       
-      // Create the auth user
-      const { data: authData, error: authError } = await supabase.auth.admin.createUser({
-        email: newUser.email,
-        password: newUser.password,
-        user_metadata: {
-          username: newUser.username,
-          full_name: newUser.fullName,
-          role: newUser.role
-        },
-        email_confirm: true
+      // Create the auth user via the admin-users edge function
+      const { data: createData, error: createError } = await supabase.functions.invoke('admin-users', {
+        body: {
+          action: 'createUser',
+          email: newUser.email,
+          password: newUser.password,
+          user_metadata: {
+            username: newUser.username,
+            full_name: newUser.fullName,
+            role: newUser.role
+          }
+        }
       });
 
-      if (authError) {
-        console.error('Auth creation error:', authError);
+      if (createError) {
+        console.error('Auth creation error:', createError);
         toast({
           title: "Error",
-          description: authError.message,
+          description: createError.message,
           variant: "destructive"
         });
         return;
       }
 
-      if (!authData.user) {
+      if (!createData || !('user' in createData)) {
         toast({
           title: "Error",
           description: "Failed to create user",
@@ -206,7 +212,7 @@ const UserManagement = () => {
       const { error: profileError } = await supabase
         .from('profiles')
         .upsert({
-          id: authData.user.id,
+          id: (createData as any).user.id,
           username: newUser.username,
           full_name: newUser.fullName,
           role: newUser.role
@@ -271,17 +277,20 @@ const UserManagement = () => {
         return;
       }
 
-      // Update auth user metadata
-      const { error: authError } = await supabase.auth.admin.updateUserById(
-        editingUser.id,
-        {
-          user_metadata: {
-            username: editingUser.username,
-            full_name: editingUser.fullName,
-            role: editingUser.role
+      // Update auth user metadata via edge function
+      const { error: authError } = await supabase.functions.invoke('admin-users', {
+        body: {
+          action: 'updateUser',
+          id: editingUser.id,
+          update: {
+            user_metadata: {
+              username: editingUser.username,
+              full_name: editingUser.fullName,
+              role: editingUser.role
+            }
           }
         }
-      );
+      });
 
       if (authError) {
         console.error('Error updating auth user:', authError);
@@ -322,13 +331,15 @@ const UserManagement = () => {
     try {
       console.log('Deleting user:', userId);
       
-      const { error } = await supabase.auth.admin.deleteUser(userId);
+      const { error } = await supabase.functions.invoke('admin-users', {
+        body: { action: 'deleteUser', id: userId }
+      });
 
       if (error) {
         console.error('Error deleting user:', error);
         toast({
           title: "Error",
-          description: error.message,
+          description: (error as any).message,
           variant: "destructive"
         });
         return;
