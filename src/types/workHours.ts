@@ -31,7 +31,9 @@ export interface TechnicianSummary {
   sundayHours: number;
   daysWorked: number;
   lastWorked: string;
-  profit?: number;
+  profit: number;
+  revenue: number;
+  costs: number;
 }
 
 export interface OvertimeCalculation {

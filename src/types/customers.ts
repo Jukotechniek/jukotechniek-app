@@ -3,8 +3,9 @@ export interface Customer {
   id: string;
   name: string;
   address: string;
-  createdAt: string;
-  isActive: boolean;
+  created_at: string;
+  updated_at: string;
+  is_active: boolean;
 }
 
 export interface CustomerTechnicianRate {
