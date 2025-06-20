@@ -17,6 +17,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { TechnicianSummary } from '@/types/workHours';
 import { formatDutchDate } from '@/utils/overtimeCalculations';
+import TechnicianFilter from './TechnicianFilter';
 
 const COLORS = ['#dc2626', '#991b1b', '#7f1d1d', '#450a0a'];
 
@@ -24,6 +25,7 @@ const Dashboard: React.FC = () => {
   const { user } = useAuth();
   const [technicianData, setTechnicianData] = useState<TechnicianSummary[]>([]);
   const [weeklyData, setWeeklyData] = useState<any[]>([]);
+  const [selectedTechnician, setSelectedTechnician] = useState<string>('all');
   const [loading, setLoading] = useState(true);
   const isAdmin = user?.role === 'admin';
 
@@ -40,6 +42,7 @@ const Dashboard: React.FC = () => {
         .from('work_hours')
         .select(`
           *,
+          customers(name),
           profiles!work_hours_technician_id_fkey(full_name)
         `);
       
@@ -107,18 +110,40 @@ const Dashboard: React.FC = () => {
 
       const summary = technicianMap.get(techId);
       const hoursWorked = Number(entry.hours_worked || 0);
+      const regularHours = Number(entry.regular_hours || 0);
+      const overtimeHours = Number(entry.overtime_hours || 0);
+      const weekendHours = Number(entry.weekend_hours || 0);
+      const sundayHours = Number(entry.sunday_hours || 0);
       const rate = rateMap.get(techId) || { hourly: 0, billable: 0 };
 
-      // Calculate revenue and costs
-      const revenue = hoursWorked * rate.billable;
-      const costs = hoursWorked * rate.hourly;
+      // Calculate revenue with overtime multipliers
+      let revenue = 0;
+      let costs = 0;
+
+      if (sundayHours > 0) {
+        revenue += sundayHours * rate.billable * 2.0; // Sunday 200%
+        costs += sundayHours * rate.hourly * 2.0;
+      }
+      if (weekendHours > 0) {
+        revenue += weekendHours * rate.billable * 1.5; // Weekend 150%
+        costs += weekendHours * rate.hourly * 1.5;
+      }
+      if (overtimeHours > 0) {
+        revenue += overtimeHours * rate.billable * 1.25; // Overtime 125%
+        costs += overtimeHours * rate.hourly * 1.25;
+      }
+      if (regularHours > 0) {
+        revenue += regularHours * rate.billable; // Regular 100%
+        costs += regularHours * rate.hourly;
+      }
+
       const profit = revenue - costs;
 
       summary.totalHours += hoursWorked;
-      summary.regularHours += Number(entry.regular_hours || 0);
-      summary.overtimeHours += Number(entry.overtime_hours || 0);
-      summary.weekendHours += Number(entry.weekend_hours || 0);
-      summary.sundayHours += Number(entry.sunday_hours || 0);
+      summary.regularHours += regularHours;
+      summary.overtimeHours += overtimeHours;
+      summary.weekendHours += weekendHours;
+      summary.sundayHours += sundayHours;
       summary.entries.push(entry);
       summary.profit += profit;
       summary.revenue += revenue;
@@ -136,7 +161,7 @@ const Dashboard: React.FC = () => {
       delete summary.entries;
     });
 
-    return Array.from(technicianMap.values()).sort((a, b) => b.profit - a.profit);
+    return Array.from(technicianMap.values()).sort((a, b) => b.totalHours - a.totalHours);
   };
 
   const processWeeklyData = (workHours: any[]) => {
@@ -170,13 +195,28 @@ const Dashboard: React.FC = () => {
     }).format(amount);
   };
 
-  const totalHours = technicianData.reduce((sum, tech) => sum + tech.totalHours, 0);
-  const totalDays = technicianData.reduce((sum, tech) => sum + tech.daysWorked, 0);
+  // Filter data based on selected technician
+  const filteredTechnicianData = selectedTechnician === 'all' 
+    ? technicianData 
+    : technicianData.filter(tech => tech.technicianId === selectedTechnician);
+
+  // Filter for current user if not admin
+  const displayData = isAdmin 
+    ? filteredTechnicianData
+    : technicianData.filter(tech => tech.technicianId === user?.id);
+
+  const totalHours = displayData.reduce((sum, tech) => sum + tech.totalHours, 0);
+  const totalDays = displayData.reduce((sum, tech) => sum + tech.daysWorked, 0);
   const avgHoursPerDay = totalDays > 0 ? (totalHours / totalDays).toFixed(1) : '0';
-  const totalProfit = technicianData.reduce((sum, tech) => sum + tech.profit, 0);
-  const totalRevenue = technicianData.reduce((sum, tech) => sum + tech.revenue, 0);
-  const totalCosts = technicianData.reduce((sum, tech) => sum + tech.costs, 0);
+  const totalProfit = displayData.reduce((sum, tech) => sum + tech.profit, 0);
+  const totalRevenue = displayData.reduce((sum, tech) => sum + tech.revenue, 0);
+  const totalCosts = displayData.reduce((sum, tech) => sum + tech.costs, 0);
   const currentUserData = technicianData.find(tech => tech.technicianId === user?.id);
+
+  const availableTechnicians = technicianData.map(tech => ({
+    id: tech.technicianId,
+    name: tech.technicianName
+  }));
 
   if (loading) {
     return (
@@ -203,6 +243,15 @@ const Dashboard: React.FC = () => {
           </p>
         </div>
 
+        {/* Technician Filter for Admin */}
+        {isAdmin && (
+          <TechnicianFilter
+            technicians={availableTechnicians}
+            selectedTechnician={selectedTechnician}
+            onTechnicianChange={setSelectedTechnician}
+          />
+        )}
+
         {/* Key Metrics */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
           <Card className="bg-white shadow-sm">
@@ -221,37 +270,41 @@ const Dashboard: React.FC = () => {
             </CardContent>
           </Card>
 
-          <Card className="bg-white shadow-sm">
-            <CardContent className="p-6">
-              <div className="flex items-center">
-                <div className="p-2 bg-green-100 rounded-lg">
-                  <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1" />
-                  </svg>
+          {isAdmin && (
+            <Card className="bg-white shadow-sm">
+              <CardContent className="p-6">
+                <div className="flex items-center">
+                  <div className="p-2 bg-green-100 rounded-lg">
+                    <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1" />
+                    </svg>
+                  </div>
+                  <div className="ml-4">
+                    <p className="text-sm font-medium text-gray-600">Total Revenue</p>
+                    <p className="text-2xl font-bold text-gray-900">{formatCurrency(totalRevenue)}</p>
+                  </div>
                 </div>
-                <div className="ml-4">
-                  <p className="text-sm font-medium text-gray-600">Total Revenue</p>
-                  <p className="text-2xl font-bold text-gray-900">{formatCurrency(totalRevenue)}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+          )}
 
-          <Card className="bg-white shadow-sm">
-            <CardContent className="p-6">
-              <div className="flex items-center">
-                <div className="p-2 bg-yellow-100 rounded-lg">
-                  <svg className="w-6 h-6 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
-                  </svg>
+          {isAdmin && (
+            <Card className="bg-white shadow-sm">
+              <CardContent className="p-6">
+                <div className="flex items-center">
+                  <div className="p-2 bg-yellow-100 rounded-lg">
+                    <svg className="w-6 h-6 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                    </svg>
+                  </div>
+                  <div className="ml-4">
+                    <p className="text-sm font-medium text-gray-600">Total Profit</p>
+                    <p className="text-2xl font-bold text-gray-900">{formatCurrency(totalProfit)}</p>
+                  </div>
                 </div>
-                <div className="ml-4">
-                  <p className="text-sm font-medium text-gray-600">Total Profit</p>
-                  <p className="text-2xl font-bold text-gray-900">{formatCurrency(totalProfit)}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+          )}
 
           <Card className="bg-white shadow-sm">
             <CardContent className="p-6">
@@ -290,36 +343,67 @@ const Dashboard: React.FC = () => {
             </CardContent>
           </Card>
 
-          {/* Profit Distribution */}
-          <Card className="bg-white shadow-sm">
-            <CardHeader>
-              <CardTitle className="text-lg font-semibold text-gray-900">Profit Distribution by Technician</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <ResponsiveContainer width="100%" height={300}>
-                <PieChart>
-                  <Pie
-                    data={technicianData.slice(0, 4)}
-                    cx="50%"
-                    cy="50%"
-                    labelLine={false}
-                    label={({ technicianName, profit }) => `${technicianName}: ${formatCurrency(profit)}`}
-                    outerRadius={80}
-                    fill="#8884d8"
-                    dataKey="profit"
-                  >
-                    {technicianData.slice(0, 4).map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                    ))}
-                  </Pie>
-                  <Tooltip formatter={(value) => formatCurrency(Number(value))} />
-                </PieChart>
-              </ResponsiveContainer>
-            </CardContent>
-          </Card>
+          {/* Profit Distribution - Only for Admin */}
+          {isAdmin && (
+            <Card className="bg-white shadow-sm">
+              <CardHeader>
+                <CardTitle className="text-lg font-semibold text-gray-900">Profit Distribution by Technician</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ResponsiveContainer width="100%" height={300}>
+                  <PieChart>
+                    <Pie
+                      data={displayData.slice(0, 4).filter(tech => tech.profit > 0)}
+                      cx="50%"
+                      cy="50%"
+                      labelLine={false}
+                      label={({ technicianName, profit }) => `${technicianName}: ${formatCurrency(profit)}`}
+                      outerRadius={80}
+                      fill="#8884d8"
+                      dataKey="profit"
+                    >
+                      {displayData.slice(0, 4).filter(tech => tech.profit > 0).map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                      ))}
+                    </Pie>
+                    <Tooltip formatter={(value) => formatCurrency(Number(value))} />
+                  </PieChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Hours Distribution for Technicians */}
+          {!isAdmin && (
+            <Card className="bg-white shadow-sm">
+              <CardHeader>
+                <CardTitle className="text-lg font-semibold text-gray-900">Hours Distribution</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Regular Hours:</span>
+                    <span className="font-medium">{currentUserData?.regularHours.toFixed(1) || '0'}h</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Overtime Hours:</span>
+                    <span className="font-medium text-orange-600">{currentUserData?.overtimeHours.toFixed(1) || '0'}h</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Weekend Hours:</span>
+                    <span className="font-medium text-orange-600">{currentUserData?.weekendHours.toFixed(1) || '0'}h</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Sunday Hours:</span>
+                    <span className="font-medium text-purple-600">{currentUserData?.sundayHours.toFixed(1) || '0'}h</span>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </div>
 
-        {/* Technician Performance Table */}
+        {/* Technician Performance Table - Admin Only */}
         {isAdmin && (
           <Card className="bg-white shadow-sm">
             <CardHeader>
@@ -343,7 +427,7 @@ const Dashboard: React.FC = () => {
                     </tr>
                   </thead>
                   <tbody>
-                    {technicianData.map((tech) => {
+                    {displayData.map((tech) => {
                       const margin = tech.revenue > 0 ? ((tech.profit / tech.revenue) * 100).toFixed(1) : '0';
                       return (
                         <tr key={tech.technicianId} className="border-b border-gray-100 hover:bg-gray-50">
@@ -380,7 +464,7 @@ const Dashboard: React.FC = () => {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 <div className="text-center">
                   <p className="text-2xl font-bold text-red-600">{currentUserData.totalHours.toFixed(1)}h</p>
                   <p className="text-sm text-gray-600">Total Hours</p>
@@ -390,14 +474,10 @@ const Dashboard: React.FC = () => {
                   <p className="text-sm text-gray-600">Days Worked</p>
                 </div>
                 <div className="text-center">
-                  <p className="text-2xl font-bold text-green-600">{formatCurrency(currentUserData.profit)}</p>
-                  <p className="text-sm text-gray-600">Your Profit</p>
-                </div>
-                <div className="text-center">
-                  <p className="text-2xl font-bold text-purple-600">
-                    {currentUserData.revenue > 0 ? ((currentUserData.profit / currentUserData.revenue) * 100).toFixed(1) : '0'}%
+                  <p className="text-2xl font-bold text-green-600">
+                    {currentUserData.totalHours > 0 ? (currentUserData.totalHours / currentUserData.daysWorked).toFixed(1) : '0'}h
                   </p>
-                  <p className="text-sm text-gray-600">Profit Margin</p>
+                  <p className="text-sm text-gray-600">Avg Hours/Day</p>
                 </div>
               </div>
             </CardContent>
