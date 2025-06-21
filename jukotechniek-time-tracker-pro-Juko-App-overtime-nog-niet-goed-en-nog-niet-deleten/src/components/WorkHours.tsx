@@ -48,80 +48,74 @@ const WorkHours = () => {
   });
 
   const isAdmin = user?.role === 'admin';
-  const filteredEntries = isAdmin
-    ? workEntries
-    : workEntries.filter(entry => entry.technicianId === user?.id);
+  const [selectedTech, setSelectedTech] = useState<string>('all');
+  const [selectedMonth, setSelectedMonth] = useState<string>(new Date().toISOString().slice(0, 7));
 
   const fetchData = async () => {
     setLoading(true);
     try {
-    // klanten ophalen
       const { data: customerData, error: custError } = await supabase
         .from('customers')
         .select('*')
-      .eq('is_active', true)
-      .order('name');
-    if (custError) throw custError;
+        .eq('is_active', true)
+        .order('name');
+      if (custError) throw custError;
 
-    // monteurs ophalen
-    const { data: technicianData, error: techError } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('role', 'technician')
-      .order('full_name');
-    if (techError) throw techError;
+      const { data: technicianData, error: techError } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('role', 'technician')
+        .order('full_name');
+      if (techError) throw techError;
 
-    // tarieven ophalen
-    const { data: rateData, error: rateError } = await supabase
-      .from('customer_technician_rates')
-      .select('*');
-    if (rateError) throw rateError;
+      const { data: rateData, error: rateError } = await supabase
+        .from('customer_technician_rates')
+        .select('*');
+      if (rateError) throw rateError;
 
-    // werkuren ophalen + expliciete relatie naar technician_id
-    const { data: entries, error: entryError } = await supabase
-      .from('work_hours')
-      .select(`
-        *,
-        customers(name),
-        technician:profiles!work_hours_technician_id_fkey(full_name)
-      `)
-      .order('date', { ascending: false });
-    if (entryError) throw entryError;
+      const { data: entries, error: entryError } = await supabase
+        .from('work_hours')
+        .select(`
+          *,
+          customers(name),
+          technician:profiles!work_hours_technician_id_fkey(full_name)
+        `)
+        .order('date', { ascending: false });
+      if (entryError) throw entryError;
 
-    setCustomers(customerData || []);
-    setTechnicians(technicianData || []);
-    setTravelRates(rateData || []);
+      setCustomers(customerData || []);
+      setTechnicians(technicianData || []);
+      setTravelRates(rateData || []);
 
-    const formatted = (entries || []).map(e => ({
-      id: e.id,
-      technicianId: e.technician_id || '',
-      technicianName: e.technician?.full_name || '',
-      customerId: e.customer_id || '',
-      customerName: e.customers?.name || '',
-      date: e.date,
-      hoursWorked: e.hours_worked,
-      regularHours: e.regular_hours || 0,
-      overtimeHours: e.overtime_hours || 0,
-      weekendHours: e.weekend_hours || 0,
-      sundayHours: e.sunday_hours || 0,
-      isWeekend: e.is_weekend || false,
-      isSunday: e.is_sunday || false,
-      isManualEntry: e.is_manual_entry || false,
-      description: e.description || '',
-      travelExpenseToTechnician: e.travel_expense_to_technician || 0,
-      travelExpenseFromClient: e.travel_expense_from_client || 0,
-      createdAt: e.created_at || '',
-      createdBy: e.created_by || ''
-    }));
+      const formatted = (entries || []).map(e => ({
+        id: e.id,
+        technicianId: e.technician_id || '',
+        technicianName: e.technician?.full_name || '',
+        customerId: e.customer_id || '',
+        customerName: e.customers?.name || '',
+        date: e.date,
+        hoursWorked: e.hours_worked,
+        regularHours: e.regular_hours || 0,
+        overtimeHours: e.overtime_hours || 0,
+        weekendHours: e.weekend_hours || 0,
+        sundayHours: e.sunday_hours || 0,
+        isWeekend: e.is_weekend || false,
+        isSunday: e.is_sunday || false,
+        isManualEntry: e.is_manual_entry || false,
+        description: e.description || '',
+        travelExpenseToTechnician: e.travel_expense_to_technician || 0,
+        travelExpenseFromClient: e.travel_expense_from_client || 0,
+        createdAt: e.created_at || '',
+        createdBy: e.created_by || ''
+      }));
 
-    setWorkEntries(formatted);
-  } catch (error) {
-    console.error('Error fetching work hours:', error);
-  } finally {
-    setLoading(false);
-  }
-};
-
+      setWorkEntries(formatted);
+    } catch (error) {
+      console.error('Error fetching work hours:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
     fetchData();
@@ -132,16 +126,6 @@ const WorkHours = () => {
       setNewEntry(prev => ({ ...prev, customerId: customers[0].id }));
     }
   }, [customers]);
-
-  if (loading) {
-    return (
-      <div className="p-6 bg-gray-50 min-h-screen">
-        <div className="flex items-center justify-center h-64">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-red-600"></div>
-        </div>
-      </div>
-    );
-  }
 
   const getTravelExpenses = (customerId: string, technicianId: string) => {
     return (
@@ -154,12 +138,17 @@ const WorkHours = () => {
 
   const handleAddEntry = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    if (!newEntry.technicianId || !newEntry.customerId || !newEntry.date || !newEntry.hoursWorked) {
+
+    if (
+      (!isAdmin && !newEntry.customerId) ||
+      (isAdmin && (!newEntry.technicianId || !newEntry.customerId)) ||
+      !newEntry.date ||
+      !newEntry.hoursWorked
+    ) {
       toast({
-        title: "Fout",
-        description: "Vul alle verplichte velden in",
-        variant: "destructive"
+        title: 'Fout',
+        description: 'Vul alle verplichte velden in',
+        variant: 'destructive'
       });
       return;
     }
@@ -167,17 +156,14 @@ const WorkHours = () => {
     const hours = parseFloat(newEntry.hoursWorked);
     if (hours <= 0 || hours > 24) {
       toast({
-        title: "Fout",
-        description: "Uren moeten tussen 0 en 24 liggen",
-        variant: "destructive"
+        title: 'Fout',
+        description: 'Uren moeten tussen 0 en 24 liggen',
+        variant: 'destructive'
       });
       return;
     }
 
-    // Calculate overtime hours
     const overtimeData = calculateOvertimeHours(newEntry.date, hours);
-    
-    // Get travel expenses
     const travelExpenses = getTravelExpenses(newEntry.customerId, newEntry.technicianId);
 
     const { data, error } = await supabase
@@ -235,27 +221,10 @@ const WorkHours = () => {
         createdAt: data.created_at || '',
         createdBy: data.created_by || ''
       };
-
-      setWorkEntries([...workEntries, formatted]);
+      setWorkEntries(prev => [formatted, ...prev]);
     }
-    
-    // Only show overtime message to admins
-    let overtimeMessage = '';
-    if (isAdmin) {
-      if (overtimeData.isSunday) {
-        overtimeMessage = ` Zondag: ${overtimeData.sundayHours}u tegen 200%`;
-      } else if (overtimeData.isWeekend) {
-        overtimeMessage = ` Weekend: ${overtimeData.weekendHours}u tegen 150%`;
-      } else if (overtimeData.overtimeHours > 0) {
-        overtimeMessage = ` Overwerk: ${overtimeData.overtimeHours}u tegen 125%`;
-      }
-    }
-    
-    toast({
-      title: "Succes",
-      description: `Werkuren succesvol toegevoegd.${overtimeMessage}`
-    });
 
+    toast({ title: 'Succes', description: 'Werkuren succesvol toegevoegd' });
     setNewEntry({
       technicianId: user?.role === 'technician' ? user.id : '',
       customerId: customers[0]?.id || '',
@@ -269,9 +238,9 @@ const WorkHours = () => {
   const handleEdit = (entry: WorkEntry) => {
     if (!isAdmin && entry.technicianId !== user?.id) {
       toast({
-        title: "Fout",
-        description: "Je kunt alleen je eigen uren bewerken",
-        variant: "destructive"
+        title: 'Fout',
+        description: 'Je kunt alleen je eigen uren bewerken',
+        variant: 'destructive'
       });
       return;
     }
@@ -284,15 +253,14 @@ const WorkHours = () => {
     const hours = editingEntry.hoursWorked;
     if (hours <= 0 || hours > 24) {
       toast({
-        title: "Fout",
-        description: "Uren moeten tussen 0 en 24 liggen",
-        variant: "destructive"
+        title: 'Fout',
+        description: 'Uren moeten tussen 0 en 24 liggen',
+        variant: 'destructive'
       });
       return;
     }
 
     const overtimeData = calculateOvertimeHours(editingEntry.date, hours);
-    
     const { error } = await supabase
       .from('work_hours')
       .update({
@@ -313,25 +281,21 @@ const WorkHours = () => {
       return;
     }
 
-    setWorkEntries(workEntries.map(entry =>
-      entry.id === editingEntry.id
-        ? { ...editingEntry, ...overtimeData }
-        : entry
-    ));
-    
+    setWorkEntries(prev =>
+      prev.map(e =>
+        e.id === editingEntry.id ? { ...editingEntry, ...overtimeData } : e
+      )
+    );
     setEditingEntry(null);
-    toast({
-      title: "Succes",
-      description: "Werkuren succesvol bijgewerkt"
-    });
+    toast({ title: 'Succes', description: 'Werkuren succesvol bijgewerkt' });
   };
 
   const handleDelete = async (entryId: string, entry: WorkEntry) => {
     if (!isAdmin && entry.technicianId !== user?.id) {
       toast({
-        title: "Fout",
-        description: "Je kunt alleen je eigen uren verwijderen",
-        variant: "destructive"
+        title: 'Fout',
+        description: 'Je kunt alleen je eigen uren verwijderen',
+        variant: 'destructive'
       });
       return;
     }
@@ -342,12 +306,23 @@ const WorkHours = () => {
       return;
     }
 
-    setWorkEntries(workEntries.filter(e => e.id !== entryId));
-    toast({
-      title: 'Succes',
-      description: 'Werkuren succesvol verwijderd'
-    });
+    setWorkEntries(prev => prev.filter(e => e.id !== entryId));
+    toast({ title: 'Succes', description: 'Werkuren succesvol verwijderd' });
   };
+
+  const filteredEntries = workEntries.filter(e => {
+    if (isAdmin) {
+      if (selectedTech !== 'all' && e.technicianId !== selectedTech) return false;
+    } else {
+      if (e.technicianId !== user?.id) return false;
+    }
+    if (selectedMonth !== 'all') {
+      const [year, month] = selectedMonth.split('-').map(n => parseInt(n, 10));
+      const d = new Date(e.date);
+      if (d.getFullYear() !== year || d.getMonth() + 1 !== month) return false;
+    }
+    return true;
+  });
 
   return (
     <div className="p-6 bg-gray-50 min-h-screen">
@@ -369,7 +344,32 @@ const WorkHours = () => {
           </Button>
         </div>
 
-        {/* Add Entry Form */}
+        <div className="mb-4 flex items-center space-x-4">
+          {isAdmin && (
+            <select
+              value={selectedTech}
+              onChange={e => setSelectedTech(e.target.value)}
+              className="p-2 border rounded"
+            >
+              <option value="all">Alle monteurs</option>
+              {technicians.map(t => (
+                <option key={t.id} value={t.id}>
+                  {t.full_name}
+                </option>
+              ))}
+            </select>
+          )}
+          <Input
+            type="month"
+            value={selectedMonth === 'all' ? '' : selectedMonth}
+            onChange={e => setSelectedMonth(e.target.value || 'all')}
+            className="p-2 border rounded"
+          />
+          <Button onClick={() => setSelectedMonth('all')} className="bg-red-600 text-white">
+            Alles
+          </Button>
+        </div>
+
         {showAddForm && (
           <Card className="bg-white mb-6">
             <CardHeader>
@@ -383,7 +383,7 @@ const WorkHours = () => {
                     <select
                       id="technician"
                       value={newEntry.technicianId}
-                      onChange={(e) => setNewEntry({ ...newEntry, technicianId: e.target.value })}
+                      onChange={e => setNewEntry({ ...newEntry, technicianId: e.target.value })}
                       className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-red-500 focus:border-red-500"
                       required
                     >
@@ -401,7 +401,7 @@ const WorkHours = () => {
                   <select
                     id="customer"
                     value={newEntry.customerId}
-                    onChange={(e) => setNewEntry({ ...newEntry, customerId: e.target.value })}
+                    onChange={e => setNewEntry({ ...newEntry, customerId: e.target.value })}
                     className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-red-500 focus:border-red-500"
                     required
                   >
@@ -410,7 +410,8 @@ const WorkHours = () => {
                       const travelExpenses = getTravelExpenses(customer.id, newEntry.technicianId);
                       return (
                         <option key={customer.id} value={customer.id}>
-                          {customer.name} {isAdmin && `(€${(travelExpenses.travel_expense_to_technician || 0).toFixed(2)} reis)`}
+                          {customer.name}
+                          {isAdmin && ` (€${(travelExpenses.travel_expense_to_technician || 0).toFixed(2)})`}
                         </option>
                       );
                     })}
@@ -422,7 +423,7 @@ const WorkHours = () => {
                     id="date"
                     type="date"
                     value={newEntry.date}
-                    onChange={(e) => setNewEntry({ ...newEntry, date: e.target.value })}
+                    onChange={e => setNewEntry({ ...newEntry, date: e.target.value })}
                     required
                     className="focus:ring-red-500 focus:border-red-500"
                   />
@@ -436,26 +437,21 @@ const WorkHours = () => {
                     min="0.5"
                     max="24"
                     value={newEntry.hoursWorked}
-                    onChange={(e) => setNewEntry({ ...newEntry, hoursWorked: e.target.value })}
+                    onChange={e => setNewEntry({ ...newEntry, hoursWorked: e.target.value })}
                     placeholder="8.0"
                     required
                     className="focus:ring-red-500 focus:border-red-500"
                   />
-                  {/* Only show overtime calculations to admins */}
                   {isAdmin && newEntry.hoursWorked && (
                     <div className="text-xs text-gray-600">
                       {(() => {
-                        const hours = parseFloat(newEntry.hoursWorked);
-                        const overtimeData = calculateOvertimeHours(newEntry.date, hours);
-                        if (overtimeData.isSunday) {
-                          return `Zondag: ${hours}u tegen 200% tarief`;
-                        } else if (overtimeData.isWeekend) {
-                          return `Weekend: ${hours}u tegen 150% tarief`;
-                        } else if (overtimeData.overtimeHours > 0) {
-                          return `Normaal: ${overtimeData.regularHours}u, Overwerk: ${overtimeData.overtimeHours}u tegen 125%`;
-                        } else {
-                          return `Normale uren: ${hours}u`;
-                        }
+                        const hrs = parseFloat(newEntry.hoursWorked);
+                        const od = calculateOvertimeHours(newEntry.date, hrs);
+                        if (od.isSunday) return `Zondag: ${od.sundayHours}u tegen 200%`;
+                        if (od.isWeekend) return `Weekend: ${od.weekendHours}u tegen 150%`;
+                        if (od.overtimeHours > 0)
+                          return `Normaal: ${od.regularHours}u, Overwerk: ${od.overtimeHours}u tegen 125%`;
+                        return `Normale uren: ${hrs}u`;
                       })()}
                     </div>
                   )}
@@ -465,7 +461,7 @@ const WorkHours = () => {
                   <Textarea
                     id="description"
                     value={newEntry.description}
-                    onChange={(e) => setNewEntry({ ...newEntry, description: e.target.value })}
+                    onChange={e => setNewEntry({ ...newEntry, description: e.target.value })}
                     placeholder="Korte omschrijving van uitgevoerde werkzaamheden"
                     className="focus:ring-red-500 focus:border-red-500"
                   />
@@ -480,7 +476,6 @@ const WorkHours = () => {
           </Card>
         )}
 
-        {/* Work Entries Table */}
         <Card className="bg-white">
           <CardHeader>
             <CardTitle className="text-lg font-semibold text-gray-900">
@@ -496,7 +491,6 @@ const WorkHours = () => {
                     <th className="pb-3 text-sm font-medium text-gray-600">Klant</th>
                     <th className="pb-3 text-sm font-medium text-gray-600">Datum</th>
                     <th className="pb-3 text-sm font-medium text-gray-600">Uren</th>
-                    {/* Only show overtime columns to admins */}
                     {isAdmin && (
                       <>
                         <th className="pb-3 text-sm font-medium text-gray-600">Normaal</th>
@@ -510,7 +504,7 @@ const WorkHours = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredEntries.map((entry) => (
+                  {filteredEntries.map(entry => (
                     <tr key={entry.id} className="border-b border-gray-100 hover:bg-gray-50">
                       {isAdmin && (
                         <td className="py-3 font-medium text-gray-900">{entry.technicianName}</td>
@@ -521,7 +515,7 @@ const WorkHours = () => {
                           <Input
                             type="date"
                             value={editingEntry.date}
-                            onChange={(e) => setEditingEntry({ ...editingEntry, date: e.target.value })}
+                            onChange={e => setEditingEntry({ ...editingEntry, date: e.target.value })}
                             className="h-8"
                           />
                         ) : (
@@ -536,27 +530,38 @@ const WorkHours = () => {
                             min="0.5"
                             max="24"
                             value={editingEntry.hoursWorked}
-                            onChange={(e) => setEditingEntry({ ...editingEntry, hoursWorked: parseFloat(e.target.value) })}
+                            onChange={e =>
+                              setEditingEntry({ ...editingEntry, hoursWorked: parseFloat(e.target.value) })
+                            }
                             className="h-8 w-20"
                           />
                         ) : (
                           `${entry.hoursWorked}h`
                         )}
                       </td>
-                      {/* Only show overtime columns to admins */}
                       {isAdmin && (
                         <>
-                          <td className="py-3 text-gray-700">{entry.regularHours.toFixed(1)}h</td>
-                          <td className="py-3 text-orange-600">{entry.overtimeHours.toFixed(1)}h</td>
-                          <td className="py-3 text-orange-600">{entry.weekendHours.toFixed(1)}h</td>
-                          <td className="py-3 text-purple-600">{entry.sundayHours.toFixed(1)}h</td>
+                          <td className="py-3 text-gray-700">
+                            {entry.regularHours.toFixed(1)}h
+                          </td>
+                          <td className="py-3 text-orange-600">
+                            {entry.overtimeHours.toFixed(1)}h
+                          </td>
+                          <td className="py-3 text-orange-600">
+                            {entry.weekendHours.toFixed(1)}h
+                          </td>
+                          <td className="py-3 text-purple-600">
+                            {entry.sundayHours.toFixed(1)}h
+                          </td>
                         </>
                       )}
                       <td className="py-3 text-gray-700 max-w-xs truncate">
                         {editingEntry?.id === entry.id ? (
                           <Input
                             value={editingEntry.description || ''}
-                            onChange={(e) => setEditingEntry({ ...editingEntry, description: e.target.value })}
+                            onChange={e =>
+                              setEditingEntry({ ...editingEntry, description: e.target.value })
+                            }
                             className="h-8"
                           />
                         ) : (
