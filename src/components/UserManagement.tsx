@@ -316,9 +316,24 @@ const UserManagement = () => {
 
     try {
       console.log('Deleting user profile:', userId);
-      
-      // Note: We can only delete the profile, not the auth user from client side
-      // The auth user would need to be deleted through admin API on server side
+
+      // Clean up related data to avoid foreign key issues
+      await supabase
+        .from('customer_technician_rates')
+        .delete()
+        .eq('technician_id', userId);
+
+      await supabase
+        .from('technician_rates')
+        .delete()
+        .eq('technician_id', userId);
+
+      await supabase
+        .from('work_hours')
+        .update({ technician_id: null })
+        .eq('technician_id', userId);
+
+      // Finally remove the profile itself
       const { error } = await supabase
         .from('profiles')
         .delete()
@@ -339,7 +354,7 @@ const UserManagement = () => {
         description: `Gebruikersprofiel van ${userName} succesvol verwijderd`
       });
 
-      fetchUsers();
+      setUsers(users.filter(u => u.id !== userId));
     } catch (error) {
       console.error('Error deleting user:', error);
       toast({
