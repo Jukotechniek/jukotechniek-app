@@ -373,30 +373,16 @@ const Dashboard: React.FC = () => {
             </Card>
           )}
 
-          {/* Hours Distribution for Technicians */}
+          {/* Basic hours overview for technicians */}
           {!isAdmin && (
             <Card className="bg-white shadow-sm">
               <CardHeader>
-                <CardTitle className="text-lg font-semibold text-gray-900">Hours Distribution</CardTitle>
+                <CardTitle className="text-lg font-semibold text-gray-900">Hours Overview</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="space-y-4">
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">Regular Hours:</span>
-                    <span className="font-medium">{currentUserData?.regularHours.toFixed(1) || '0'}h</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">Overtime Hours:</span>
-                    <span className="font-medium text-orange-600">{currentUserData?.overtimeHours.toFixed(1) || '0'}h</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">Weekend Hours:</span>
-                    <span className="font-medium text-orange-600">{currentUserData?.weekendHours.toFixed(1) || '0'}h</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">Sunday Hours:</span>
-                    <span className="font-medium text-purple-600">{currentUserData?.sundayHours.toFixed(1) || '0'}h</span>
-                  </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Total Hours:</span>
+                  <span className="font-medium">{currentUserData?.totalHours.toFixed(1) || '0'}h</span>
                 </div>
               </CardContent>
             </Card>
