@@ -317,6 +317,19 @@ const UserManagement = () => {
     try {
       console.log('Deleting user profile:', userId);
 
+      // Remove the auth user first so the profile is cascaded
+      const { error: authError } = await supabase.auth.admin.deleteUser(userId);
+
+      if (authError) {
+        console.error('Error deleting auth user:', authError);
+        toast({
+          title: "Error",
+          description: authError.message,
+          variant: "destructive"
+        });
+        return;
+      }
+
       // Clean up related data to avoid foreign key issues
       await supabase
         .from('customer_technician_rates')

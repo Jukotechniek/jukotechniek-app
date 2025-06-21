@@ -39,6 +39,7 @@ const AIChatbot = () => {
   const [aiConfig, setAiConfig] = useState<AIConfig | null>(null);
   const [webhookUrl, setWebhookUrl] = useState('');
   const [loadingConfig, setLoadingConfig] = useState(false);
+  const [isChatbotOnline, setIsChatbotOnline] = useState<boolean | null>(null);
 
   const isAdmin = user?.role === 'admin';
 
@@ -63,9 +64,24 @@ const AIChatbot = () => {
       if (data) {
         setAiConfig(data);
         setWebhookUrl(data.webhook_url || '');
+        checkChatbotStatus(data.webhook_url);
       }
     } catch (error) {
       console.error('Error fetching AI config:', error);
+    }
+  };
+
+  const checkChatbotStatus = async (url: string | null) => {
+    if (!url) {
+      setIsChatbotOnline(null);
+      return;
+    }
+    try {
+      const res = await fetch(url, { method: 'HEAD' });
+      setIsChatbotOnline(res.ok);
+    } catch (error) {
+      console.error('Error checking chatbot status:', error);
+      setIsChatbotOnline(false);
     }
   };
 
@@ -110,6 +126,7 @@ const AIChatbot = () => {
       });
 
       fetchAIConfig();
+      checkChatbotStatus(webhookUrl);
       setShowConfig(false);
     } catch (error) {
       console.error('Error saving AI config:', error);
@@ -136,6 +153,7 @@ const AIChatbot = () => {
     setMessages(prev => [...prev, userMessage]);
     setInputMessage('');
     setIsLoading(true);
+    await checkChatbotStatus(aiConfig?.webhook_url || null);
 
     try {
       // Check if AI is configured and enabled
@@ -150,26 +168,28 @@ const AIChatbot = () => {
         return;
       }
 
-      // Send message to webhook
+      // Send message to webhook and use the response
       const response = await fetch(aiConfig.webhook_url, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
+          'Content-Type': 'application/json'
         },
-        mode: 'no-cors',
         body: JSON.stringify({
           message: inputMessage,
-          user_id: user?.id,
-          user_name: user?.fullName,
+          userId: user?.id,
+          userName: user?.fullName,
           timestamp: new Date().toISOString()
         })
       });
 
-      // Since we're using no-cors, we can't read the response
-      // For now, we'll simulate a response
+      if (!response.ok) {
+        throw new Error('Chatbot gaf een foutmelding');
+      }
+
+      const data = await response.json();
       const botMessage: Message = {
         id: (Date.now() + 1).toString(),
-        text: 'Bedankt voor je bericht! De AI-assistent heeft je verzoek ontvangen en verwerkt.',
+        text: data.response || data.message || 'Geen antwoord ontvangen.',
         isUser: false,
         timestamp: new Date()
       };
@@ -180,7 +200,9 @@ const AIChatbot = () => {
       console.error('Error sending message:', error);
       const errorMessage: Message = {
         id: (Date.now() + 1).toString(),
-        text: 'Sorry, er ging iets mis bij het versturen van je bericht. Probeer het later opnieuw.',
+        text: isChatbotOnline === false
+          ? 'De chatbot is momenteel offline.'
+          : 'Sorry, er ging iets mis bij het versturen van je bericht. Probeer het later opnieuw.',
         isUser: false,
         timestamp: new Date()
       };
@@ -340,10 +362,15 @@ const AIChatbot = () => {
         {!isAdmin && (
           <div className="mt-4 text-center">
             <p className="text-sm text-gray-600">
-              AI-status: {aiConfig?.is_enabled ? 
-                <span className="text-green-600 font-medium">Actief</span> : 
+              AI-status: {aiConfig?.is_enabled ? (
+                isChatbotOnline ? (
+                  <span className="text-green-600 font-medium">Online</span>
+                ) : (
+                  <span className="text-yellow-600 font-medium">Offline</span>
+                )
+              ) : (
                 <span className="text-red-600 font-medium">Niet geconfigureerd</span>
-              }
+              )}
             </p>
           </div>
         )}
