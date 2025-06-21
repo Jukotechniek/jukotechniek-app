@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
@@ -11,7 +10,8 @@ import {
   ResponsiveContainer,
   PieChart,
   Pie,
-  Cell
+  Cell,
+  Legend
 } from 'recharts';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
@@ -23,21 +23,59 @@ const COLORS = ['#dc2626', '#991b1b', '#7f1d1d', '#450a0a'];
 
 const Dashboard: React.FC = () => {
   const { user } = useAuth();
+  const isAdmin = user?.role === 'admin';
+
+  const [rawWorkHours, setRawWorkHours] = useState<any[]>([]);
+  const [rawRates, setRawRates] = useState<any[]>([]);
   const [technicianData, setTechnicianData] = useState<TechnicianSummary[]>([]);
   const [weeklyData, setWeeklyData] = useState<any[]>([]);
   const [selectedTechnician, setSelectedTechnician] = useState<string>('all');
   const [loading, setLoading] = useState(true);
-  const isAdmin = user?.role === 'admin';
+
+  // Nieuw voor maandselectie & “alles weergeven”
+  const [selectedMonth, setSelectedMonth] = useState<string>(new Date().toISOString().slice(0, 7)); // 'YYYY-MM' of '' = alles
+  const [monthlyHours, setMonthlyHours] = useState<number>(0);
 
   useEffect(() => {
     fetchDashboardData();
   }, []);
 
+  useEffect(() => {
+    if (!rawWorkHours.length) return;
+
+    let filteredWorkHours: any[] = [];
+
+    if (isAdmin) {
+      filteredWorkHours =
+        selectedTechnician === 'all'
+          ? rawWorkHours
+          : rawWorkHours.filter(e => e.technician_id === selectedTechnician);
+    } else {
+      // non-admin: filter op technicus en op maand, of alle data als selectedMonth === ''
+      if (selectedMonth) {
+        const [year, month] = selectedMonth.split('-').map(n => parseInt(n, 10));
+        filteredWorkHours = rawWorkHours.filter(e => {
+          const d = new Date(e.date);
+          return (
+            e.technician_id === user?.id &&
+            d.getFullYear() === year &&
+            d.getMonth() + 1 === month
+          );
+        });
+      } else {
+        filteredWorkHours = rawWorkHours.filter(e => e.technician_id === user?.id);
+      }
+      const uren = filteredWorkHours.reduce((sum, e) => sum + Number(e.hours_worked || 0), 0);
+      setMonthlyHours(uren);
+    }
+
+    setTechnicianData(processTechnicianData(filteredWorkHours, rawRates));
+    setWeeklyData(processWeeklyData(filteredWorkHours));
+  }, [rawWorkHours, rawRates, selectedTechnician, isAdmin, selectedMonth]);
+
   const fetchDashboardData = async () => {
     setLoading(true);
     try {
-      console.log('Fetching dashboard data...');
-      
       const { data: workHours, error: hoursError } = await supabase
         .from('work_hours')
         .select(`
@@ -45,55 +83,39 @@ const Dashboard: React.FC = () => {
           customers(name),
           profiles!work_hours_technician_id_fkey(full_name)
         `);
-      
-      if (hoursError) {
-        console.error('Error fetching work hours:', hoursError);
-        return;
-      }
+      if (hoursError) throw hoursError;
 
       const { data: rates, error: ratesError } = await supabase
         .from('technician_rates')
         .select('*');
-        
-      if (ratesError) {
-        console.error('Error fetching rates:', ratesError);
-      }
+      if (ratesError) console.error(ratesError);
 
-      if (workHours) {
-        console.log('Processing technician data with', workHours.length, 'work hour entries');
-        const technicianSummaries = processTechnicianData(workHours, rates || []);
-        setTechnicianData(technicianSummaries);
-
-        const weekly = processWeeklyData(workHours);
-        setWeeklyData(weekly);
-      }
-    } catch (error) {
-      console.error('Error fetching dashboard data:', error);
+      setRawWorkHours(workHours || []);
+      setRawRates(rates || []);
+    } catch (err) {
+      console.error('Fetch error:', err);
     } finally {
       setLoading(false);
     }
   };
 
   const processTechnicianData = (workHours: any[], rates: any[]): TechnicianSummary[] => {
-    const technicianMap = new Map<string, any>();
+    const techMap = new Map<string, any>();
     const rateMap = new Map<string, { hourly: number; billable: number }>();
-
-    // Build rate map
     rates.forEach(r => {
       rateMap.set(r.technician_id, {
         hourly: Number(r.hourly_rate || 0),
-        billable: Number(r.billable_rate || 0)
+        billable: Number(r.billable_rate || 0),
       });
     });
 
     workHours.forEach(entry => {
-      const techId = entry.technician_id;
-      const techName = entry.profiles?.full_name || 'Unknown';
-
-      if (!technicianMap.has(techId)) {
-        technicianMap.set(techId, {
-          technicianId: techId,
-          technicianName: techName,
+      const id = entry.technician_id;
+      const name = entry.profiles?.full_name || 'Unknown';
+      if (!techMap.has(id)) {
+        techMap.set(id, {
+          technicianId: id,
+          technicianName: name,
           totalHours: 0,
           regularHours: 0,
           overtimeHours: 0,
@@ -107,123 +129,72 @@ const Dashboard: React.FC = () => {
           costs: 0
         });
       }
+      const s = techMap.get(id);
+      const hrs = Number(entry.hours_worked || 0);
+      const reg = Number(entry.regular_hours || 0);
+      const ot  = Number(entry.overtime_hours || 0);
+      const wk  = Number(entry.weekend_hours || 0);
+      const su  = Number(entry.sunday_hours || 0);
+      const rate = rateMap.get(id) || { hourly: 0, billable: 0 };
 
-      const summary = technicianMap.get(techId);
-      const hoursWorked = Number(entry.hours_worked || 0);
-      const regularHours = Number(entry.regular_hours || 0);
-      const overtimeHours = Number(entry.overtime_hours || 0);
-      const weekendHours = Number(entry.weekend_hours || 0);
-      const sundayHours = Number(entry.sunday_hours || 0);
-      const rate = rateMap.get(techId) || { hourly: 0, billable: 0 };
+      let rev = 0, cost = 0;
+      if (su > 0) { rev += su * rate.billable * 2; cost += su * rate.hourly * 2; }
+      if (wk > 0) { rev += wk * rate.billable * 1.5; cost += wk * rate.hourly * 1.5; }
+      if (ot > 0) { rev += ot * rate.billable * 1.25; cost += ot * rate.hourly * 1.25; }
+      if (reg> 0) { rev += reg * rate.billable; cost += reg * rate.hourly; }
+      const profit = rev - cost;
 
-      // Calculate revenue with overtime multipliers
-      let revenue = 0;
-      let costs = 0;
-
-      if (sundayHours > 0) {
-        revenue += sundayHours * rate.billable * 2.0; // Sunday 200%
-        costs += sundayHours * rate.hourly * 2.0;
-      }
-      if (weekendHours > 0) {
-        revenue += weekendHours * rate.billable * 1.5; // Weekend 150%
-        costs += weekendHours * rate.hourly * 1.5;
-      }
-      if (overtimeHours > 0) {
-        revenue += overtimeHours * rate.billable * 1.25; // Overtime 125%
-        costs += overtimeHours * rate.hourly * 1.25;
-      }
-      if (regularHours > 0) {
-        revenue += regularHours * rate.billable; // Regular 100%
-        costs += regularHours * rate.hourly;
-      }
-
-      const profit = revenue - costs;
-
-      summary.totalHours += hoursWorked;
-      summary.regularHours += regularHours;
-      summary.overtimeHours += overtimeHours;
-      summary.weekendHours += weekendHours;
-      summary.sundayHours += sundayHours;
-      summary.entries.push(entry);
-      summary.profit += profit;
-      summary.revenue += revenue;
-      summary.costs += costs;
-
-      if (entry.date > summary.lastWorked) {
-        summary.lastWorked = entry.date;
-      }
+      s.totalHours     += hrs;
+      s.regularHours   += reg;
+      s.overtimeHours  += ot;
+      s.weekendHours   += wk;
+      s.sundayHours    += su;
+      s.profit         += profit;
+      s.revenue        += rev;
+      s.costs          += cost;
+      s.entries.push(entry);
+      if (entry.date > s.lastWorked) s.lastWorked = entry.date;
     });
 
-    // Calculate days worked
-    technicianMap.forEach(summary => {
-      const uniqueDates = new Set(summary.entries.map((e: any) => e.date));
-      summary.daysWorked = uniqueDates.size;
-      delete summary.entries;
+    techMap.forEach(s => {
+      s.daysWorked = new Set(s.entries.map((e: any) => e.date)).size;
+      delete s.entries;
     });
 
-    return Array.from(technicianMap.values()).sort((a, b) => b.totalHours - a.totalHours);
+    return Array.from(techMap.values()).sort((a,b)=> b.totalHours - a.totalHours);
   };
 
   const processWeeklyData = (workHours: any[]) => {
     const weekMap = new Map<string, { week: string; hours: number }>();
-
-    workHours.forEach(entry => {
-      const dateObj = new Date(entry.date);
-      const weekStart = new Date(dateObj);
-      weekStart.setDate(dateObj.getDate() - dateObj.getDay());
-      const weekKey = weekStart.toISOString().split('T')[0];
-
-      if (!weekMap.has(weekKey)) {
-        weekMap.set(weekKey, {
-          week: `Week ${formatDutchDate(weekKey)}`,
-          hours: 0
-        });
-      }
-
-      weekMap.get(weekKey)!.hours += Number(entry.hours_worked || 0);
+    workHours.forEach(e => {
+      const d = new Date(e.date);
+      const ws = new Date(d);
+      ws.setDate(d.getDate() - d.getDay());
+      const key = ws.toISOString().split('T')[0];
+      if (!weekMap.has(key)) weekMap.set(key, { week: `Week ${formatDutchDate(key)}`, hours: 0 });
+      weekMap.get(key)!.hours += Number(e.hours_worked || 0);
     });
-
-    return Array.from(weekMap.values())
-      .sort((a, b) => new Date(a.week.split(' ')[1]).getTime() - new Date(b.week.split(' ')[1]).getTime())
+    return Array
+      .from(weekMap.values())
+      .sort((a,b)=> new Date(a.week.split(' ')[1]).getTime() - new Date(b.week.split(' ')[1]).getTime())
       .slice(-8);
   };
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('nl-NL', {
-      style: 'currency',
-      currency: 'EUR'
-    }).format(amount);
-  };
+  const formatCurrency = (amt: number) =>
+    new Intl.NumberFormat('nl-NL', { style: 'currency', currency: 'EUR' }).format(amt);
 
-  // Filter data based on selected technician
-  const filteredTechnicianData = selectedTechnician === 'all' 
-    ? technicianData 
-    : technicianData.filter(tech => tech.technicianId === selectedTechnician);
-
-  // Filter for current user if not admin
-  const displayData = isAdmin 
-    ? filteredTechnicianData
-    : technicianData.filter(tech => tech.technicianId === user?.id);
-
-  const totalHours = displayData.reduce((sum, tech) => sum + tech.totalHours, 0);
-  const totalDays = displayData.reduce((sum, tech) => sum + tech.daysWorked, 0);
-  const avgHoursPerDay = totalDays > 0 ? (totalHours / totalDays).toFixed(1) : '0';
-  const totalProfit = displayData.reduce((sum, tech) => sum + tech.profit, 0);
-  const totalRevenue = displayData.reduce((sum, tech) => sum + tech.revenue, 0);
-  const totalCosts = displayData.reduce((sum, tech) => sum + tech.costs, 0);
-  const currentUserData = technicianData.find(tech => tech.technicianId === user?.id);
-
-  const availableTechnicians = technicianData.map(tech => ({
-    id: tech.technicianId,
-    name: tech.technicianName
-  }));
+  const totalHours     = technicianData.reduce((s, t) => s + t.totalHours, 0);
+  const totalDays      = technicianData.reduce((s, t) => s + t.daysWorked, 0);
+  const avgHoursPerDay = totalDays > 0 ? (totalHours/totalDays).toFixed(1) : '0';
+  const displayData    = isAdmin
+    ? technicianData
+    : technicianData.filter(t => t.technicianId === user?.id);
+  const availableTechnicians = technicianData.map(t => ({ id: t.technicianId, name: t.technicianName }));
 
   if (loading) {
     return (
-      <div className="p-6 bg-gray-50 min-h-screen">
-        <div className="flex items-center justify-center h-64">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-red-600"></div>
-        </div>
+      <div className="p-6 bg-gray-50 min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-red-600" />
       </div>
     );
   }
@@ -231,254 +202,163 @@ const Dashboard: React.FC = () => {
   return (
     <div className="p-6 bg-gray-50 min-h-screen">
       <div className="max-w-7xl mx-auto">
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">
-            Dashboard - {isAdmin ? 'Admin View' : 'Personal View'}
-          </h1>
-          <p className="text-gray-600">
-            {isAdmin 
-              ? 'Complete overview of all technicians and performance metrics'
-              : 'Your personal work statistics and performance'
-            }
-          </p>
-        </div>
-
-        {/* Technician Filter for Admin */}
-        {isAdmin && (
+        {isAdmin ? (
           <TechnicianFilter
             technicians={availableTechnicians}
             selectedTechnician={selectedTechnician}
             onTechnicianChange={setSelectedTechnician}
           />
+        ) : (
+          <div className="mb-4 flex items-center space-x-4">
+            <label htmlFor="monthPicker" className="text-gray-600">Select month:</label>
+            <input
+              id="monthPicker"
+              type="month"
+              value={selectedMonth}
+              onChange={e => setSelectedMonth(e.target.value)}
+              className="border rounded p-1"
+            />
+            <button
+              onClick={() => setSelectedMonth('')}
+              className="px-3 py-1 bg-red-600 text-white rounded hover:bg-red-700"
+            >
+              Alles weergeven
+            </button>
+          </div>
         )}
+        <header className="mb-8">
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">
+            Dashboard — {isAdmin ? 'Admin View' : 'Personal View'}
+          </h1>
+          <p className="text-gray-600">
+            {isAdmin
+              ? 'Complete overzicht van alle technici en performance metrics'
+              : 'Jouw persoonlijke werkstatistieken en performance'}
+          </p>
+        </header>
 
         {/* Key Metrics */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          <Card className="bg-white shadow-sm">
-            <CardContent className="p-6">
-              <div className="flex items-center">
-                <div className="p-2 bg-red-100 rounded-lg">
-                  <svg className="w-6 h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                </div>
-                <div className="ml-4">
-                  <p className="text-sm font-medium text-gray-600">Total Hours</p>
-                  <p className="text-2xl font-bold text-gray-900">{totalHours.toFixed(1)}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+        <div className={`grid grid-cols-1 md:grid-cols-2 lg:grid-cols-${isAdmin ? '4' : '3'} gap-6 mb-8`}>
+          <Card><CardContent>
+            <p className="text-sm text-gray-600">Total Hours</p>
+            <p className="text-2xl font-bold">{totalHours.toFixed(1)}h</p>
+          </CardContent></Card>
 
           {isAdmin && (
-            <Card className="bg-white shadow-sm">
-              <CardContent className="p-6">
-                <div className="flex items-center">
-                  <div className="p-2 bg-green-100 rounded-lg">
-                    <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1" />
-                    </svg>
-                  </div>
-                  <div className="ml-4">
-                    <p className="text-sm font-medium text-gray-600">Total Revenue</p>
-                    <p className="text-2xl font-bold text-gray-900">{formatCurrency(totalRevenue)}</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+            <Card><CardContent>
+              <p className="text-sm text-gray-600">Total Revenue</p>
+              <p className="text-2xl font-bold">{formatCurrency(technicianData.reduce((s,t)=>s+t.revenue,0))}</p>
+            </CardContent></Card>
           )}
 
           {isAdmin && (
-            <Card className="bg-white shadow-sm">
-              <CardContent className="p-6">
-                <div className="flex items-center">
-                  <div className="p-2 bg-yellow-100 rounded-lg">
-                    <svg className="w-6 h-6 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
-                    </svg>
-                  </div>
-                  <div className="ml-4">
-                    <p className="text-sm font-medium text-gray-600">Total Profit</p>
-                    <p className="text-2xl font-bold text-gray-900">{formatCurrency(totalProfit)}</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+            <Card><CardContent>
+              <p className="text-sm text-gray-600">Total Profit</p>
+              <p className="text-2xl font-bold">{formatCurrency(technicianData.reduce((s,t)=>s+t.profit,0))}</p>
+            </CardContent></Card>
           )}
 
-          <Card className="bg-white shadow-sm">
-            <CardContent className="p-6">
-              <div className="flex items-center">
-                <div className="p-2 bg-blue-100 rounded-lg">
-                  <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v4a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                  </svg>
-                </div>
-                <div className="ml-4">
-                  <p className="text-sm font-medium text-gray-600">Avg Hours/Day</p>
-                  <p className="text-2xl font-bold text-gray-900">{avgHoursPerDay}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+          <Card><CardContent>
+            <p className="text-sm text-gray-600">Avg Hours/Day</p>
+            <p className="text-2xl font-bold">{avgHoursPerDay}h</p>
+          </CardContent></Card>
+
+          {!isAdmin && (
+            <Card><CardContent>
+              <p className="text-sm text-gray-600">
+                {selectedMonth ? `Hours in ${selectedMonth}` : 'Hours totaal'}
+              </p>
+              <p className="text-2xl font-bold">{monthlyHours.toFixed(1)}h</p>
+            </CardContent></Card>
+          )}
         </div>
 
-        {/* Charts Section */}
+        {/* Charts */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
-          {/* Weekly Hours Chart */}
-          <Card className="bg-white shadow-sm">
-            <CardHeader>
-              <CardTitle className="text-lg font-semibold text-gray-900">Weekly Hours Trend</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <ResponsiveContainer width="100%" height={300}>
-                <BarChart data={weeklyData}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="week" />
-                  <YAxis />
-                  <Tooltip />
-                  <Bar dataKey="hours" fill="#dc2626" />
-                </BarChart>
-              </ResponsiveContainer>
-            </CardContent>
-          </Card>
+          <Card><CardHeader><CardTitle>Weekly Hours Trend</CardTitle></CardHeader><CardContent>
+            <ResponsiveContainer width="100%" height={300}>
+              <BarChart data={weeklyData}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="week" />
+                <YAxis />
+                <Tooltip />
+                <Bar dataKey="hours" fill={COLORS[0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </CardContent></Card>
 
-          {/* Profit Distribution - Only for Admin */}
           {isAdmin && (
-            <Card className="bg-white shadow-sm">
-              <CardHeader>
-                <CardTitle className="text-lg font-semibold text-gray-900">Profit Distribution by Technician</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <ResponsiveContainer width="100%" height={300}>
-                  <PieChart>
-                    <Pie
-                      data={displayData.slice(0, 4).filter(tech => tech.profit > 0)}
-                      cx="50%"
-                      cy="50%"
-                      labelLine={false}
-                      label={({ technicianName, profit }) => `${technicianName}: ${formatCurrency(profit)}`}
-                      outerRadius={80}
-                      fill="#8884d8"
-                      dataKey="profit"
-                    >
-                      {displayData.slice(0, 4).filter(tech => tech.profit > 0).map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                      ))}
-                    </Pie>
-                    <Tooltip formatter={(value) => formatCurrency(Number(value))} />
-                  </PieChart>
-                </ResponsiveContainer>
-              </CardContent>
-            </Card>
+            <Card><CardHeader><CardTitle>Profit Distribution</CardTitle></CardHeader><CardContent>
+              <ResponsiveContainer width="100%" height={300}>
+                <PieChart>
+                  <Pie
+                    data={displayData.filter(t=>t.profit>0).slice(0,4)}
+                    dataKey="profit"
+                    cx="50%" cy="50%" outerRadius={80}
+                    label={({ technicianName, profit })=>`${technicianName}: ${formatCurrency(profit)}`}
+                  >
+                    {displayData.filter(t=>t.profit>0).slice(0,4).map((e,i)=>(<Cell key={i} fill={COLORS[i%COLORS.length]} />))}
+                  </Pie>
+                  <Tooltip formatter={v=>formatCurrency(Number(v))} />
+                </PieChart>
+              </ResponsiveContainer>
+            </CardContent></Card>
           )}
-
-          {/* Personal Stats for Non-Admin Users */}
-{!isAdmin && currentUserData && (
-  <Card className="bg-white shadow-sm">
-    <CardHeader>
-      <CardTitle className="text-lg font-semibold text-gray-900">
-        Your Work Summary
-      </CardTitle>
-    </CardHeader>
-    <CardContent>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div className="text-center">
-          <p className="text-2xl font-bold text-red-600">
-            {currentUserData.totalHours.toFixed(1)}h
-          </p>
-          <p className="text-sm text-gray-600">Total Hours</p>
-        </div>
-        <div className="text-center">
-          <p className="text-2xl font-bold text-blue-600">{avgHoursPerDay}</p>
-          <p className="text-sm text-gray-600">Avg Hours/Day</p>
-        </div>
-      </div>
-    </CardContent>
-  </Card>
-)}
-
         </div>
 
-        {/* Technician Performance Table - Admin Only */}
+        {/* Overtime Breakdown (Admin) */}
         {isAdmin && (
-          <Card className="bg-white shadow-sm">
-            <CardHeader>
-              <CardTitle className="text-lg font-semibold text-gray-900">
-                Technician Performance Overview
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="overflow-x-auto">
-                <table className="w-full text-left">
-                  <thead>
-                    <tr className="border-b border-gray-200">
-                      <th className="pb-3 text-sm font-medium text-gray-600">Technician</th>
-                      <th className="pb-3 text-sm font-medium text-gray-600">Total Hours</th>
-                      <th className="pb-3 text-sm font-medium text-gray-600">Days Worked</th>
-                      <th className="pb-3 text-sm font-medium text-gray-600">Revenue</th>
-                      <th className="pb-3 text-sm font-medium text-gray-600">Costs</th>
-                      <th className="pb-3 text-sm font-medium text-gray-600">Profit</th>
-                      <th className="pb-3 text-sm font-medium text-gray-600">Margin %</th>
-                      <th className="pb-3 text-sm font-medium text-gray-600">Last Worked</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {displayData.map((tech) => {
-                      const margin = tech.revenue > 0 ? ((tech.profit / tech.revenue) * 100).toFixed(1) : '0';
-                      return (
-                        <tr key={tech.technicianId} className="border-b border-gray-100 hover:bg-gray-50">
-                          <td className="py-3 font-medium text-gray-900">{tech.technicianName}</td>
-                          <td className="py-3 text-gray-700">{tech.totalHours.toFixed(1)}h</td>
-                          <td className="py-3 text-gray-700">{tech.daysWorked}</td>
-                          <td className="py-3 text-gray-700">{formatCurrency(tech.revenue)}</td>
-                          <td className="py-3 text-gray-700">{formatCurrency(tech.costs)}</td>
-                          <td className={`py-3 font-medium ${tech.profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                            {formatCurrency(tech.profit)}
-                          </td>
-                          <td className={`py-3 font-medium ${parseFloat(margin) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                            {margin}%
-                          </td>
-                          <td className="py-3 text-gray-700">
-                            {new Date(tech.lastWorked).toLocaleDateString('nl-NL')}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </CardContent>
-          </Card>
+          <Card className="mb-8"><CardHeader><CardTitle>Overtime by Technician (125%, 150%, 200%)</CardTitle></CardHeader><CardContent>
+            <ResponsiveContainer width="100%" height={300}>
+              <BarChart data={technicianData}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="technicianName" />
+                <YAxis />
+                <Tooltip formatter={v=>`${v}h`} />
+                <Legend />
+                <Bar dataKey="overtimeHours" fill={COLORS[1]} name="Overtime 125%" />
+                <Bar dataKey="weekendHours" fill={COLORS[2]} name="Weekend 150%" />
+                <Bar dataKey="sundayHours" fill={COLORS[3]} name="Sunday 200%" />
+              </BarChart>
+            </ResponsiveContainer>
+          </CardContent></Card>
         )}
 
-        {/* Personal Stats for Non-Admin Users */}
-        {!isAdmin && currentUserData && (
-          <Card className="bg-white shadow-sm">
-            <CardHeader>
-              <CardTitle className="text-lg font-semibold text-gray-900">
-                Your Performance Summary
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                <div className="text-center">
-                  <p className="text-2xl font-bold text-red-600">{currentUserData.totalHours.toFixed(1)}h</p>
-                  <p className="text-sm text-gray-600">Total Hours</p>
-                </div>
-                <div className="text-center">
-                  <p className="text-2xl font-bold text-blue-600">{currentUserData.daysWorked}</p>
-                  <p className="text-sm text-gray-600">Days Worked</p>
-                </div>
-                <div className="text-center">
-                  <p className="text-2xl font-bold text-green-600">
-                    {currentUserData.totalHours > 0 ? (currentUserData.totalHours / currentUserData.daysWorked).toFixed(1) : '0'}h
-                  </p>
-                  <p className="text-sm text-gray-600">Avg Hours/Day</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+        {/* Admin Performance Table */}
+        {isAdmin && (
+          <Card><CardHeader><CardTitle>Technician Performance Overview</CardTitle></CardHeader><CardContent>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left">
+                <thead>
+                  <tr className="border-b">
+                    <th>Technician</th><th>Total Hours</th><th>Days Worked</th>
+                    <th>Revenue</th><th>Costs</th><th>Profit</th><th>Margin %</th><th>Last Worked</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {displayData.map(t => {
+                    const margin = t.revenue>0?((t.profit/t.revenue)*100).toFixed(1):'0';
+                    return (
+                      <tr key={t.technicianId} className="border-b hover:bg-gray-50">
+                        <td>{t.technicianName}</td>
+                        <td>{t.totalHours.toFixed(1)}h</td>
+                        <td>{t.daysWorked}</td>
+                        <td>{formatCurrency(t.revenue)}</td>
+                        <td>{formatCurrency(t.costs)}</td>
+                        <td className={t.profit>=0?'text-green-600':'text-red-600'}>
+                          {formatCurrency(t.profit)}
+                        </td>
+                        <td className={parseFloat(margin)>=0?'text-green-600':'text-red-600'}>
+                          {margin}% 
+                        </td>
+                        <td>{new Date(t.lastWorked).toLocaleDateString('nl-NL')}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </CardContent></Card>
         )}
       </div>
     </div>
