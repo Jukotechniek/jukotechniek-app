@@ -71,7 +71,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 id: profile.id,
                 username: profile.username || session.user.email || '',
                 email: session.user.email || '',
-                role: (profile.role === 'admin' || profile.role === 'technician') ? profile.role : 'technician',
+                role: (profile.role === 'admin' || profile.role === 'technician' || profile.role === 'opdrachtgever') ? profile.role : 'technician',
                 fullName: profile.full_name || session.user.user_metadata?.full_name || session.user.email || '',
                 createdAt: profile.created_at || session.user.created_at || new Date().toISOString()
               };

@@ -28,7 +28,7 @@ const UserManagement = () => {
     username: '',
     email: '',
     fullName: '',
-    role: 'technician' as 'admin' | 'technician',
+    role: 'technician' as 'admin' | 'technician' | 'opdrachtgever',
     password: ''
   });
   const [resetPassword, setResetPassword] = useState('');
@@ -45,48 +45,37 @@ const UserManagement = () => {
     }
   }, [currentUser]);
 
-  // Fetch users from auth.users through admin API
+  // Fetch users from profiles table
   const fetchUsers = async () => {
     setLoading(true);
     try {
-      console.log('Fetching users from Supabase auth...');
+      console.log('Fetching users from profiles table...');
       
-      // Get the service role key for admin operations
-      const { data: authUsers, error: authError } = await supabase.auth.admin.listUsers();
+      const { data: profiles, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .order('created_at', { ascending: false });
 
-      if (authError) {
-        console.error('Error fetching auth users:', authError);
+      if (error) {
+        console.error('Error fetching profiles:', error);
         toast({
           title: "Error",
-          description: "Failed to fetch users from authentication system",
+          description: "Failed to fetch users",
           variant: "destructive"
         });
         return;
       }
 
-      // Also get profile data to merge with auth data
-      const { data: profiles, error: profileError } = await supabase
-        .from('profiles')
-        .select('*');
+      const formattedUsers: User[] = (profiles || []).map(profile => ({
+        id: profile.id,
+        username: profile.username || '',
+        email: '', // Email is not stored in profiles for security
+        role: profile.role || 'technician',
+        fullName: profile.full_name || '',
+        createdAt: profile.created_at || new Date().toISOString()
+      }));
 
-      if (profileError) {
-        console.error('Error fetching profiles:', profileError);
-      }
-
-      // Merge auth users with profile data
-      const formattedUsers: User[] = (authUsers.users || []).map(authUser => {
-        const profile = profiles?.find(p => p.id === authUser.id);
-        return {
-          id: authUser.id,
-          username: profile?.username || authUser.email || '',
-          email: authUser.email || '',
-          role: (profile?.role === 'admin' || profile?.role === 'technician') ? profile.role : 'technician',
-          fullName: profile?.full_name || authUser.user_metadata?.full_name || authUser.email || '',
-          createdAt: authUser.created_at || new Date().toISOString()
-        };
-      });
-
-      console.log('Fetched', formattedUsers.length, 'users from authentication system');
+      console.log('Fetched', formattedUsers.length, 'users from profiles table');
       setUsers(formattedUsers);
     } catch (error) {
       console.error('Error fetching users:', error);
@@ -193,15 +182,18 @@ const UserManagement = () => {
     try {
       console.log('Creating new user:', newUser.email);
       
-      // Create the auth user using admin API
-      const { data: authData, error: authError } = await supabase.auth.admin.createUser({
+      // Create the auth user
+      const { data: authData, error: authError } = await supabase.auth.signUp({
         email: newUser.email,
         password: newUser.password,
-        user_metadata: {
-          username: newUser.username,
-          full_name: newUser.fullName
-        },
-        email_confirm: true
+        options: {
+          data: {
+            username: newUser.username,
+            full_name: newUser.fullName,
+            role: newUser.role
+          },
+          emailRedirectTo: `${window.location.origin}/`
+        }
       });
 
       if (authError) {
@@ -223,7 +215,8 @@ const UserManagement = () => {
         return;
       }
 
-      // Create or update the profile
+      // The profile will be created automatically by the trigger
+      // But we can also manually create/update it to ensure the role is set
       const { error: profileError } = await supabase
         .from('profiles')
         .upsert({
@@ -236,12 +229,11 @@ const UserManagement = () => {
       if (profileError) {
         console.error('Profile creation error:', profileError);
         // Don't fail completely, the trigger should handle this
-        console.log('Profile will be created by trigger if not already exists');
       }
 
       toast({
         title: "Success",
-        description: `Gebruiker ${newUser.fullName} succesvol toegevoegd`
+        description: `Gebruiker ${newUser.fullName} succesvol toegevoegd. Ze ontvangen een bevestigingsmail.`
       });
 
       setNewUser({
@@ -291,19 +283,6 @@ const UserManagement = () => {
         return;
       }
 
-      // Update user metadata in auth
-      const { error: authError } = await supabase.auth.admin.updateUserById(editingUser.id, {
-        user_metadata: {
-          username: editingUser.username,
-          full_name: editingUser.fullName
-        }
-      });
-
-      if (authError) {
-        console.error('Error updating auth metadata:', authError);
-        // Don't fail the operation, profile update is more important
-      }
-
       toast({
         title: "Success",
         description: `Gebruiker ${editingUser.fullName} succesvol bijgewerkt`
@@ -336,13 +315,17 @@ const UserManagement = () => {
     }
 
     try {
-      console.log('Deleting user:', userId);
+      console.log('Deleting user profile:', userId);
       
-      // Delete the auth user (this will cascade to profile due to foreign key)
-      const { error } = await supabase.auth.admin.deleteUser(userId);
+      // Note: We can only delete the profile, not the auth user from client side
+      // The auth user would need to be deleted through admin API on server side
+      const { error } = await supabase
+        .from('profiles')
+        .delete()
+        .eq('id', userId);
 
       if (error) {
-        console.error('Error deleting user:', error);
+        console.error('Error deleting profile:', error);
         toast({
           title: "Error",
           description: error.message,
@@ -353,7 +336,7 @@ const UserManagement = () => {
 
       toast({
         title: "Success",
-        description: `Gebruiker ${userName} succesvol verwijderd`
+        description: `Gebruikersprofiel van ${userName} succesvol verwijderd`
       });
 
       fetchUsers();
@@ -367,25 +350,25 @@ const UserManagement = () => {
     }
   };
 
-  const handlePasswordReset = async (userId: string) => {
-    if (!resetPassword) {
+  const handlePasswordReset = async (userEmail: string) => {
+    if (!userEmail) {
       toast({
         title: "Error",
-        description: "Voer een nieuw wachtwoord in",
+        description: "Email adres niet beschikbaar voor deze gebruiker",
         variant: "destructive"
       });
       return;
     }
 
     try {
-      console.log('Resetting password for user:', userId);
+      console.log('Sending password reset email to:', userEmail);
       
-      const { error } = await supabase.auth.admin.updateUserById(userId, {
-        password: resetPassword
+      const { error } = await supabase.auth.resetPasswordForEmail(userEmail, {
+        redirectTo: `${window.location.origin}/reset-password`
       });
 
       if (error) {
-        console.error('Error resetting password:', error);
+        console.error('Error sending password reset:', error);
         toast({
           title: "Error",
           description: error.message,
@@ -396,16 +379,15 @@ const UserManagement = () => {
 
       toast({
         title: "Success",
-        description: "Wachtwoord succesvol gewijzigd"
+        description: "Wachtwoord reset email verzonden"
       });
 
       setShowPasswordReset(null);
-      setResetPassword('');
     } catch (error) {
-      console.error('Error resetting password:', error);
+      console.error('Error sending password reset:', error);
       toast({
         title: "Error",
-        description: "Kon wachtwoord niet wijzigen",
+        description: "Kon wachtwoord reset email niet versturen",
         variant: "destructive"
       });
     }
@@ -426,7 +408,7 @@ const UserManagement = () => {
       <div className="max-w-7xl mx-auto">
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-gray-900 mb-2">Gebruikersbeheer</h1>
-          <p className="text-gray-600">Beheer admin en monteur accounts</p>
+          <p className="text-gray-600">Beheer admin, monteur en opdrachtgever accounts</p>
         </div>
 
         {/* Current User Profile */}
@@ -592,11 +574,12 @@ const UserManagement = () => {
                       <select
                         id="role"
                         value={newUser.role}
-                        onChange={(e) => setNewUser({ ...newUser, role: e.target.value as 'admin' | 'technician' })}
+                        onChange={(e) => setNewUser({ ...newUser, role: e.target.value as 'admin' | 'technician' | 'opdrachtgever' })}
                         className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-red-500 focus:border-red-500"
                       >
                         <option value="technician">Monteur</option>
                         <option value="admin">Admin</option>
+                        <option value="opdrachtgever">Opdrachtgever</option>
                       </select>
                     </div>
                     <div className="md:col-span-2">
@@ -623,7 +606,6 @@ const UserManagement = () => {
                       <tr className="border-b border-gray-200">
                         <th className="pb-3 text-sm font-medium text-gray-600">Naam</th>
                         <th className="pb-3 text-sm font-medium text-gray-600">Gebruikersnaam</th>
-                        <th className="pb-3 text-sm font-medium text-gray-600">Email</th>
                         <th className="pb-3 text-sm font-medium text-gray-600">Rol</th>
                         <th className="pb-3 text-sm font-medium text-gray-600">Aangemaakt</th>
                         <th className="pb-3 text-sm font-medium text-gray-600">Acties</th>
@@ -657,26 +639,26 @@ const UserManagement = () => {
                               user.username
                             )}
                           </td>
-                          <td className="py-3 text-gray-700">
-                            {user.email}
-                          </td>
                           <td className="py-3">
                             {editingUser?.id === user.id ? (
                               <select
                                 value={editingUser.role}
-                                onChange={(e) => setEditingUser({ ...editingUser, role: e.target.value as 'admin' | 'technician' })}
+                                onChange={(e) => setEditingUser({ ...editingUser, role: e.target.value as 'admin' | 'technician' | 'opdrachtgever' })}
                                 className="h-8 px-2 border border-gray-300 rounded text-sm"
                               >
                                 <option value="technician">Monteur</option>
                                 <option value="admin">Admin</option>
+                                <option value="opdrachtgever">Opdrachtgever</option>
                               </select>
                             ) : (
                               <span className={`px-2 py-1 rounded-full text-xs font-medium ${
                                 user.role === 'admin'
                                   ? 'bg-red-100 text-red-800'
+                                  : user.role === 'opdrachtgever'
+                                  ? 'bg-green-100 text-green-800'
                                   : 'bg-blue-100 text-blue-800'
                               }`}>
-                                {user.role === 'admin' ? 'Admin' : 'Monteur'}
+                                {user.role === 'admin' ? 'Admin' : user.role === 'opdrachtgever' ? 'Opdrachtgever' : 'Monteur'}
                               </span>
                             )}
                           </td>
@@ -704,35 +686,6 @@ const UserManagement = () => {
                                     Annuleren
                                   </Button>
                                 </>
-                              ) : showPasswordReset === user.id ? (
-                                <div className="flex space-x-2 items-center">
-                                  <Input
-                                    type="password"
-                                    placeholder="Nieuw wachtwoord"
-                                    value={resetPassword}
-                                    onChange={(e) => setResetPassword(e.target.value)}
-                                    className="h-8 w-32"
-                                  />
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => handlePasswordReset(user.id)}
-                                    className="text-green-600 hover:text-green-800"
-                                  >
-                                    Opslaan
-                                  </Button>
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => {
-                                      setShowPasswordReset(null);
-                                      setResetPassword('');
-                                    }}
-                                    className="text-gray-600 hover:text-gray-800"
-                                  >
-                                    Annuleren
-                                  </Button>
-                                </div>
                               ) : (
                                 <>
                                   <Button
@@ -746,10 +699,10 @@ const UserManagement = () => {
                                   <Button
                                     variant="outline"
                                     size="sm"
-                                    onClick={() => setShowPasswordReset(user.id)}
+                                    onClick={() => handlePasswordReset(user.email)}
                                     className="text-blue-600 hover:text-blue-800"
                                   >
-                                    Wachtwoord
+                                    Reset PW
                                   </Button>
                                   <Button
                                     variant="outline"
@@ -768,7 +721,7 @@ const UserManagement = () => {
                       ))}
                       {users.length === 0 && (
                         <tr>
-                          <td colSpan={6} className="py-8 text-center text-gray-500">
+                          <td colSpan={5} className="py-8 text-center text-gray-500">
                             Geen gebruikers gevonden
                           </td>
                         </tr>
