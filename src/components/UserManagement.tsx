@@ -45,37 +45,48 @@ const UserManagement = () => {
     }
   }, [currentUser]);
 
-  // Fetch users from profiles table
+  // Fetch users from auth.users through admin API
   const fetchUsers = async () => {
     setLoading(true);
     try {
-      console.log('Fetching users from profiles...');
+      console.log('Fetching users from Supabase auth...');
       
-      const { data: profiles, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .order('full_name');
+      // Get the service role key for admin operations
+      const { data: authUsers, error: authError } = await supabase.auth.admin.listUsers();
 
-      if (error) {
-        console.error('Error fetching profiles:', error);
+      if (authError) {
+        console.error('Error fetching auth users:', authError);
         toast({
           title: "Error",
-          description: "Failed to fetch users",
+          description: "Failed to fetch users from authentication system",
           variant: "destructive"
         });
         return;
       }
 
-      const formattedUsers: User[] = (profiles || []).map(profile => ({
-        id: profile.id,
-        username: profile.username || '',
-        email: '', // We'll get this from auth.users if needed
-        role: (profile.role === 'admin' || profile.role === 'technician') ? profile.role : 'technician',
-        fullName: profile.full_name || '',
-        createdAt: profile.created_at || new Date().toISOString()
-      }));
+      // Also get profile data to merge with auth data
+      const { data: profiles, error: profileError } = await supabase
+        .from('profiles')
+        .select('*');
 
-      console.log('Fetched', formattedUsers.length, 'users from profiles');
+      if (profileError) {
+        console.error('Error fetching profiles:', profileError);
+      }
+
+      // Merge auth users with profile data
+      const formattedUsers: User[] = (authUsers.users || []).map(authUser => {
+        const profile = profiles?.find(p => p.id === authUser.id);
+        return {
+          id: authUser.id,
+          username: profile?.username || authUser.email || '',
+          email: authUser.email || '',
+          role: (profile?.role === 'admin' || profile?.role === 'technician') ? profile.role : 'technician',
+          fullName: profile?.full_name || authUser.user_metadata?.full_name || authUser.email || '',
+          createdAt: authUser.created_at || new Date().toISOString()
+        };
+      });
+
+      console.log('Fetched', formattedUsers.length, 'users from authentication system');
       setUsers(formattedUsers);
     } catch (error) {
       console.error('Error fetching users:', error);
@@ -105,7 +116,8 @@ const UserManagement = () => {
     try {
       console.log('Updating current user profile...');
       
-      const { error } = await supabase
+      // Update profile data
+      const { error: profileError } = await supabase
         .from('profiles')
         .update({
           username: currentUserForm.username,
@@ -113,11 +125,11 @@ const UserManagement = () => {
         })
         .eq('id', currentUser.id);
 
-      if (error) {
-        console.error('Error updating profile:', error);
+      if (profileError) {
+        console.error('Error updating profile:', profileError);
         toast({
           title: "Error",
-          description: error.message,
+          description: profileError.message,
           variant: "destructive"
         });
         return;
@@ -181,14 +193,13 @@ const UserManagement = () => {
     try {
       console.log('Creating new user:', newUser.email);
       
-      // Create the auth user with admin API
+      // Create the auth user using admin API
       const { data: authData, error: authError } = await supabase.auth.admin.createUser({
         email: newUser.email,
         password: newUser.password,
         user_metadata: {
           username: newUser.username,
-          full_name: newUser.fullName,
-          role: newUser.role
+          full_name: newUser.fullName
         },
         email_confirm: true
       });
@@ -212,7 +223,22 @@ const UserManagement = () => {
         return;
       }
 
-      // The trigger should create the profile automatically
+      // Create or update the profile
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .upsert({
+          id: authData.user.id,
+          username: newUser.username,
+          full_name: newUser.fullName,
+          role: newUser.role
+        });
+
+      if (profileError) {
+        console.error('Profile creation error:', profileError);
+        // Don't fail completely, the trigger should handle this
+        console.log('Profile will be created by trigger if not already exists');
+      }
+
       toast({
         title: "Success",
         description: `Gebruiker ${newUser.fullName} succesvol toegevoegd`
@@ -265,6 +291,19 @@ const UserManagement = () => {
         return;
       }
 
+      // Update user metadata in auth
+      const { error: authError } = await supabase.auth.admin.updateUserById(editingUser.id, {
+        user_metadata: {
+          username: editingUser.username,
+          full_name: editingUser.fullName
+        }
+      });
+
+      if (authError) {
+        console.error('Error updating auth metadata:', authError);
+        // Don't fail the operation, profile update is more important
+      }
+
       toast({
         title: "Success",
         description: `Gebruiker ${editingUser.fullName} succesvol bijgewerkt`
@@ -299,6 +338,7 @@ const UserManagement = () => {
     try {
       console.log('Deleting user:', userId);
       
+      // Delete the auth user (this will cascade to profile due to foreign key)
       const { error } = await supabase.auth.admin.deleteUser(userId);
 
       if (error) {
@@ -338,6 +378,8 @@ const UserManagement = () => {
     }
 
     try {
+      console.log('Resetting password for user:', userId);
+      
       const { error } = await supabase.auth.admin.updateUserById(userId, {
         password: resetPassword
       });
@@ -581,6 +623,7 @@ const UserManagement = () => {
                       <tr className="border-b border-gray-200">
                         <th className="pb-3 text-sm font-medium text-gray-600">Naam</th>
                         <th className="pb-3 text-sm font-medium text-gray-600">Gebruikersnaam</th>
+                        <th className="pb-3 text-sm font-medium text-gray-600">Email</th>
                         <th className="pb-3 text-sm font-medium text-gray-600">Rol</th>
                         <th className="pb-3 text-sm font-medium text-gray-600">Aangemaakt</th>
                         <th className="pb-3 text-sm font-medium text-gray-600">Acties</th>
@@ -613,6 +656,9 @@ const UserManagement = () => {
                             ) : (
                               user.username
                             )}
+                          </td>
+                          <td className="py-3 text-gray-700">
+                            {user.email}
                           </td>
                           <td className="py-3">
                             {editingUser?.id === user.id ? (
@@ -722,7 +768,7 @@ const UserManagement = () => {
                       ))}
                       {users.length === 0 && (
                         <tr>
-                          <td colSpan={5} className="py-8 text-center text-gray-500">
+                          <td colSpan={6} className="py-8 text-center text-gray-500">
                             Geen gebruikers gevonden
                           </td>
                         </tr>
