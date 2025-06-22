@@ -12,6 +12,8 @@ import HourComparison from '@/components/HourComparison';
 import UserManagement from '@/components/UserManagement';
 import Reports from '@/components/Reports';
 import AIChatbot from '@/components/AIChatbot';
+import VacationRequests from '@/components/VacationRequests';
+import WorkSchedulePage from '@/components/WorkSchedule';
 
 const AppContent = () => {
   const { isAuthenticated, loading } = useAuth();
@@ -40,6 +42,10 @@ const AppContent = () => {
         return <WorkHours />;
       case 'projects':
         return <Projects />;
+      case 'schedule':
+        return <WorkSchedulePage />;
+      case 'vacation':
+        return <VacationRequests />;
       case 'customers':
         return <CustomerManagement />;
       case 'billing':

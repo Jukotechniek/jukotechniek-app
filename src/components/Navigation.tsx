@@ -8,6 +8,8 @@ import {
   Building2,
   DollarSign,
   CheckCircle,
+  CalendarDays,
+  Sun,
   Users,
   FileText,
   Bot,
@@ -28,11 +30,14 @@ interface NavigationProps {
 const Navigation: React.FC<NavigationProps> = ({ activeTab, onTabChange }) => {
   const { user, logout } = useAuth();
   const isAdmin = user?.role === 'admin';
+  const isOpdrachtgever = user?.role === 'opdrachtgever';
 
   const adminTabs = [
     { id: 'dashboard', label: 'Dashboard', icon: BarChart3 },
     { id: 'hours', label: 'Work Hours', icon: Clock },
     { id: 'projects', label: 'Projects', icon: Briefcase },
+    { id: 'schedule', label: 'Schedule', icon: CalendarDays },
+    { id: 'vacation', label: 'Vacation', icon: Sun },
     { id: 'customers', label: 'Customers', icon: Building2 },
     { id: 'billing', label: 'Billing', icon: DollarSign },
     { id: 'verification', label: 'Hour Verification', icon: CheckCircle },
@@ -45,11 +50,20 @@ const Navigation: React.FC<NavigationProps> = ({ activeTab, onTabChange }) => {
     { id: 'dashboard', label: 'Dashboard', icon: BarChart3 },
     { id: 'hours', label: 'My Hours', icon: Clock },
     { id: 'projects', label: 'My Projects', icon: Briefcase },
+    { id: 'vacation', label: 'Vacation', icon: Sun },
     { id: 'chatbot', label: 'AI Assistant', icon: Bot }
   ];
 
-  const tabs = isAdmin ? adminTabs : technicianTabs;
-  const primaryTabIds = ['dashboard', 'chatbot', 'hours', 'billing', 'verification'];
+  const opdrachtgeverTabs = [
+    { id: 'dashboard', label: 'Dashboard', icon: BarChart3 },
+    { id: 'projects', label: 'Projects', icon: Briefcase },
+    { id: 'schedule', label: 'Schedule', icon: CalendarDays },
+    { id: 'vacation', label: 'Vacation', icon: Sun },
+    { id: 'chatbot', label: 'AI Assistant', icon: Bot }
+  ];
+
+  const tabs = isAdmin ? adminTabs : isOpdrachtgever ? opdrachtgeverTabs : technicianTabs;
+  const primaryTabIds = ['dashboard', 'chatbot', 'hours', 'billing', 'verification', 'schedule'];
   const visibleTabs = tabs.filter(t => primaryTabIds.includes(t.id));
   const dropdownTabs = tabs.filter(t => !primaryTabIds.includes(t.id));
 
