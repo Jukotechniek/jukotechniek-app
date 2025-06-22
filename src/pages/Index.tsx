@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { AuthProvider, useAuth } from '@/contexts/AuthContext';
 import LoginForm from '@/components/LoginForm';
@@ -15,7 +14,7 @@ import AIChatbot from '@/components/AIChatbot';
 import VacationRequests from '@/components/VacationRequests';
 import WorkSchedulePage from '@/components/WorkSchedule';
 
-const AppContent = () => {
+const AppContent: React.FC = () => {
   const { isAuthenticated, loading } = useAuth();
   const [activeTab, setActiveTab] = useState('dashboard');
 
@@ -71,7 +70,7 @@ const AppContent = () => {
   );
 };
 
-const Index = () => {
+const Index: React.FC = () => {
   return (
     <AuthProvider>
       <AppContent />
