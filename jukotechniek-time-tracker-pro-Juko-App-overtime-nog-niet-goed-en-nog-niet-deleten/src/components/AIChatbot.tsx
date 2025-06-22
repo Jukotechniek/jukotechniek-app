@@ -21,6 +21,7 @@ interface AIConfig {
   is_enabled: boolean;
 }
 
+
 const AIChatbot: React.FC = () => {
   const { user } = useAuth();
   const { toast } = useToast();
