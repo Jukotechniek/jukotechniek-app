@@ -6,6 +6,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { VacationRequest } from '@/types/vacation';
+import { WorkSchedule } from '@/types/schedule';
 import TechnicianFilter from './TechnicianFilter';
 
 interface Technician { id: string; full_name: string; }
@@ -30,10 +31,12 @@ const WorkSchedulePage: React.FC = () => {
 
   const fetchSchedule = async (techId: string) => {
     const { data } = await supabase
-      .from('work_schedules')
+      .from<WorkSchedule>('work_schedules')
       .select('*')
       .eq('technician_id', techId);
-    const dates = (data || []).filter(d => d.is_working).map(d => new Date(d.date));
+    const dates = (data || [])
+      .filter(d => d.is_working)
+      .map(d => new Date(d.date));
     setDays(dates);
   };
 
@@ -58,18 +61,29 @@ const WorkSchedulePage: React.FC = () => {
     setRequests(formatted);
   };
 
-  useEffect(() => { fetchTechnicians(); fetchRequests(); }, []);
-  useEffect(() => { if (selectedTech) fetchSchedule(selectedTech); }, [selectedTech]);
+  useEffect(() => {
+    fetchTechnicians();
+    if (isPlanner) fetchRequests();
+  }, []);
+
+  useEffect(() => {
+    if (selectedTech) fetchSchedule(selectedTech);
+  }, [selectedTech]);
 
   const saveSchedule = async () => {
     if (!isPlanner) return;
-    await supabase.from('work_schedules').delete().eq('technician_id', selectedTech);
+    await supabase
+      .from('work_schedules')
+      .delete()
+      .eq('technician_id', selectedTech);
     const inserts = days.map(d => ({
       technician_id: selectedTech,
       date: d.toISOString().split('T')[0],
       is_working: true,
     }));
-    const { error } = await supabase.from('work_schedules').insert(inserts);
+    const { error } = await supabase
+      .from('work_schedules')
+      .insert(inserts);
     if (error) toast({ title: 'Error', description: error.message, variant: 'destructive' });
     else toast({ title: 'Opgeslagen', description: 'Planning bijgewerkt' });
   };
@@ -130,19 +144,25 @@ const WorkSchedulePage: React.FC = () => {
           <CardContent>
             <Calendar mode="multiple" selected={days} onSelect={setDays} />
             {isPlanner && (
-              <Button onClick={saveSchedule} className="mt-4 bg-red-600 hover:bg-red-700 text-white">Save</Button>
+              <Button onClick={saveSchedule} className="mt-4 bg-red-600 hover:bg-red-700 text-white">
+                Opslaan
+              </Button>
             )}
           </CardContent>
         </Card>
+
         <Card>
           <CardHeader>
             <CardTitle>Vrije dag aanvragen</CardTitle>
           </CardHeader>
           <CardContent>
             <Calendar mode="range" selected={selectedRange} onSelect={setSelectedRange} />
-            <Button onClick={submitRequest} className="mt-4 bg-red-600 hover:bg-red-700 text-white">Aanvragen</Button>
+            <Button onClick={submitRequest} className="mt-4 bg-red-600 hover:bg-red-700 text-white">
+              Aanvragen
+            </Button>
           </CardContent>
         </Card>
+
         <Card>
           <CardHeader>
             <CardTitle>Aanvragen</CardTitle>
@@ -162,6 +182,9 @@ const WorkSchedulePage: React.FC = () => {
                   )}
                 </li>
               ))}
+              {requests.length === 0 && (
+                <li className="text-center text-gray-500 py-4">Geen aanvragen gevonden</li>
+              )}
             </ul>
           </CardContent>
         </Card>
