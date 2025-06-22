@@ -70,7 +70,7 @@ const Projects = () => {
     fetchData();
   }, []);
 
-  const isAdmin = user?.role === 'admin';
+  const isAdmin = user?.role === 'admin' || user?.role === 'opdrachtgever';
   const filteredProjects = isAdmin
     ? projects
     : projects.filter(project => project.technicianId === user?.id);
