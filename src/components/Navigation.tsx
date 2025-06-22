@@ -37,7 +37,6 @@ const Navigation: React.FC<NavigationProps> = ({ activeTab, onTabChange }) => {
     { id: 'hours', label: 'Work Hours', icon: Clock },
     { id: 'projects', label: 'Projects', icon: Briefcase },
     { id: 'schedule', label: 'Schedule', icon: CalendarDays },
-    { id: 'vacation', label: 'Vacation', icon: Sun },
     { id: 'customers', label: 'Customers', icon: Building2 },
     { id: 'billing', label: 'Billing', icon: DollarSign },
     { id: 'verification', label: 'Hour Verification', icon: CheckCircle },
@@ -50,7 +49,6 @@ const Navigation: React.FC<NavigationProps> = ({ activeTab, onTabChange }) => {
     { id: 'dashboard', label: 'Dashboard', icon: BarChart3 },
     { id: 'hours', label: 'My Hours', icon: Clock },
     { id: 'projects', label: 'My Projects', icon: Briefcase },
-    { id: 'vacation', label: 'Vacation', icon: Sun },
     { id: 'chatbot', label: 'AI Assistant', icon: Bot }
   ];
 
@@ -58,7 +56,6 @@ const Navigation: React.FC<NavigationProps> = ({ activeTab, onTabChange }) => {
     { id: 'dashboard', label: 'Dashboard', icon: BarChart3 },
     { id: 'projects', label: 'Projects', icon: Briefcase },
     { id: 'schedule', label: 'Schedule', icon: CalendarDays },
-    { id: 'vacation', label: 'Vacation', icon: Sun },
     { id: 'chatbot', label: 'AI Assistant', icon: Bot }
   ];
 
