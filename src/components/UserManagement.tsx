@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -16,6 +17,7 @@ const UserManagement = () => {
   const [loading, setLoading] = useState(true);
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [editingCurrentUser, setEditingCurrentUser] = useState(false);
+  const [showPasswordReset, setShowPasswordReset] = useState<string | null>(null);
   const [currentUserForm, setCurrentUserForm] = useState({
     username: currentUser?.username || '',
     fullName: currentUser?.fullName || '',
@@ -68,9 +70,7 @@ const UserManagement = () => {
         id: profile.id,
         username: profile.username || '',
         email: '', // Email is not stored in profiles for security
-        role: (profile.role === 'admin' || profile.role === 'technician' || profile.role === 'opdrachtgever') 
-          ? profile.role as 'admin' | 'technician' | 'opdrachtgever'
-          : 'technician',
+        role: profile.role || 'technician',
         fullName: profile.full_name || '',
         createdAt: profile.created_at || new Date().toISOString()
       }));
@@ -315,41 +315,29 @@ const UserManagement = () => {
     }
 
     try {
-      console.log('Deleting user completely:', userId);
+      console.log('Deleting user profile:', userId);
       
-      // First delete the profile
-      const { error: profileError } = await supabase
+      // Note: We can only delete the profile, not the auth user from client side
+      // The auth user would need to be deleted through admin API on server side
+      const { error } = await supabase
         .from('profiles')
         .delete()
         .eq('id', userId);
 
-      if (profileError) {
-        console.error('Error deleting profile:', profileError);
+      if (error) {
+        console.error('Error deleting profile:', error);
         toast({
           title: "Error",
-          description: `Kon profiel niet verwijderen: ${profileError.message}`,
+          description: error.message,
           variant: "destructive"
         });
         return;
       }
 
-      // Then call admin function to delete auth user
-      const { data, error: adminError } = await supabase.auth.admin.deleteUser(userId);
-
-      if (adminError) {
-        console.error('Error deleting auth user:', adminError);
-        // Still show success for profile deletion even if auth deletion fails
-        toast({
-          title: "Gedeeltelijk Succesvol",
-          description: `Gebruikersprofiel verwijderd, maar authenticatie kon niet worden verwijderd: ${adminError.message}`,
-          variant: "destructive"
-        });
-      } else {
-        toast({
-          title: "Success",
-          description: `Gebruiker ${userName} volledig verwijderd`,
-        });
-      }
+      toast({
+        title: "Success",
+        description: `Gebruikersprofiel van ${userName} succesvol verwijderd`
+      });
 
       fetchUsers();
     } catch (error) {
