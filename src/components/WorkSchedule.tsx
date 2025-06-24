@@ -6,7 +6,6 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { VacationRequest } from '@/types/vacation';
-import { WorkSchedule } from '@/types/schedule';
 import TechnicianFilter from './TechnicianFilter';
 
 interface Technician { id: string; full_name: string; }
@@ -70,6 +69,18 @@ const WorkSchedulePage: React.FC = () => {
   useEffect(() => {
     if (selectedTech) fetchSchedule(selectedTech);
   }, [selectedTech]);
+
+  const vacationDates = requests
+    .filter(r => r.status !== 'denied')
+    .flatMap(r => {
+      const start = new Date(r.startDate);
+      const end = new Date(r.endDate);
+      const dates: Date[] = [];
+      for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+        dates.push(new Date(d));
+      }
+      return dates;
+    });
 
   const saveSchedule = async () => {
     if (!isPlanner) return;
@@ -140,10 +151,21 @@ const WorkSchedulePage: React.FC = () => {
         )}
         <Card>
           <CardHeader>
-            <CardTitle>Weekplanning</CardTitle>
+            <CardTitle>Agenda</CardTitle>
           </CardHeader>
           <CardContent>
-            <Calendar mode="multiple" selected={days} onSelect={setDays} />
+            <Calendar
+              mode="multiple"
+              selected={days}
+              onSelect={isPlanner ? setDays : undefined}
+              modifiers={{ vacation: vacationDates }}
+              modifiersClassNames={{
+                vacation: 'bg-red-500 text-white',
+              }}
+              classNames={{
+                day_selected: 'bg-green-500 text-white hover:bg-green-600',
+              }}
+            />
             {isPlanner && (
               <Button onClick={saveSchedule} className="mt-4 bg-red-600 hover:bg-red-700 text-white">
                 Opslaan
