@@ -442,6 +442,155 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      },
+      vacation_requests: {
+        Row: {
+          id: string
+          technician_id: string
+          start_date: string
+          end_date: string
+          status: string | null
+          created_at: string | null
+          approved_by: string | null
+        }
+        Insert: {
+          id?: string
+          technician_id: string
+          start_date: string
+          end_date: string
+          status?: string | null
+          created_at?: string | null
+          approved_by?: string | null
+        }
+        Update: {
+          id?: string
+          technician_id?: string
+          start_date?: string
+          end_date?: string
+          status?: string | null
+          created_at?: string | null
+          approved_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vacation_requests_technician_id_fkey",
+            columns: ["technician_id"],
+            isOneToOne: false,
+            referencedRelation: "profiles",
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vacation_requests_approved_by_fkey",
+            columns: ["approved_by"],
+            isOneToOne: false,
+            referencedRelation: "profiles",
+            referencedColumns: ["id"]
+          },
+        ]
+      },
+      work_schedules: {
+        Row: {
+          id: string
+          technician_id: string
+          date: string
+          is_working: boolean | null
+          created_at: string | null
+        }
+        Insert: {
+          id?: string
+          technician_id: string
+          date: string
+          is_working?: boolean | null
+          created_at?: string | null
+        }
+        Update: {
+          id?: string
+          technician_id?: string
+          date?: string
+          is_working?: boolean | null
+          created_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "work_schedules_technician_id_fkey",
+            columns: ["technician_id"],
+            isOneToOne: false,
+            referencedRelation: "profiles",
+            referencedColumns: ["id"]
+          },
+        ]
+      },
+      project_permissions: {
+        Row: {
+          id: string
+          user_id: string
+          project_id: string
+          can_edit: boolean | null
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          project_id: string
+          can_edit?: boolean | null
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          project_id?: string
+          can_edit?: boolean | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_permissions_user_id_fkey",
+            columns: ["user_id"],
+            isOneToOne: false,
+            referencedRelation: "profiles",
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "project_permissions_project_id_fkey",
+            columns: ["project_id"],
+            isOneToOne: false,
+            referencedRelation: "projects",
+            referencedColumns: ["id"]
+          },
+        ]
+      },
+      client_permissions: {
+        Row: {
+          id: string
+          user_id: string
+          customer_id: string
+          can_view: boolean | null
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          customer_id: string
+          can_view?: boolean | null
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          customer_id?: string
+          can_view?: boolean | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_permissions_user_id_fkey",
+            columns: ["user_id"],
+            isOneToOne: false,
+            referencedRelation: "profiles",
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_permissions_customer_id_fkey",
+            columns: ["customer_id"],
+            isOneToOne: false,
+            referencedRelation: "customers",
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Views: {
