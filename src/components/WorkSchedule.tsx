@@ -6,14 +6,19 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { VacationRequest } from '@/types/vacation';
+import { WorkSchedule } from '@/types/schedule';
 import TechnicianFilter from './TechnicianFilter';
 import { isSameDay, eachDayOfInterval } from 'date-fns';
 
-interface Technician { id: string; full_name: string; }
+interface Technician {
+  id: string;
+  full_name: string;
+}
 
 const WorkSchedulePage: React.FC = () => {
   const { user } = useAuth();
   const { toast } = useToast();
+
   const [technicians, setTechnicians] = useState<Technician[]>([]);
   const [selectedTech, setSelectedTech] = useState<string>('');
   const [workDays, setWorkDays] = useState<Date[]>([]);
@@ -24,36 +29,38 @@ const WorkSchedulePage: React.FC = () => {
   const isPlanner = user?.role === 'admin' || user?.role === 'opdrachtgever';
   const isAdmin = user?.role === 'admin';
 
+  // Load all technicians for the planner dropdown
   const fetchTechnicians = async () => {
     const { data } = await supabase.from('profiles').select('id, full_name');
     setTechnicians(data || []);
     if (!selectedTech && user) setSelectedTech(user.id);
   };
 
+  // Load saved work schedule for the technician
   const fetchSchedule = async (techId: string) => {
     const { data } = await supabase
-      .from('work_schedules')
+      .from<WorkSchedule>('work_schedules')
       .select('*')
       .eq('technician_id', techId);
     const dates = (data || [])
-      .filter((d) => d.is_working)
-      .map((d) => new Date(d.date));
+      .filter(d => d.is_working)
+      .map(d => new Date(d.date));
     setWorkDays(dates);
   };
 
+  // Load all vacation requests (filtered if not admin)
   const fetchRequests = async () => {
     let query = supabase
       .from('vacation_requests')
       .select('*, profiles!vacation_requests_technician_id_fkey(full_name)')
       .order('start_date');
-
     if (!isAdmin) {
       query = query.eq('technician_id', user?.id || '');
     } else if (selectedTech && selectedTech !== 'all') {
       query = query.eq('technician_id', selectedTech);
     }
     const { data } = await query;
-    const formatted = (data || []).map((r) => ({
+    const formatted = (data || []).map(r => ({
       id: r.id,
       technicianId: r.technician_id,
       technicianName: r.profiles?.full_name || '',
@@ -63,39 +70,50 @@ const WorkSchedulePage: React.FC = () => {
       approvedBy: r.approved_by,
     }));
     setRequests(formatted);
+
+    // Build array of all vacation days for calendar modifiers
     const dates: Date[] = [];
-    formatted.forEach((r) => {
-      const rangeDays = eachDayOfInterval({
+    formatted.forEach(r => {
+      const range = eachDayOfInterval({
         start: new Date(r.startDate),
         end: new Date(r.endDate),
       });
-      dates.push(...rangeDays);
+      dates.push(...range);
     });
     setVacationDates(dates);
   };
 
   useEffect(() => {
     fetchTechnicians();
+    // Only planners need to see others' vacation requests immediately
+    if (isPlanner) fetchRequests();
   }, []);
 
+  // Reload schedule & requests when technician selection changes
   useEffect(() => {
-    if (selectedTech) {
-      fetchSchedule(selectedTech);
-      fetchRequests();
-    }
+    if (!selectedTech) return;
+    fetchSchedule(selectedTech);
+    if (isPlanner) fetchRequests();
   }, [selectedTech]);
 
   const saveSchedule = async () => {
     if (!isPlanner) return;
-    await supabase.from('work_schedules').delete().eq('technician_id', selectedTech);
-    const inserts = workDays.map((d) => ({
+    // Clear existing then insert new working days
+    await supabase
+      .from('work_schedules')
+      .delete()
+      .eq('technician_id', selectedTech);
+    const inserts = workDays.map(d => ({
       technician_id: selectedTech,
       date: d.toISOString().split('T')[0],
       is_working: true,
     }));
     const { error } = await supabase.from('work_schedules').insert(inserts);
-    if (error) toast({ title: 'Error', description: error.message, variant: 'destructive' });
-    else toast({ title: 'Opgeslagen', description: 'Planning bijgewerkt' });
+    if (error) {
+      toast({ title: 'Error', description: error.message, variant: 'destructive' });
+    } else {
+      toast({ title: 'Opgeslagen', description: 'Planning bijgewerkt' });
+    }
   };
 
   const submitRequest = async () => {
@@ -112,6 +130,7 @@ const WorkSchedulePage: React.FC = () => {
       toast({ title: 'Error', description: error.message, variant: 'destructive' });
       return;
     }
+    // Send notification email
     try {
       await supabase.functions.invoke('vacation-request-email', {
         body: {
@@ -147,54 +166,78 @@ const WorkSchedulePage: React.FC = () => {
             onTechnicianChange={setSelectedTech}
           />
         )}
+
         <Card>
           <CardHeader>
-            <CardTitle>Agenda</CardTitle>
+            <CardTitle>Agenda & Vakanties</CardTitle>
           </CardHeader>
           <CardContent>
             <Calendar
               mode={isPlanner ? 'single' : 'range'}
               selected={isPlanner ? undefined : selectedRange}
               onSelect={isPlanner ? undefined : setSelectedRange}
-              onDayClick={isPlanner ? (day) => {
-                setWorkDays((prev) => {
-                  const exists = prev.some((d) => isSameDay(d, day));
-                  return exists ? prev.filter((d) => !isSameDay(d, day)) : [...prev, day];
-                });
-              } : undefined}
+              onDayClick={
+                isPlanner
+                  ? day => {
+                      setWorkDays(prev => {
+                        const exists = prev.some(d => isSameDay(d, day));
+                        return exists ? prev.filter(d => !isSameDay(d, day)) : [...prev, day];
+                      });
+                    }
+                  : undefined
+              }
               modifiers={{ working: workDays, vacation: vacationDates }}
               modifiersClassNames={{
                 working: 'bg-green-200 text-green-800',
                 vacation: 'bg-red-200 text-red-800',
               }}
             />
-            {!isPlanner && (
-              <Button onClick={submitRequest} className="mt-4 bg-red-600 hover:bg-red-700 text-white">Aanvragen</Button>
-            )}
-            {isPlanner && (
-              <Button onClick={saveSchedule} className="mt-4 bg-red-600 hover:bg-red-700 text-white">Opslaan</Button>
+
+            {!isPlanner ? (
+              <Button
+                onClick={submitRequest}
+                className="mt-4 bg-red-600 hover:bg-red-700 text-white"
+              >
+                Vakantie aanvragen
+              </Button>
+            ) : (
+              <Button
+                onClick={saveSchedule}
+                className="mt-4 bg-red-600 hover:bg-red-700 text-white"
+              >
+                Planning opslaan
+              </Button>
             )}
           </CardContent>
         </Card>
+
         <Card>
           <CardHeader>
             <CardTitle>Aanvragen</CardTitle>
           </CardHeader>
           <CardContent>
             <ul className="space-y-2">
-              {requests.map(r => (
-                <li key={r.id} className="flex justify-between border-b pb-1">
-                  <span>
-                    {r.technicianName} {r.startDate} - {r.endDate} ({r.status})
-                  </span>
-                  {isAdmin && r.status === 'pending' && (
-                    <span className="space-x-1">
-                      <Button size="sm" onClick={() => updateStatus(r.id, 'approved')}>Akkoord</Button>
-                      <Button size="sm" variant="outline" onClick={() => updateStatus(r.id, 'denied')}>Weiger</Button>
+              {requests.length > 0 ? (
+                requests.map(r => (
+                  <li key={r.id} className="flex justify-between border-b pb-1">
+                    <span>
+                      {r.technicianName} {r.startDate} – {r.endDate} ({r.status})
                     </span>
-                  )}
-                </li>
-              ))}
+                    {isAdmin && r.status === 'pending' && (
+                      <span className="space-x-1">
+                        <Button size="sm" onClick={() => updateStatus(r.id, 'approved')}>
+                          Akkoord
+                        </Button>
+                        <Button size="sm" variant="outline" onClick={() => updateStatus(r.id, 'denied')}>
+                          Weiger
+                        </Button>
+                      </span>
+                    )}
+                  </li>
+                ))
+              ) : (
+                <li className="text-center text-gray-500 py-4">Geen aanvragen gevonden</li>
+              )}
             </ul>
           </CardContent>
         </Card>

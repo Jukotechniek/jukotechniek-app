@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { AuthProvider, useAuth } from '@/contexts/AuthContext';
 import LoginForm from '@/components/LoginForm';
@@ -12,11 +11,12 @@ import HourComparison from '@/components/HourComparison';
 import UserManagement from '@/components/UserManagement';
 import Reports from '@/components/Reports';
 import AIChatbot from '@/components/AIChatbot';
+import VacationRequests from '@/components/VacationRequests';
 import WorkSchedulePage from '@/components/WorkSchedule';
 
-const AppContent = () => {
+const AppContent: React.FC = () => {
   const { isAuthenticated, loading } = useAuth();
-  const [activeTab, setActiveTab] = useState('dashboard');
+  const [activeTab, setActiveTab] = useState<string>('dashboard');
 
   if (loading) {
     return (
@@ -43,6 +43,8 @@ const AppContent = () => {
         return <Projects />;
       case 'schedule':
         return <WorkSchedulePage />;
+      case 'vacation':
+        return <VacationRequests />;
       case 'customers':
         return <CustomerManagement />;
       case 'billing':
@@ -68,12 +70,10 @@ const AppContent = () => {
   );
 };
 
-const Index = () => {
-  return (
-    <AuthProvider>
-      <AppContent />
-    </AuthProvider>
-  );
-};
+const Index: React.FC = () => (
+  <AuthProvider>
+    <AppContent />
+  </AuthProvider>
+);
 
 export default Index;
