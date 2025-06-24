@@ -2,11 +2,11 @@ import React, { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
+import { Dialog, DialogContent, DialogTrigger } from '@/components/ui/dialog';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { VacationRequest } from '@/types/vacation';
-import { WorkSchedule } from '@/types/schedule';
 import TechnicianFilter from './TechnicianFilter';
 
 interface Technician { id: string; full_name: string; }
@@ -17,6 +17,12 @@ const WorkSchedulePage: React.FC = () => {
   const [technicians, setTechnicians] = useState<Technician[]>([]);
   const [selectedTech, setSelectedTech] = useState<string>('');
   const [days, setDays] = useState<Date[]>([]);
+  const [weekRange, setWeekRange] = useState<{ from: Date; to?: Date }>();
+  const [weekDays, setWeekDays] = useState<number[]>([]);
+  const [showLarge, setShowLarge] = useState(false);
+  const [allSchedules, setAllSchedules] = useState<Record<string, Date[]>>({});
+  const colors = ['bg-blue-500', 'bg-green-500', 'bg-yellow-500', 'bg-purple-500', 'bg-pink-500', 'bg-orange-500'];
+  const techColors: Record<string, string> = {};
   const [requests, setRequests] = useState<VacationRequest[]>([]);
   const [selectedRange, setSelectedRange] = useState<{ from: Date; to?: Date }>();
 
@@ -25,11 +31,28 @@ const WorkSchedulePage: React.FC = () => {
 
   const fetchTechnicians = async () => {
     const { data } = await supabase.from('profiles').select('id, full_name');
-    setTechnicians(data || []);
+    const list = data || [];
+    list.forEach((t, idx) => {
+      techColors[t.id] = colors[idx % colors.length];
+    });
+    setTechnicians(list);
     if (!selectedTech && user) setSelectedTech(user.id);
   };
 
   const fetchSchedule = async (techId: string) => {
+    if (techId === 'all') {
+      const { data } = await supabase.from('work_schedules').select('*');
+      const map: Record<string, Date[]> = {};
+      (data || [])
+        .filter(d => d.is_working)
+        .forEach(d => {
+          if (!map[d.technician_id]) map[d.technician_id] = [];
+          map[d.technician_id].push(new Date(d.date));
+        });
+      setAllSchedules(map);
+      setDays([]);
+      return;
+    }
     const { data } = await supabase
       .from('work_schedules')
       .select('*')
@@ -38,6 +61,7 @@ const WorkSchedulePage: React.FC = () => {
       .filter(d => d.is_working)
       .map(d => new Date(d.date));
     setDays(dates);
+    setAllSchedules({});
   };
 
   const fetchRequests = async () => {
@@ -71,6 +95,18 @@ const WorkSchedulePage: React.FC = () => {
     if (selectedTech) fetchSchedule(selectedTech);
   }, [selectedTech]);
 
+  const vacationDates = requests
+    .filter(r => r.status !== 'denied')
+    .flatMap(r => {
+      const start = new Date(r.startDate);
+      const end = new Date(r.endDate);
+      const dates: Date[] = [];
+      for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+        dates.push(new Date(d));
+      }
+      return dates;
+    });
+
   const saveSchedule = async () => {
     if (!isPlanner) return;
     await supabase
@@ -87,6 +123,22 @@ const WorkSchedulePage: React.FC = () => {
       .insert(inserts);
     if (error) toast({ title: 'Error', description: error.message, variant: 'destructive' });
     else toast({ title: 'Opgeslagen', description: 'Planning bijgewerkt' });
+  };
+
+  const planRepeated = () => {
+    if (!weekRange?.from || !weekRange.to || weekDays.length === 0) return;
+    const newDates: Date[] = [];
+    for (let d = new Date(weekRange.from); d <= weekRange.to; d.setDate(d.getDate() + 1)) {
+      if (weekDays.includes(d.getDay())) {
+        newDates.push(new Date(d));
+      }
+    }
+    setDays(prev => {
+      const map = (arr: Date[]) => arr.map(dd => dd.toDateString());
+      const existing = new Set(map(prev));
+      newDates.forEach(nd => existing.add(nd.toDateString()));
+      return Array.from(existing).map(str => new Date(str));
+    });
   };
 
   const submitRequest = async () => {
@@ -128,6 +180,27 @@ const WorkSchedulePage: React.FC = () => {
     fetchRequests();
   };
 
+  const deleteRequest = async (id: string) => {
+    const { error } = await supabase
+      .from('vacation_requests')
+      .delete()
+      .eq('id', id);
+    if (error) console.error(error);
+    fetchRequests();
+  };
+
+  const calendarModifiers: Record<string, Date[]> = { vacation: vacationDates };
+  const modifierClasses: Record<string, string> = { vacation: 'bg-red-500 text-white' };
+  if (selectedTech === 'all') {
+    Object.entries(allSchedules).forEach(([id, list]) => {
+      calendarModifiers[id] = list;
+      modifierClasses[id] = `${techColors[id]} text-white`;
+    });
+  } else {
+    calendarModifiers['work'] = days;
+    modifierClasses['work'] = 'bg-green-500 text-white';
+  }
+
   return (
     <div className="p-6 bg-gray-50 min-h-screen">
       <div className="max-w-3xl mx-auto space-y-6">
@@ -140,17 +213,96 @@ const WorkSchedulePage: React.FC = () => {
         )}
         <Card>
           <CardHeader>
-            <CardTitle>Weekplanning</CardTitle>
+            <CardTitle>Agenda</CardTitle>
           </CardHeader>
           <CardContent>
-            <Calendar mode="multiple" selected={days} onSelect={setDays} />
+            <Calendar
+              mode="multiple"
+              selected={selectedTech === 'all' ? undefined : days}
+              onSelect={selectedTech === 'all' ? undefined : isPlanner ? setDays : undefined}
+              modifiers={calendarModifiers}
+              modifiersClassNames={modifierClasses}
+              classNames={{
+                day_selected: 'bg-green-500 text-white hover:bg-green-600',
+              }}
+            />
             {isPlanner && (
               <Button onClick={saveSchedule} className="mt-4 bg-red-600 hover:bg-red-700 text-white">
                 Opslaan
               </Button>
             )}
+            <Dialog open={showLarge} onOpenChange={setShowLarge}>
+              <DialogTrigger asChild>
+                <Button variant="ghost" size="sm" className="ml-2">
+                  Vergroot
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-4xl">
+                <Calendar
+                  mode="multiple"
+                  selected={selectedTech === 'all' ? undefined : days}
+                  onSelect={selectedTech === 'all' ? undefined : isPlanner ? setDays : undefined}
+                  modifiers={calendarModifiers}
+                  modifiersClassNames={modifierClasses}
+                  classNames={{ day_selected: 'bg-green-500 text-white hover:bg-green-600' }}
+                />
+              </DialogContent>
+            </Dialog>
+            <div className="mt-4 flex flex-wrap gap-4 text-sm">
+              {selectedTech === 'all'
+                ? technicians.map(t => (
+                    <div key={t.id} className="flex items-center space-x-1">
+                      <span className={`w-3 h-3 inline-block ${techColors[t.id]}`}></span>
+                      <span>{t.full_name}</span>
+                    </div>
+                  ))
+                : (
+                    <>
+                      <div className="flex items-center space-x-1">
+                        <span className="w-3 h-3 bg-green-500 inline-block" />
+                        <span>Werkdag</span>
+                      </div>
+                      <div className="flex items-center space-x-1">
+                        <span className="w-3 h-3 bg-red-500 inline-block" />
+                        <span>Vrij</span>
+                      </div>
+                    </>
+                  )}
+            </div>
           </CardContent>
         </Card>
+
+        {isPlanner && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Herhaal planning</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <Calendar mode="range" selected={weekRange} onSelect={setWeekRange} />
+              <div className="flex space-x-2 mt-2">
+                {['Zo','Ma','Di','Wo','Do','Vr','Za'].map((d, idx) => (
+                  <label key={idx} className="flex items-center space-x-1 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={weekDays.includes(idx)}
+                      onChange={() =>
+                        setWeekDays(prev =>
+                          prev.includes(idx)
+                            ? prev.filter(i => i !== idx)
+                            : [...prev, idx]
+                        )
+                      }
+                    />
+                    <span>{d}</span>
+                  </label>
+                ))}
+              </div>
+              <Button onClick={planRepeated} className="mt-4 bg-red-600 hover:bg-red-700 text-white">
+                Voeg toe
+              </Button>
+            </CardContent>
+          </Card>
+        )}
 
         <Card>
           <CardHeader>
@@ -179,6 +331,7 @@ const WorkSchedulePage: React.FC = () => {
                     <span className="space-x-1">
                       <Button size="sm" onClick={() => updateStatus(r.id, 'approved')}>Akkoord</Button>
                       <Button size="sm" variant="outline" onClick={() => updateStatus(r.id, 'denied')}>Weiger</Button>
+                      <Button size="sm" variant="outline" onClick={() => deleteRequest(r.id)}>Delete</Button>
                     </span>
                   )}
                 </li>
