@@ -1,5 +1,3 @@
-import React from 'react';
-import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
 import {
   BarChart3,
@@ -15,13 +13,13 @@ import {
   Bot,
   Menu
 } from 'lucide-react';
-import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
   DropdownMenuTrigger,
   DropdownMenuContent,
   DropdownMenuItem
 } from '@/components/ui/dropdown-menu';
+import { Button } from '@/components/ui/button';
 
 interface NavigationProps {
   activeTab: string;
@@ -63,20 +61,8 @@ const Navigation: React.FC<NavigationProps> = ({ activeTab, onTabChange }) => {
     { id: 'chatbot', label: 'AI Assistant', icon: Bot }
   ];
 
-  const tabs = isAdmin
-    ? adminTabs
-    : isOpdrachtgever
-    ? opdrachtgeverTabs
-    : technicianTabs;
-
-  const primaryTabIds = [
-    'dashboard',
-    'chatbot',
-    'hours',
-    'billing',
-    'verification',
-    'schedule'
-  ];
+  const tabs = isAdmin ? adminTabs : isOpdrachtgever ? opdrachtgeverTabs : technicianTabs;
+  const primaryTabIds = ['dashboard', 'chatbot', 'hours', 'billing', 'verification', 'schedule'];
   const visibleTabs = tabs.filter(t => primaryTabIds.includes(t.id));
   const dropdownTabs = tabs.filter(t => !primaryTabIds.includes(t.id));
 
@@ -87,7 +73,7 @@ const Navigation: React.FC<NavigationProps> = ({ activeTab, onTabChange }) => {
           <div className="flex items-center space-x-8">
             <div className="flex items-center">
               <h1 className="text-xl font-bold">JukoTechniek</h1>
-              <div className="w-1 h-6 bg-red-600 ml-2" />
+              <div className="w-1 h-6 bg-red-600 ml-2"></div>
             </div>
 
             <div className="hidden md:flex space-x-1">
@@ -179,4 +165,3 @@ const Navigation: React.FC<NavigationProps> = ({ activeTab, onTabChange }) => {
 };
 
 export default Navigation;
-
