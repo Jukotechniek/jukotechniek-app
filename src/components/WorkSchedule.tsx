@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
 import { Dialog, DialogContent, DialogTrigger } from '@/components/ui/dialog';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
@@ -17,14 +18,13 @@ const WorkSchedulePage: React.FC = () => {
   const [technicians, setTechnicians] = useState<Technician[]>([]);
   const [selectedTech, setSelectedTech] = useState<string>('');
   const [days, setDays] = useState<Date[]>([]);
-  const [weekRange, setWeekRange] = useState<{ from: Date; to?: Date }>();
-  const [weekDays, setWeekDays] = useState<number[]>([]);
   const [showLarge, setShowLarge] = useState(false);
   const [allSchedules, setAllSchedules] = useState<Record<string, Date[]>>({});
   const colors = ['bg-blue-500', 'bg-green-500', 'bg-yellow-500', 'bg-purple-500', 'bg-pink-500', 'bg-orange-500'];
   const techColors: Record<string, string> = {};
   const [requests, setRequests] = useState<VacationRequest[]>([]);
   const [selectedRange, setSelectedRange] = useState<{ from: Date; to?: Date }>();
+  const [requestTab, setRequestTab] = useState<'pending' | 'approved'>('pending');
 
   const isPlanner = user?.role === 'admin' || user?.role === 'opdrachtgever';
   const isAdmin = user?.role === 'admin';
@@ -125,21 +125,6 @@ const WorkSchedulePage: React.FC = () => {
     else toast({ title: 'Opgeslagen', description: 'Planning bijgewerkt' });
   };
 
-  const planRepeated = () => {
-    if (!weekRange?.from || !weekRange.to || weekDays.length === 0) return;
-    const newDates: Date[] = [];
-    for (let d = new Date(weekRange.from); d <= weekRange.to; d.setDate(d.getDate() + 1)) {
-      if (weekDays.includes(d.getDay())) {
-        newDates.push(new Date(d));
-      }
-    }
-    setDays(prev => {
-      const map = (arr: Date[]) => arr.map(dd => dd.toDateString());
-      const existing = new Set(map(prev));
-      newDates.forEach(nd => existing.add(nd.toDateString()));
-      return Array.from(existing).map(str => new Date(str));
-    });
-  };
 
   const submitRequest = async () => {
     if (!selectedRange?.from || !selectedRange.to) return;
@@ -180,14 +165,6 @@ const WorkSchedulePage: React.FC = () => {
     fetchRequests();
   };
 
-  const deleteRequest = async (id: string) => {
-    const { error } = await supabase
-      .from('vacation_requests')
-      .delete()
-      .eq('id', id);
-    if (error) console.error(error);
-    fetchRequests();
-  };
 
   const calendarModifiers: Record<string, Date[]> = { vacation: vacationDates };
   const modifierClasses: Record<string, string> = { vacation: 'bg-red-500 text-white' };
@@ -235,7 +212,7 @@ const WorkSchedulePage: React.FC = () => {
                   Vergroot
                 </Button>
               </DialogTrigger>
-              <DialogContent className="max-w-4xl">
+              <DialogContent className="max-w-none w-screen h-screen">
                 <Calendar
                   mode="multiple"
                   selected={selectedTech === 'all' ? undefined : days}
@@ -270,37 +247,6 @@ const WorkSchedulePage: React.FC = () => {
           </CardContent>
         </Card>
 
-        {isPlanner && (
-          <Card>
-            <CardHeader>
-              <CardTitle>Herhaal planning</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <Calendar mode="range" selected={weekRange} onSelect={setWeekRange} />
-              <div className="flex space-x-2 mt-2">
-                {['Zo','Ma','Di','Wo','Do','Vr','Za'].map((d, idx) => (
-                  <label key={idx} className="flex items-center space-x-1 text-sm">
-                    <input
-                      type="checkbox"
-                      checked={weekDays.includes(idx)}
-                      onChange={() =>
-                        setWeekDays(prev =>
-                          prev.includes(idx)
-                            ? prev.filter(i => i !== idx)
-                            : [...prev, idx]
-                        )
-                      }
-                    />
-                    <span>{d}</span>
-                  </label>
-                ))}
-              </div>
-              <Button onClick={planRepeated} className="mt-4 bg-red-600 hover:bg-red-700 text-white">
-                Voeg toe
-              </Button>
-            </CardContent>
-          </Card>
-        )}
 
         <Card>
           <CardHeader>
@@ -319,25 +265,46 @@ const WorkSchedulePage: React.FC = () => {
             <CardTitle>Aanvragen</CardTitle>
           </CardHeader>
           <CardContent>
-            <ul className="space-y-2">
-              {requests.map(r => (
-                <li key={r.id} className="flex justify-between border-b pb-1">
-                  <span>
-                    {r.technicianName} {r.startDate} - {r.endDate} ({r.status})
-                  </span>
-                  {isAdmin && r.status === 'pending' && (
-                    <span className="space-x-1">
-                      <Button size="sm" onClick={() => updateStatus(r.id, 'approved')}>Akkoord</Button>
-                      <Button size="sm" variant="outline" onClick={() => updateStatus(r.id, 'denied')}>Weiger</Button>
-                      <Button size="sm" variant="outline" onClick={() => deleteRequest(r.id)}>Delete</Button>
-                    </span>
+            <Tabs value={requestTab} onValueChange={setRequestTab} className="w-full">
+              <TabsList>
+                <TabsTrigger value="pending">Pending</TabsTrigger>
+                <TabsTrigger value="approved">Goedgekeurd</TabsTrigger>
+              </TabsList>
+              <TabsContent value="pending">
+                <ul className="space-y-2">
+                  {requests.filter(r => r.status === 'pending').map(r => (
+                    <li key={r.id} className="flex justify-between border-b pb-1">
+                      <span>
+                        {r.technicianName} {r.startDate} - {r.endDate} ({r.status})
+                      </span>
+                      {isAdmin && (
+                        <span className="space-x-1">
+                          <Button size="sm" onClick={async () => updateStatus(r.id, 'approved')}>Akkoord</Button>
+                          <Button size="sm" variant="outline" onClick={async () => updateStatus(r.id, 'denied')}>Weiger</Button>
+                        </span>
+                      )}
+                    </li>
+                  ))}
+                  {requests.filter(r => r.status === 'pending').length === 0 && (
+                    <li className="text-center text-gray-500 py-4">Geen aanvragen gevonden</li>
                   )}
-                </li>
-              ))}
-              {requests.length === 0 && (
-                <li className="text-center text-gray-500 py-4">Geen aanvragen gevonden</li>
-              )}
-            </ul>
+                </ul>
+              </TabsContent>
+              <TabsContent value="approved">
+                <ul className="space-y-2">
+                  {requests.filter(r => r.status === 'approved').map(r => (
+                    <li key={r.id} className="flex justify-between border-b pb-1">
+                      <span>
+                        {r.technicianName} {r.startDate} - {r.endDate}
+                      </span>
+                    </li>
+                  ))}
+                  {requests.filter(r => r.status === 'approved').length === 0 && (
+                    <li className="text-center text-gray-500 py-4">Geen aanvragen gevonden</li>
+                  )}
+                </ul>
+              </TabsContent>
+            </Tabs>
           </CardContent>
         </Card>
       </div>
