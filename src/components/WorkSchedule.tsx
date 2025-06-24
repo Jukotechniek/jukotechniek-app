@@ -222,9 +222,7 @@ const WorkSchedulePage: React.FC = () => {
               onSelect={selectedTech === 'all' ? undefined : isPlanner ? setDays : undefined}
               modifiers={calendarModifiers}
               modifiersClassNames={modifierClasses}
-              classNames={{
-                day_selected: 'bg-green-500 text-white hover:bg-green-600',
-              }}
+              classNames={{ day_selected: 'bg-green-500 text-white hover:bg-green-600' }}
             />
             {isPlanner && (
               <Button onClick={saveSchedule} className="mt-4 bg-red-600 hover:bg-red-700 text-white">
