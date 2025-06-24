@@ -265,7 +265,7 @@ const WorkSchedulePage: React.FC = () => {
             <CardTitle>Aanvragen</CardTitle>
           </CardHeader>
           <CardContent>
-            <Tabs value={requestTab} onValueChange={setRequestTab} className="w-full">
+            <Tabs value={requestTab} onValueChange={v => setRequestTab(v as 'pending' | 'approved')} className="w-full">
               <TabsList>
                 <TabsTrigger value="pending">Pending</TabsTrigger>
                 <TabsTrigger value="approved">Goedgekeurd</TabsTrigger>
