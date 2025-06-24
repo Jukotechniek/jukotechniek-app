@@ -16,7 +16,7 @@ import WorkSchedulePage from '@/components/WorkSchedule';
 
 const AppContent: React.FC = () => {
   const { isAuthenticated, loading } = useAuth();
-  const [activeTab, setActiveTab] = useState('dashboard');
+  const [activeTab, setActiveTab] = useState<string>('dashboard');
 
   if (loading) {
     return (
@@ -70,12 +70,10 @@ const AppContent: React.FC = () => {
   );
 };
 
-const Index: React.FC = () => {
-  return (
-    <AuthProvider>
-      <AppContent />
-    </AuthProvider>
-  );
-};
+const Index: React.FC = () => (
+  <AuthProvider>
+    <AppContent />
+  </AuthProvider>
+);
 
 export default Index;
