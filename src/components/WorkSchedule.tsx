@@ -19,12 +19,13 @@ const WorkSchedulePage: React.FC = () => {
   const [selectedTech, setSelectedTech] = useState<string>('');
   const [days, setDays] = useState<Date[]>([]);
   const [showLarge, setShowLarge] = useState(false);
+  const [showRequest, setShowRequest] = useState(false);
   const [allSchedules, setAllSchedules] = useState<Record<string, Date[]>>({});
   const colors = ['bg-blue-500', 'bg-green-500', 'bg-yellow-500', 'bg-purple-500', 'bg-pink-500', 'bg-orange-500'];
   const techColors: Record<string, string> = {};
   const [requests, setRequests] = useState<VacationRequest[]>([]);
   const [selectedRange, setSelectedRange] = useState<{ from: Date; to?: Date }>();
-  const [requestTab, setRequestTab] = useState<'pending' | 'approved'>('pending');
+  const [requestTab, setRequestTab] = useState<'pending' | 'approved' | 'denied'>('pending');
 
   const isPlanner = user?.role === 'admin' || user?.role === 'opdrachtgever';
   const isAdmin = user?.role === 'admin';
@@ -36,7 +37,7 @@ const WorkSchedulePage: React.FC = () => {
       techColors[t.id] = colors[idx % colors.length];
     });
     setTechnicians(list);
-    if (!selectedTech && user) setSelectedTech(user.id);
+    if (!selectedTech && user) setSelectedTech(isPlanner ? 'all' : user.id);
   };
 
   const fetchSchedule = async (techId: string) => {
@@ -96,7 +97,11 @@ const WorkSchedulePage: React.FC = () => {
   }, [selectedTech]);
 
   const vacationDates = requests
-    .filter(r => r.status !== 'denied')
+    .filter(
+      r =>
+        r.status !== 'denied' &&
+        (selectedTech === 'all' || r.technicianId === selectedTech)
+    )
     .flatMap(r => {
       const start = new Date(r.startDate);
       const end = new Date(r.endDate);
@@ -153,6 +158,7 @@ const WorkSchedulePage: React.FC = () => {
     }
     toast({ title: 'Aanvraag verstuurd', description: 'Je vrije dag is aangevraagd' });
     setSelectedRange(undefined);
+    setShowRequest(false);
     fetchRequests();
   };
 
@@ -161,7 +167,26 @@ const WorkSchedulePage: React.FC = () => {
       .from('vacation_requests')
       .update({ status, approved_by: user?.id })
       .eq('id', id);
-    if (error) console.error(error);
+    if (error) {
+      console.error(error);
+      toast({ title: 'Error', description: error.message, variant: 'destructive' });
+      return;
+    }
+    toast({
+      title: 'Bijgewerkt',
+      description: `Aanvraag ${status === 'approved' ? 'goedgekeurd' : 'geweigerd'}`
+    });
+    setRequestTab(status);
+    fetchRequests();
+  };
+
+  const deleteRequest = async (id: string) => {
+    const { error } = await supabase.from('vacation_requests').delete().eq('id', id);
+    if (error) {
+      toast({ title: 'Error', description: error.message, variant: 'destructive' });
+    } else {
+      toast({ title: 'Verwijderd', description: 'Aanvraag verwijderd' });
+    }
     fetchRequests();
   };
 
@@ -206,21 +231,53 @@ const WorkSchedulePage: React.FC = () => {
                 Opslaan
               </Button>
             )}
+            <Button onClick={() => setShowRequest(true)} className="mt-4 ml-2 bg-red-600 hover:bg-red-700 text-white">
+              Vrije dag aanvragen
+            </Button>
             <Dialog open={showLarge} onOpenChange={setShowLarge}>
               <DialogTrigger asChild>
                 <Button variant="ghost" size="sm" className="ml-2">
                   Vergroot
                 </Button>
               </DialogTrigger>
-              <DialogContent className="max-w-none w-screen h-screen">
+              <DialogContent
+                className="inset-0 w-screen h-screen max-w-none rounded-none p-0"
+                style={{ left: 0, top: 0, transform: 'none' }}
+              >
                 <Calendar
                   mode="multiple"
+                  className="h-full"
                   selected={selectedTech === 'all' ? undefined : days}
                   onSelect={selectedTech === 'all' ? undefined : isPlanner ? setDays : undefined}
                   modifiers={calendarModifiers}
                   modifiersClassNames={modifierClasses}
                   classNames={{ day_selected: 'bg-green-500 text-white hover:bg-green-600' }}
                 />
+              </DialogContent>
+            </Dialog>
+            <Dialog open={showRequest} onOpenChange={setShowRequest}>
+              <DialogContent
+                className="inset-0 w-full max-w-md sm:max-w-lg"
+                style={{ left: 0, top: 0, transform: 'none' }}
+              >
+                <Calendar
+                  mode="range"
+                  selected={selectedRange}
+                  onSelect={setSelectedRange}
+                />
+                {selectedRange?.from && selectedRange.to && (
+                  <p className="mt-2 text-sm text-gray-600">
+                    Geselecteerd:{' '}
+                    {selectedRange.from.toLocaleDateString()} -{' '}
+                    {selectedRange.to.toLocaleDateString()}
+                  </p>
+                )}
+                <Button
+                  onClick={submitRequest}
+                  className="mt-4 bg-red-600 hover:bg-red-700 text-white"
+                >
+                  Aanvragen
+                </Button>
               </DialogContent>
             </Dialog>
             <div className="mt-4 flex flex-wrap gap-4 text-sm">
@@ -248,31 +305,27 @@ const WorkSchedulePage: React.FC = () => {
         </Card>
 
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Vrije dag aanvragen</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <Calendar mode="range" selected={selectedRange} onSelect={setSelectedRange} />
-            <Button onClick={submitRequest} className="mt-4 bg-red-600 hover:bg-red-700 text-white">
-              Aanvragen
-            </Button>
-          </CardContent>
-        </Card>
 
         <Card>
           <CardHeader>
             <CardTitle>Aanvragen</CardTitle>
           </CardHeader>
           <CardContent>
-            <Tabs value={requestTab} onValueChange={v => setRequestTab(v as 'pending' | 'approved')} className="w-full">
+            <Tabs value={requestTab} onValueChange={v => setRequestTab(v as 'pending' | 'approved' | 'denied')} className="w-full">
               <TabsList>
                 <TabsTrigger value="pending">Pending</TabsTrigger>
                 <TabsTrigger value="approved">Goedgekeurd</TabsTrigger>
+                <TabsTrigger value="denied">Geweigerd</TabsTrigger>
               </TabsList>
               <TabsContent value="pending">
                 <ul className="space-y-2">
-                  {requests.filter(r => r.status === 'pending').map(r => (
+                  {requests
+                    .filter(
+                      r =>
+                        r.status === 'pending' &&
+                        (selectedTech === 'all' || r.technicianId === selectedTech)
+                    )
+                    .map(r => (
                     <li key={r.id} className="flex justify-between border-b pb-1">
                       <span>
                         {r.technicianName} {r.startDate} - {r.endDate} ({r.status})
@@ -285,21 +338,69 @@ const WorkSchedulePage: React.FC = () => {
                       )}
                     </li>
                   ))}
-                  {requests.filter(r => r.status === 'pending').length === 0 && (
+                  {requests.filter(
+                    r =>
+                      r.status === 'pending' &&
+                      (selectedTech === 'all' || r.technicianId === selectedTech)
+                  ).length === 0 && (
                     <li className="text-center text-gray-500 py-4">Geen aanvragen gevonden</li>
                   )}
                 </ul>
               </TabsContent>
               <TabsContent value="approved">
                 <ul className="space-y-2">
-                  {requests.filter(r => r.status === 'approved').map(r => (
+                  {requests
+                    .filter(
+                      r =>
+                        r.status === 'approved' &&
+                        (selectedTech === 'all' || r.technicianId === selectedTech)
+                    )
+                    .map(r => (
                     <li key={r.id} className="flex justify-between border-b pb-1">
                       <span>
                         {r.technicianName} {r.startDate} - {r.endDate}
                       </span>
+                      {isAdmin && (
+                        <Button size="sm" variant="outline" onClick={() => deleteRequest(r.id)}>
+                          Verwijder
+                        </Button>
+                      )}
                     </li>
                   ))}
-                  {requests.filter(r => r.status === 'approved').length === 0 && (
+                  {requests.filter(
+                    r =>
+                      r.status === 'approved' &&
+                      (selectedTech === 'all' || r.technicianId === selectedTech)
+                  ).length === 0 && (
+                    <li className="text-center text-gray-500 py-4">Geen aanvragen gevonden</li>
+                  )}
+                </ul>
+              </TabsContent>
+              <TabsContent value="denied">
+                <ul className="space-y-2">
+                  {requests
+                    .filter(
+                      r =>
+                        r.status === 'denied' &&
+                        (selectedTech === 'all' || r.technicianId === selectedTech)
+                    )
+                    .map(r => (
+                    <li key={r.id} className="flex justify-between border-b pb-1">
+                      <span>
+                        {r.technicianName} {r.startDate} - {r.endDate}
+                      </span>
+                      {isAdmin && (
+                        <Button size="sm" variant="outline" onClick={() => deleteRequest(r.id)}>
+                          Verwijder
+                        </Button>
+                      )}
+                    </li>
+                  ))}
+                  {requests.filter(
+                    r =>
+                      r.status === 'denied' &&
+                      (selectedTech === 'all' || r.technicianId === selectedTech)
+                  ).length === 0 && (
                     <li className="text-center text-gray-500 py-4">Geen aanvragen gevonden</li>
                   )}
                 </ul>
