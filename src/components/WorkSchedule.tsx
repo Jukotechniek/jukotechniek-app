@@ -16,76 +16,96 @@ type RequestTab = 'pending' | 'approved' | 'denied'
 type Modifiers = Record<string, Date[]>
 type ModifierClasses = Record<string, string>
 
-// helper to format a Date as local "YYYY-MM-DD"
+// Format a Date to "YYYY-MM-DD" local string
 function formatDateLocal(d: Date): string {
-  const yyyy = d.getFullYear()
-  const mm = String(d.getMonth() + 1).padStart(2, '0')
-  const dd = String(d.getDate()).padStart(2, '0')
-  return `${yyyy}-${mm}-${dd}`
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
 }
 
 const WorkSchedulePage: React.FC = () => {
-  const { user } = useAuth()
-  const { toast } = useToast()
+  const { user } = useAuth();
+  const { toast } = useToast();
 
-  const role      = user?.role?.toLowerCase() || ''
-  const isPlanner = ['admin','opdrachtgever','administrator'].includes(role)
-  const isAdmin   = ['admin','administrator'].includes(role)
+  const role = user?.role?.toLowerCase() || '';
+  const isPlanner = ['admin','opdrachtgever','administrator'].includes(role);
+  const isAdmin   = ['admin','administrator'].includes(role);
 
-  const [technicians, setTechnicians]       = useState<Technician[]>([])
-  const [selectedTech, setSelectedTech]     = useState<string>('all')
-  const [workDays, setWorkDays]             = useState<Date[]>([])
-  const [allSchedules, setAllSchedules]     = useState<Modifiers>({})
-  const [techColors, setTechColors]         = useState<Record<string,string>>({})
-  const [requests, setRequests]             = useState<VacationRequest[]>([])
-  const [requestTab, setRequestTab]         = useState<RequestTab>('pending')
-  const [vacationRange, setVacationRange]   = useState<DateRange|undefined>(undefined)
-  const [isVacDialogOpen, setVacDialogOpen] = useState<boolean>(false)
-  const [fullscreen, setFullscreen]         = useState<boolean>(false)
+  const [technicians, setTechnicians]       = useState<Technician[]>([]);
+  const [selectedTech, setSelectedTech]     = useState<string>('all');
+  const [workDays, setWorkDays]             = useState<Date[]>([]);
+  const [allSchedules, setAllSchedules]     = useState<Modifiers>({});
+  const [techColors, setTechColors]         = useState<Record<string,string>>({});
+  const [requests, setRequests]             = useState<VacationRequest[]>([]);
+  const [requestTab, setRequestTab]         = useState<RequestTab>('pending');
+  const [vacationRange, setVacationRange]   = useState<DateRange|undefined>(undefined);
+  const [isVacDialogOpen, setVacDialogOpen] = useState(false);
 
-  const colors = ['#3b82f6','#10b981','#f59e0b','#8b5cf6','#ec4899','#f97316']
+  // Build approved vacation-days map per tech
+  const vacSchedules: Modifiers = {};
+  requests.filter(r => r.status === 'approved').forEach(r => {
+    const from = new Date(r.startDate), to = new Date(r.endDate);
+    for (let d = new Date(from); d <= to; d.setDate(d.getDate()+1)) {
+      vacSchedules[r.technicianId] = vacSchedules[r.technicianId]||[];
+      vacSchedules[r.technicianId].push(new Date(d));
+    }
+  });
 
+  // Color palette for technicians
+  const colors = ['#3b82f6','#10b981','#f59e0b','#8b5cf6','#ec4899','#f97316'];
+
+  // Restrict non-planners to their own schedule
   useEffect(() => {
-    if (!isPlanner && user?.id) setSelectedTech(user.id)
-  }, [isPlanner, user])
+    if (!isPlanner && user?.id) {
+      setSelectedTech(user.id);
+    }
+  }, [isPlanner, user]);
 
+  // Fetch technicians & assign each a color
   async function fetchTechnicians() {
-    const { data } = await supabase.from('profiles').select('id, full_name')
-    const list = data || []
+    const { data } = await supabase.from('profiles').select('id, full_name');
+    const list = data || [];
     const visible = isPlanner
       ? [{ id: 'all', full_name: 'Alle monteurs' }, ...list]
-      : list.filter(t => t.id === user?.id)
-    const cmap: Record<string,string> = {}
-    visible.forEach((t,i) => { if (t.id!=='all') cmap[t.id] = colors[i%colors.length] })
-    setTechnicians(visible)
-    setTechColors(cmap)
+      : list.filter(t => t.id === user?.id);
+    const cmap: Record<string,string> = {};
+    visible.forEach((t,i) => {
+      if (t.id !== 'all') cmap[t.id] = colors[i % colors.length];
+    });
+    setTechnicians(visible);
+    setTechColors(cmap);
   }
 
-  async function fetchSchedule(id: string) {
-    if (id==='all') {
-      const { data } = await supabase.from('work_schedules').select('*')
-      const map: Modifiers = {}
-      ;(data||[]).filter(r=>r.is_working).forEach(r=>{
-        map[r.technician_id] = map[r.technician_id]||[]
-        map[r.technician_id].push(new Date(r.date))
-      })
-      setAllSchedules(map)
-      setWorkDays([])
+  // Fetch work schedules
+  async function fetchSchedule(techId: string) {
+    if (techId === 'all') {
+      const { data } = await supabase.from('work_schedules').select('*');
+      const map: Modifiers = {};
+      (data||[]).filter(r=>r.is_working).forEach(r => {
+        map[r.technician_id] = map[r.technician_id]||[];
+        map[r.technician_id].push(new Date(r.date));
+      });
+      setAllSchedules(map);
+      setWorkDays([]);
     } else {
       const { data } = await supabase
-        .from('work_schedules').select('*').eq('technician_id', id)
-      setWorkDays((data||[]).filter(r=>r.is_working).map(r=>new Date(r.date)))
-      setAllSchedules({})
+        .from('work_schedules')
+        .select('*')
+        .eq('technician_id', techId);
+      setWorkDays((data||[]).filter(r=>r.is_working).map(r=>new Date(r.date)));
+      setAllSchedules({});
     }
   }
 
+  // Fetch vacation requests
   async function fetchRequests() {
     let q = supabase.from('vacation_requests')
       .select('*, profiles!vacation_requests_technician_id_fkey(full_name)')
-      .order('start_date')
-    if (!isAdmin) q = q.eq('technician_id', user?.id||'')
-    const { data } = await q
-    setRequests((data||[]).map(r=>({
+      .order('start_date');
+    if (!isAdmin) q = q.eq('technician_id', user?.id || '');
+    const { data } = await q;
+    setRequests((data||[]).map(r => ({
       id:             r.id,
       technicianId:   r.technician_id,
       technicianName: r.profiles?.full_name||'',
@@ -93,208 +113,220 @@ const WorkSchedulePage: React.FC = () => {
       endDate:        r.end_date,
       status:         r.status as VacationRequest['status'],
       approvedBy:     (r as any).approved_by,
-    })))
+    })));
   }
 
-  useEffect(()=>{
-    fetchTechnicians()
-    fetchRequests()
-  },[])
+  useEffect(() => {
+    fetchTechnicians();
+    fetchRequests();
+  }, []);
 
-  useEffect(()=>{
-    if (selectedTech) fetchSchedule(selectedTech)
-  },[selectedTech])
+  useEffect(() => {
+    if (selectedTech) fetchSchedule(selectedTech);
+  }, [selectedTech]);
 
-  // build approved vacation map
-  const vacSchedules: Modifiers = {}
-  requests.filter(r=>r.status==='approved').forEach(r=>{
-    const s=new Date(r.startDate), e=new Date(r.endDate)
-    for(let d=new Date(s); d<=e; d.setDate(d.getDate()+1)){
-      vacSchedules[r.technicianId] = vacSchedules[r.technicianId]||[]
-      vacSchedules[r.technicianId].push(new Date(d))
-    }
-  })
-  const vacationDays = Object.values(vacSchedules).flat()
+  // Vacation days for the currently selected technician
+  const currentVacDays = selectedTech === 'all'
+    ? []
+    : vacSchedules[selectedTech] || [];
 
-  // custom Day cell for 'all' view
+  // Custom calendar cell for "all" view: one dot per tech per day
   const CustomDay = ({ date, ...props }: DayProps) => {
-    const ds = date.toDateString()
+    const ds = date.toDateString();
     const workTechs = Object.entries(allSchedules)
-      .filter(([,dates])=>dates.some(d=>d.toDateString()===ds)).map(([id])=>id)
+      .filter(([,dates]) => dates.some(d => d.toDateString() === ds))
+      .map(([id]) => id);
     const vacTechs = Object.entries(vacSchedules)
-      .filter(([,dates])=>dates.some(d=>d.toDateString()===ds)).map(([id])=>id)
-    // Compute isSelected based on selected workDays
-    const isSelected = workDays.some(d => d.toDateString() === ds)
+      .filter(([,dates]) => dates.some(d => d.toDateString() === ds))
+      .map(([id]) => id);
     return (
-      <button
-        {...props}
-        className={`relative p-1 text-center ${isSelected?' ring-2 ring-offset-2 ring-gray-500':''}`}
-      >
+      <button {...props} className="relative p-1 text-center">
         <span>{date.getDate()}</span>
-        {workTechs.length>0 && (
+        {workTechs.length > 0 && (
           <div className="absolute top-1 left-0 right-0 flex justify-center space-x-0.5">
-            {workTechs.map(id=>(
+            {workTechs.map(id => (
               <span key={id}
                 className="w-2 h-2 rounded-full"
                 style={{ backgroundColor: techColors[id] }}
+                title={`${technicians.find(t=>t.id===id)?.full_name} werkt`}
               />
             ))}
           </div>
         )}
-        {vacTechs.length>0 && (
+        {vacTechs.length > 0 && (
           <div className="absolute bottom-1 left-0 right-0 flex justify-center space-x-0.5">
-            {vacTechs.map(id=>(
+            {vacTechs.map(id => (
               <span key={id}
                 className="w-2 h-2 rounded-full border border-current"
                 style={{ color: techColors[id] }}
+                title={`${technicians.find(t=>t.id===id)?.full_name} vrij`}
               />
             ))}
           </div>
         )}
       </button>
-    )
-  }
+    );
+  };
 
-  // SAVE WORKDAYS with local date formatting
+  // Save work days to Supabase
   async function saveWorkDays() {
-    if (!isPlanner || selectedTech==='all') return
-    await supabase.from('work_schedules')
-      .delete().eq('technician_id', selectedTech)
-    const inserts = workDays.map(d=>({
+    if (!isPlanner || selectedTech === 'all') return;
+    await supabase.from('work_schedules').delete().eq('technician_id', selectedTech);
+    const inserts = workDays.map(d => ({
       technician_id: selectedTech,
       date:          formatDateLocal(d),
       is_working:    true
-    }))
-    const { error } = await supabase.from('work_schedules').insert(inserts)
-    if (error) toast({ title:'Error', description:error.message, variant:'destructive' })
-    else     toast({ title:'Werkdagen opgeslagen' })
-    fetchSchedule(selectedTech)
+    }));
+    const { error } = await supabase.from('work_schedules').insert(inserts);
+    if (error) toast({ title: 'Error', description: error.message, variant: 'destructive' });
+    else      toast({ title: 'Werkdagen opgeslagen' });
+    fetchSchedule(selectedTech);
   }
 
+  // Delete all work days for this tech
   async function deleteWorkDays() {
-    if (!isPlanner || selectedTech==='all') return
-    await supabase.from('work_schedules')
-      .delete().eq('technician_id', selectedTech)
-    toast({ title:'Werkdagen verwijderd' })
-    setWorkDays([])
+    if (!isPlanner || selectedTech === 'all') return;
+    await supabase.from('work_schedules').delete().eq('technician_id', selectedTech);
+    toast({ title: 'Werkdagen verwijderd' });
+    setWorkDays([]);
   }
 
+  // Auto-fill Mon–Fri of current month
   function fillWorkDays() {
-    if (!isPlanner || selectedTech==='all') return
-    const days: Date[] = []
-    const now=new Date(), y=now.getFullYear(), m=now.getMonth()
-    for(let d=new Date(y,m,1); d<=new Date(y,m+1,0); d.setDate(d.getDate()+1)){
-      if(d.getDay()>0&&d.getDay()<6) days.push(new Date(d))
+    if (!isPlanner || selectedTech === 'all') return;
+    const days: Date[] = [];
+    const now = new Date(), y = now.getFullYear(), m = now.getMonth();
+    for (let d = new Date(y,m,1); d <= new Date(y,m+1,0); d.setDate(d.getDate()+1)) {
+      if (d.getDay() > 0 && d.getDay() < 6) days.push(new Date(d));
     }
-    setWorkDays(days)
+    setWorkDays(days);
   }
 
-  // ADD VACATION with local date formatting
+  // Submit a vacation request
   async function addVacation() {
-    if(!isPlanner||selectedTech==='all'||!vacationRange?.from||!vacationRange.to) return
-    const start = formatDateLocal(vacationRange.from)
-    const end   = formatDateLocal(vacationRange.to)
+    if (!isPlanner || selectedTech === 'all' || !vacationRange?.from || !vacationRange.to) return;
+    const start = formatDateLocal(vacationRange.from);
+    const end   = formatDateLocal(vacationRange.to);
     const { error } = await supabase.from('vacation_requests').insert([{
       technician_id: selectedTech,
       start_date:    start,
       end_date:      end,
       status:        'pending'
-    }])
-    if(error) toast({ title:'Error', description:error.message, variant:'destructive' })
+    }]);
+    if (error) toast({ title: 'Error', description: error.message, variant: 'destructive' });
     else {
-      toast({ title:'Vakantie aangevraagd' })
-      setVacDialogOpen(false)
-      setVacationRange(undefined)
-      fetchRequests()
+      toast({ title: 'Vakantie aangevraagd' });
+      setVacDialogOpen(false);
+      setVacationRange(undefined);
+      fetchRequests();
     }
   }
 
-  async function updateStatus(id:string,status:'approved'|'denied') {
+  // Approve or deny a request
+  async function updateStatus(id: string, status: 'approved'|'denied') {
     await supabase.from('vacation_requests')
-      .update({ status, approved_by:user?.id }).eq('id',id)
-    toast({ title:status==='approved'?'Goedgekeurd':'Afgewezen' })
-    fetchRequests(); fetchSchedule(selectedTech)
+      .update({ status, approved_by: user?.id })
+      .eq('id', id);
+    toast({ title: status === 'approved' ? 'Goedgekeurd' : 'Afgewezen' });
+    fetchRequests();
+    fetchSchedule(selectedTech);
   }
 
-  async function deleteVacation(id:string) {
-    await supabase.from('vacation_requests').delete().eq('id',id)
-    toast({ title:'Aanvraag verwijderd' })
-    fetchRequests(); fetchSchedule(selectedTech)
+  // Delete a vacation request
+  async function deleteVacation(id: string) {
+    await supabase.from('vacation_requests').delete().eq('id', id);
+    toast({ title: 'Aanvraag verwijderd' });
+    fetchRequests();
+    fetchSchedule(selectedTech);
   }
 
-  const modifiers: Modifiers = { work: workDays, vacation: vacationDays, ...allSchedules }
+  // Combined modifiers & classnames
+  const modifiers: Modifiers = {
+    work: workDays,
+    vacation: selectedTech === 'all' ? [] : currentVacDays,
+    ...allSchedules
+  };
   const classes: ModifierClasses = {
-    work: 'bg-red-500 text-white',
+    work:     'bg-red-500 text-white',
     vacation: 'bg-green-500 text-white',
     ...techColors
-  }
+  };
 
   return (
     <div className="p-6 bg-gray-50 min-h-screen">
       <div className="max-w-3xl mx-auto space-y-6">
+
         {isPlanner && (
           <TechnicianFilter
-            technicians={technicians.map(t=>({ id:t.id, name:t.full_name }))}
+            technicians={technicians.map(t => ({ id: t.id, name: t.full_name }))}
             selectedTechnician={selectedTech}
             onTechnicianChange={setSelectedTech}
           />
         )}
+
         <Card>
           <CardHeader><CardTitle>Agenda</CardTitle></CardHeader>
           <CardContent className="overflow-visible">
             <Calendar
               mode="multiple"
-              selected={selectedTech==='all'?undefined:workDays}
-              onSelect={dates=>{
-                if (selectedTech==='all') return
-                setWorkDays(dates as Date[])
+              selected={ selectedTech === 'all' ? undefined : workDays }
+              onSelect={ dates => {
+                if (selectedTech === 'all') return;
+                setWorkDays(dates as Date[]);
               }}
               modifiers={modifiers}
               modifiersClassNames={classes}
-              components={ selectedTech==='all'?{ Day: CustomDay } : {} }
+              components={ selectedTech === 'all' ? { Day: CustomDay } : {} }
+              classNames={{ day_selected: 'ring-2 ring-offset-2 ring-gray-500' }}
             />
-            <div className="mt-2 flex flex-wrap gap-2">
-              {selectedTech!=='all' && (
-                <>
-                  <Button onClick={fillWorkDays}>Vul werkdagen</Button>
-                  <Button onClick={saveWorkDays}>Opslaan werkdagen</Button>
-                  <Button variant="destructive" onClick={deleteWorkDays}>Verwijder werkdagen</Button>
-                  <Dialog open={isVacDialogOpen} onOpenChange={setVacDialogOpen}>
-                    <DialogTrigger asChild>
-                      <Button variant="outline">Vakantie toevoegen</Button>
-                    </DialogTrigger>
-                    <DialogContent className="space-y-4">
-                      <h3 className="text-lg font-medium">Vakantie aanvragen</h3>
-                      <Calendar
-                        mode="range"
-                        selected={vacationRange}
-                        onSelect={setVacationRange}
-                      />
-                      <div className="flex justify-end gap-2">
-                        <Button variant="outline" onClick={()=>setVacDialogOpen(false)}>Sluiten</Button>
-                        <Button onClick={addVacation} disabled={!(vacationRange?.from&&vacationRange.to)}>
-                          Sla vakantie op
-                        </Button>
-                      </div>
-                    </DialogContent>
-                  </Dialog>
-                </>
-              )}
-            </div>
+
+            {selectedTech !== 'all' && (
+              <div className="mt-2 flex flex-wrap gap-2">
+                <Button onClick={fillWorkDays}>Vul werkdagen</Button>
+                <Button onClick={saveWorkDays}>Opslaan werkdagen</Button>
+                <Button variant="destructive" onClick={deleteWorkDays}>Verwijder werkdagen</Button>
+                <Dialog open={isVacDialogOpen} onOpenChange={setVacDialogOpen}>
+                  <DialogTrigger asChild>
+                    <Button variant="outline">Vakantie toevoegen</Button>
+                  </DialogTrigger>
+                  <DialogContent className="space-y-4">
+                    <h3 className="text-lg font-medium">Vakantie aanvragen</h3>
+                    <Calendar
+                      mode="range"
+                      selected={vacationRange}
+                      onSelect={setVacationRange}
+                    />
+                    <div className="flex justify-end gap-2">
+                      <Button variant="outline" onClick={() => setVacDialogOpen(false)}>Sluiten</Button>
+                      <Button
+                        onClick={addVacation}
+                        disabled={!(vacationRange?.from && vacationRange.to)}
+                      >
+                        Sla vakantie op
+                      </Button>
+                    </div>
+                  </DialogContent>
+                </Dialog>
+              </div>
+            )}
           </CardContent>
         </Card>
 
         {/* Legenda */}
         <div className="mt-4 flex flex-wrap gap-4 text-sm">
           <div className="flex items-center space-x-1">
-            <span className="w-3 h-3 bg-red-500 inline-block"/><span>Werkdag</span>
+            <span className="w-3 h-3 bg-red-500 inline-block" /><span>Werkdag</span>
           </div>
           <div className="flex items-center space-x-1">
-            <span className="w-3 h-3 bg-green-500 inline-block"/><span>Vakantie</span>
+            <span className="w-3 h-3 bg-green-500 inline-block" /><span>Vakantie</span>
           </div>
-          {selectedTech==='all' && technicians.filter(t=>t.id!=='all').map(t=>(
+          {selectedTech === 'all' && technicians.filter(t => t.id !== 'all').map(t => (
             <div key={t.id} className="flex items-center space-x-1">
-              <span className={`w-3 h-3 inline-block ${techColors[t.id]}`}/><span>{t.full_name}</span>
+              <span
+                className="w-3 h-3 inline-block"
+                style={{ backgroundColor: techColors[t.id] }}
+              />
+              <span>{t.full_name}</span>
             </div>
           ))}
         </div>
@@ -302,48 +334,49 @@ const WorkSchedulePage: React.FC = () => {
         <Card>
           <CardHeader><CardTitle>Aanvragen</CardTitle></CardHeader>
           <CardContent>
-            <Tabs value={requestTab} onValueChange={v=>setRequestTab(v as RequestTab)}>
+            <Tabs value={requestTab} onValueChange={v => setRequestTab(v as RequestTab)}>
               <TabsList>
                 <TabsTrigger value="pending">Pending</TabsTrigger>
                 <TabsTrigger value="approved">Goedgekeurd</TabsTrigger>
                 <TabsTrigger value="denied">Afgekeurd</TabsTrigger>
               </TabsList>
               <TabsContent value="pending">
-                {requests.filter(r=>r.status==='pending').map(r=>(
+                {requests.filter(r => r.status === 'pending').map(r => (
                   <div key={r.id} className="flex justify-between items-center mb-2">
-                    <span>{r.technicianName} {r.startDate} - {r.endDate}</span>
+                    <span>{r.technicianName} {r.startDate} – {r.endDate}</span>
                     {isAdmin && (
                       <div className="space-x-2">
-                        <Button size="sm" onClick={()=>updateStatus(r.id,'approved')}>Akkoord</Button>
-                        <Button size="sm" variant="outline" onClick={()=>updateStatus(r.id,'denied')}>Weiger</Button>
-                        <Button size="sm" variant="destructive" onClick={()=>deleteVacation(r.id)}>Verwijder</Button>
+                        <Button size="sm" onClick={() => updateStatus(r.id,'approved')}>Akkoord</Button>
+                        <Button size="sm" variant="outline" onClick={() => updateStatus(r.id,'denied')}>Weiger</Button>
+                        <Button size="sm" variant="destructive" onClick={() => deleteVacation(r.id)}>Verwijder</Button>
                       </div>
                     )}
                   </div>
                 ))}
               </TabsContent>
               <TabsContent value="approved">
-                {requests.filter(r=>r.status==='approved').map(r=>(
+                {requests.filter(r => r.status === 'approved').map(r => (
                   <div key={r.id} className="flex justify-between items-center mb-2">
-                    <span>{r.technicianName} {r.startDate} - {r.endDate}</span>
-                    <Button size="sm" variant="destructive" onClick={()=>deleteVacation(r.id)}>Verwijder</Button>
+                    <span>{r.technicianName} {r.startDate} – {r.endDate}</span>
+                    <Button size="sm" variant="destructive" onClick={() => deleteVacation(r.id)}>Verwijder</Button>
                   </div>
                 ))}
               </TabsContent>
               <TabsContent value="denied">
-                {requests.filter(r=>r.status==='denied').map(r=>(
+                {requests.filter(r => r.status === 'denied').map(r => (
                   <div key={r.id} className="flex justify-between items-center mb-2">
-                    <span>{r.technicianName} {r.startDate} - {r.endDate}</span>
-                    <Button size="sm" variant="destructive" onClick={()=>deleteVacation(r.id)}>Verwijder</Button>
+                    <span>{r.technicianName} {r.startDate} – {r.endDate}</span>
+                    <Button size="sm" variant="destructive" onClick={() => deleteVacation(r.id)}>Verwijder</Button>
                   </div>
                 ))}
               </TabsContent>
             </Tabs>
           </CardContent>
         </Card>
+
       </div>
     </div>
-  )
-}
+  );
+};
 
-export default WorkSchedulePage
+export default WorkSchedulePage;
