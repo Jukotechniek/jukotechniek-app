@@ -11,62 +11,66 @@ const VacationRequests: React.FC = () => {
   const { user } = useAuth();
   const { toast } = useToast();
   const [requests, setRequests] = useState<VacationRequest[]>([]);
-  const [selectedRange, setSelectedRange] = useState<{ from: Date; to?: Date }>();
-  const [loading, setLoading] = useState(true);
+  const [selectedDates, setSelectedDates] = useState<Date[]>([]);
+  const [loading, setLoading] = useState(false);
   const isAdmin = user?.role === 'admin';
 
+  // Fetch bestaande aanvragen
   const fetchRequests = async () => {
     setLoading(true);
     const { data, error } = await supabase
       .from('vacation_requests')
       .select('*, profiles!vacation_requests_technician_id_fkey(full_name)')
-      .order('start_date');
-    if (error) console.error(error);
-    const formatted = (data || []).map(r => ({
-      id: r.id,
-      technicianId: r.technician_id,
-      technicianName: r.profiles?.full_name || '',
-      startDate: r.start_date,
-      endDate: r.end_date,
-      status: (r.status as VacationRequest['status']) || 'pending',
-      approvedBy: r.approved_by,
-    }));
-    setRequests(formatted);
+      .order('start_date', { ascending: true });
+    if (error) {
+      console.error(error);
+      toast({ title: 'Error', description: error.message, variant: 'destructive' });
+    } else {
+      setRequests(
+        (data || []).map(r => ({
+          id: r.id,
+          technicianId: r.technician_id,
+          technicianName: r.profiles?.full_name || '',
+          startDate: r.start_date,
+          endDate: r.end_date,
+          status: (r.status as VacationRequest['status']) || 'pending',
+          approvedBy: r.approved_by,
+        }))
+      );
+    }
     setLoading(false);
   };
 
   useEffect(() => { fetchRequests(); }, []);
 
-  const submitRequest = async () => {
-    if (!selectedRange?.from || !selectedRange.to) return;
-    const { error } = await supabase.from('vacation_requests').insert([
-      {
-        technician_id: user?.id,
-        start_date: selectedRange.from.toISOString().split('T')[0],
-        end_date: selectedRange.to.toISOString().split('T')[0],
-        status: 'pending',
-      },
-    ]);
+  // Voeg vakantie dagen toe
+  const submitVacation = async () => {
+    if (!user || selectedDates.length === 0) return;
+    setLoading(true);
+
+    const payload = selectedDates.map(d => ({
+      technician_id: user.id,
+      start_date: d.toISOString().slice(0, 10),
+      end_date:   d.toISOString().slice(0, 10),
+      status: 'pending',
+    }));
+
+    const { error } = await supabase
+      .from('vacation_requests')
+      .insert(payload);
+
     if (error) {
       toast({ title: 'Error', description: error.message, variant: 'destructive' });
-      return;
+    } else {
+      toast({ title: 'Vakantie toegevoegd', description: 'Je aanvraag is opgeslagen.' });
+      setSelectedDates([]);
+      fetchRequests();
     }
-    try {
-      await supabase.functions.invoke('vacation-request-email', {
-        body: {
-          technicianId: user?.id,
-          startDate: selectedRange.from.toISOString(),
-          endDate: selectedRange.to.toISOString(),
-        },
-      });
-    } catch (err) {
-      console.error('Email function error', err);
-    }
-    toast({ title: 'Aanvraag verstuurd', description: 'Je vrije dag is aangevraagd' });
-    setSelectedRange(undefined);
-    fetchRequests();
+
+    setLoading(false);
   };
 
+  // Admin: update status
   const updateStatus = async (id: string, status: 'approved' | 'denied') => {
     const { error } = await supabase
       .from('vacation_requests')
@@ -79,20 +83,32 @@ const VacationRequests: React.FC = () => {
   return (
     <div className="p-6 bg-gray-50 min-h-screen">
       <div className="max-w-3xl mx-auto space-y-6">
-        <Card>
-          <CardHeader>
-            <CardTitle>Vrije dag aanvragen</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <Calendar mode="range" selected={selectedRange} onSelect={setSelectedRange} />
-            <Button onClick={submitRequest} className="mt-4 bg-red-600 hover:bg-red-700 text-white">
-              Aanvragen
-            </Button>
-          </CardContent>
-        </Card>
+        {/* Vakantie aanvragen: multiple-dag selectie */}
         <Card>
           <CardHeader>
             <CardTitle>Vakantie aanvragen</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Calendar
+              mode="multiple"
+              selected={selectedDates}
+              onSelect={setSelectedDates}
+              disabled={loading}
+            />
+            <Button
+              onClick={submitVacation}
+              className="mt-4 bg-green-600 hover:bg-green-700 text-white"
+              disabled={loading || selectedDates.length === 0}
+            >
+              Voeg vakantie toe
+            </Button>
+          </CardContent>
+        </Card>
+
+        {/* Overzicht aanvragen */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Ingediende vakanties</CardTitle>
           </CardHeader>
           <CardContent>
             {loading ? (

@@ -13,6 +13,7 @@ interface Message {
   text: string;
   isUser: boolean;
   timestamp: string;
+  table?: Record<string, string>[];
 }
 
 interface AIConfig {
@@ -21,18 +22,15 @@ interface AIConfig {
   is_enabled: boolean;
 }
 
-
 const AIChatbot: React.FC = () => {
   const { user } = useAuth();
   const { toast } = useToast();
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      id: 'welcome',
-      text: 'Hallo! Ik ben je AI-assistent. Hoe kan ik je vandaag helpen?',
-      isUser: false,
-      timestamp: new Date().toISOString(),
-    },
-  ]);
+  const [messages, setMessages] = useState<Message[]>([{
+    id: 'welcome',
+    text: 'Hallo! Ik ben je AI-assistent. Hoe kan ik je vandaag helpen?',
+    isUser: false,
+    timestamp: new Date().toISOString(),
+  }]);
   const [inputMessage, setInputMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [showConfig, setShowConfig] = useState(false);
@@ -42,17 +40,13 @@ const AIChatbot: React.FC = () => {
 
   const isAdmin = user?.role === 'admin';
 
-  // Altijd AI-config ophalen bij laden
   useEffect(() => {
     fetchAIConfig();
   }, []);
 
   const fetchAIConfig = async () => {
     try {
-      const { data, error } = await supabase
-        .from('ai_assistant_config')
-        .select('*')
-        .single();
+      const { data, error } = await supabase.from('ai_assistant_config').select('*').single();
       if (!error && data) {
         setAiConfig(data);
         setWebhookUrl(data.webhook_url || '');
@@ -62,7 +56,6 @@ const AIChatbot: React.FC = () => {
     }
   };
 
-  // Alleen admins kunnen opslaan
   const saveAIConfig = async () => {
     if (!isAdmin) return;
     setLoadingConfig(true);
@@ -110,6 +103,7 @@ const AIChatbot: React.FC = () => {
       const botMsg: Message = {
         id: Date.now().toString(),
         text: data.text,
+        table: data.table || undefined,
         isUser: false,
         timestamp: new Date().toISOString(),
       };
@@ -131,7 +125,6 @@ const AIChatbot: React.FC = () => {
   return (
     <div className="p-6 bg-gray-50 min-h-screen">
       <div className="max-w-4xl mx-auto">
-        {/* Header met live status */}
         <div className="mb-8 flex justify-between items-center">
           <div className="flex items-center space-x-3">
             <h1 className="text-3xl font-bold text-gray-900">AI Assistent</h1>
@@ -140,7 +133,6 @@ const AIChatbot: React.FC = () => {
               {aiConfig?.is_enabled ? 'Live' : 'Offline'}
             </span>
           </div>
-          {/* Configuratieknop alleen voor admin */}
           {isAdmin && (
             <Button onClick={() => setShowConfig(!showConfig)} variant="outline" className="border-red-600 text-red-600 hover:bg-red-50">
               <Settings className="h-4 w-4 mr-2" />
@@ -149,7 +141,6 @@ const AIChatbot: React.FC = () => {
           )}
         </div>
 
-        {/* Configuratiepaneel voor admin */}
         {isAdmin && showConfig && (
           <Card className="bg-white mb-6 shadow-sm">
             <CardHeader>
@@ -171,7 +162,6 @@ const AIChatbot: React.FC = () => {
           </Card>
         )}
 
-        {/* Chat */}
         <Card className="bg-white shadow-sm">
           <CardHeader>
             <CardTitle className="flex items-center">
@@ -181,55 +171,79 @@ const AIChatbot: React.FC = () => {
           <CardContent className="p-0">
             <div className="h-96 overflow-y-auto p-4 space-y-4">
               {messages.map((m) => (
-                <div key={m.id} className={`flex ${m.isUser ? 'justify-end' : 'justify-start'}`}> 
-                  <div className={`px-4 py-2 rounded-lg max-w-md ${m.isUser ? 'bg-red-600 text-white' : 'bg-gray-100 text-gray-900'}`}> 
-                    <div className="flex items-start space-x-2"> 
-                      {m.isUser ? <User className="h-4 w-4 mt-0.5" /> : <Bot className="h-4 w-4 mt-0.5 text-red-600" />} 
-                      <div> 
-                        <p className="text-sm">{m.text}</p> 
-                        <p className="text-xs mt-1 text-gray-500"> 
-                          {new Date(m.timestamp).toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' })} 
-                        </p> 
-                      </div> 
-                    </div> 
-                  </div> 
-                </div> 
-              ))} 
-              {isLoading && ( 
-                <div className="flex justify-start"> 
-                  <div className="px-4 py-2 rounded-lg bg-gray-100"> 
-                    <div className="flex items-center space-x-1"> 
-                      <Bot className="h-4 w-4 text-red-600" /> 
-                      <div className="flex space-x-1"> 
-                        <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div> 
-                        <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div> 
-                        <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div> 
-                      </div> 
-                    </div> 
-                  </div> 
-                </div> 
-              )} 
-            </div> 
-            <div className="border-t p-4"> 
-              <div className="flex space-x-2"> 
-                <Input 
-                  value={inputMessage} 
-                  onChange={(e) => setInputMessage(e.target.value)} 
-                  onKeyPress={handleKeyPress} 
-                  placeholder="Typ je bericht..." 
-                  disabled={isLoading} 
-                  className="flex-1 focus:ring-red-500 focus:border-red-500" 
-                /> 
-                <Button onClick={sendMessage} disabled={isLoading || !inputMessage.trim()} className="bg-red-600 hover:bg-red-700 text-white"> 
-                  <Send className="h-4 w-4" /> 
-                </Button> 
-              </div> 
-            </div> 
-          </CardContent> 
-        </Card> 
-      </div> 
-    </div> 
-  ); 
-}; 
+                <div key={m.id} className={`flex ${m.isUser ? 'justify-end' : 'justify-start'}`}>
+                  <div className={`px-4 py-2 rounded-lg max-w-md ${m.isUser ? 'bg-red-600 text-white' : 'bg-gray-100 text-gray-900'}`}>
+                    <div className="flex items-start space-x-2">
+                      {m.isUser ? <User className="h-4 w-4 mt-0.5" /> : <Bot className="h-4 w-4 mt-0.5 text-red-600" />}
+                      <div>
+                        <div className="text-sm">
+                          <p>{m.text}</p>
+                          {m.table && m.table.length > 0 && (
+                            <div className="overflow-x-auto mt-2">
+                              <table className="min-w-full text-sm border border-gray-300">
+                                <thead className="bg-gray-100">
+                                  <tr>
+                                    {Object.keys(m.table[0]).map((col) => (
+                                      <th key={col} className="px-2 py-1 border font-bold text-left">{col}</th>
+                                    ))}
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {m.table.map((row, rowIndex) => (
+                                    <tr key={rowIndex}>
+                                      {Object.values(row).map((val, i) => (
+                                        <td key={i} className="px-2 py-1 border">{val}</td>
+                                      ))}
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          )}
+                        </div>
+                        <p className="text-xs mt-1 text-gray-500">
+                          {new Date(m.timestamp).toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' })}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+              {isLoading && (
+                <div className="flex justify-start">
+                  <div className="px-4 py-2 rounded-lg bg-gray-100">
+                    <div className="flex items-center space-x-1">
+                      <Bot className="h-4 w-4 text-red-600" />
+                      <div className="flex space-x-1">
+                        <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
+                        <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
+                        <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+            <div className="border-t p-4">
+              <div className="flex space-x-2">
+                <Input
+                  value={inputMessage}
+                  onChange={(e) => setInputMessage(e.target.value)}
+                  onKeyPress={handleKeyPress}
+                  placeholder="Typ je bericht..."
+                  disabled={isLoading}
+                  className="flex-1 focus:ring-red-500 focus:border-red-500"
+                />
+                <Button onClick={sendMessage} disabled={isLoading || !inputMessage.trim()} className="bg-red-600 hover:bg-red-700 text-white">
+                  <Send className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
+};
 
 export default AIChatbot;
