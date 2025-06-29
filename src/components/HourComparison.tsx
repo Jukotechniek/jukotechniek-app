@@ -289,9 +289,9 @@ const HourComparisonComponent: React.FC = () => {
   const getStatusText = (s: string) => {
     switch (s) {
       case 'match': return 'MATCH';
-      case 'discrepancy': return 'DISCREPANCY';
-      case 'missing_manual': return 'MISSING MANUAL';
-      case 'missing_webhook': return 'MISSING WEBHOOK';
+      case 'discrepancy': return 'DISCREPANTIE';
+      case 'missing_manual': return 'MISSENDE MANUALE UREN';
+      case 'missing_webhook': return 'MISSENDE WEBHOOK';
       default: return s.toUpperCase();
     }
   };
@@ -309,11 +309,11 @@ const HourComparisonComponent: React.FC = () => {
       <div className="max-w-7xl mx-auto">
         <div className="mb-8 flex justify-between items-center">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">Hour Verification</h1>
-            <p className="text-gray-600">Compare and verify manual vs webhook hours</p>
+            <h1 className="text-3xl font-bold text-gray-900 mb-2">Uren verificatie</h1>
+            <p className="text-gray-600">Vergelijk en verifieer handmatige vs webhook uren</p>
           </div>
           <Button onClick={handleRefresh} className="bg-red-600 hover:bg-red-700 text-white">
-            <RefreshCw className="h-4 w-4 mr-2" /> Refresh
+            <RefreshCw className="h-4 w-4 mr-2" /> Vernieuwen
           </Button>
         </div>
 
@@ -347,7 +347,7 @@ const HourComparisonComponent: React.FC = () => {
             <CardContent className="p-6 flex items-center">
               <XCircle className="h-8 w-8 text-red-600 mr-4" />
               <div>
-                <p className="text-sm text-gray-600">Missing</p>
+                <p className="text-sm text-gray-600">Missende</p>
                 <p className="text-2xl font-bold text-gray-900">
                   {comparisons.filter(c => c.status.includes('missing')).length}
                 </p>
@@ -372,7 +372,7 @@ const HourComparisonComponent: React.FC = () => {
         <Card className="bg-white shadow-sm">
           <CardHeader>
             <CardTitle className="text-lg font-semibold text-gray-900">
-              Comparison Results ({comparisons.length} entries)
+              Vergelijk resultaat ({comparisons.length} entries)
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -381,12 +381,12 @@ const HourComparisonComponent: React.FC = () => {
                 <thead>
                   <tr className="border-b border-gray-200">
                     <th className="py-3 text-sm font-medium text-gray-600">Status</th>
-                    <th className="py-3 text-sm font-medium text-gray-600">Technician</th>
-                    <th className="py-3 text-sm font-medium text-gray-600">Date</th>
-                    <th className="py-3 text-sm font-medium text-gray-600">Manual Hours</th>
-                    <th className="py-3 text-sm font-medium text-gray-600">Webhook Hours</th>
-                    <th className="py-3 text-sm font-medium text-gray-600">Difference</th>
-                    <th className="py-3 text-sm font-medium text-gray-600">Actions</th>
+                    <th className="py-3 text-sm font-medium text-gray-600">Monteur</th>
+                    <th className="py-3 text-sm font-medium text-gray-600">Datum</th>
+                    <th className="py-3 text-sm font-medium text-gray-600">Handmatige Uren</th>
+                    <th className="py-3 text-sm font-medium text-gray-600">Webhook Uren</th>
+                    <th className="py-3 text-sm font-medium text-gray-600">Verschil</th>
+                    <th className="py-3 text-sm font-medium text-gray-600">Acties</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -441,7 +441,7 @@ const HourComparisonComponent: React.FC = () => {
                             Verify
                           </Button>
                         ) : (
-                          <span className="text-gray-500">No webhook data</span>
+                          <span className="text-gray-500">Geen webhook gegevens</span>
                         )}
                       </td>
                     </tr>
@@ -449,7 +449,7 @@ const HourComparisonComponent: React.FC = () => {
                   {comparisons.length === 0 && (
                     <tr>
                       <td colSpan={7} className="py-8 text-center text-gray-500">
-                        No comparison data available
+                        Geen vergelijkingsgegevens beschikbaar
                       </td>
                     </tr>
                   )}

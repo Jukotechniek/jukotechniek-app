@@ -41,37 +41,48 @@ const Dashboard: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    if (!rawWorkHours.length) return;
+  if (!rawWorkHours.length) return;
 
-    let filteredWorkHours: any[] = [];
+  let filtered = rawWorkHours;
 
-    if (isAdmin) {
-      filteredWorkHours =
-        selectedTechnician === 'all'
-          ? rawWorkHours
-          : rawWorkHours.filter(e => e.technician_id === selectedTechnician);
-    } else {
-      // non-admin: filter op technicus en op maand, of alle data als selectedMonth === ''
-      if (selectedMonth) {
-        const [year, month] = selectedMonth.split('-').map(n => parseInt(n, 10));
-        filteredWorkHours = rawWorkHours.filter(e => {
-          const d = new Date(e.date);
-          return (
-            e.technician_id === user?.id &&
-            d.getFullYear() === year &&
-            d.getMonth() + 1 === month
-          );
-        });
-      } else {
-        filteredWorkHours = rawWorkHours.filter(e => e.technician_id === user?.id);
-      }
-      const uren = filteredWorkHours.reduce((sum, e) => sum + Number(e.hours_worked || 0), 0);
-      setMonthlyHours(uren);
+  // —————— 1) Technicus-filter (admin vs user) ——————
+  if (isAdmin) {
+    if (selectedTechnician !== 'all') {
+      filtered = filtered.filter(e => e.technician_id === selectedTechnician);
     }
+  } else {
+    // jouw bestaande non-admin filter op eigen user.id
+    if (selectedMonth) {
+      const [y, m] = selectedMonth.split('-').map(n => parseInt(n, 10));
+      filtered = filtered.filter(e => {
+        const d = new Date(e.date);
+        return (
+          e.technician_id === user?.id &&
+          d.getFullYear() === y &&
+          d.getMonth() + 1 === m
+        );
+      });
+    } else {
+      filtered = filtered.filter(e => e.technician_id === user?.id);
+    }
+    const uren = filtered.reduce((sum, e) => sum + Number(e.hours_worked || 0), 0);
+    setMonthlyHours(uren);
+  }
 
-    setTechnicianData(processTechnicianData(filteredWorkHours, rawRates));
-    setWeeklyData(processWeeklyData(filteredWorkHours));
-  }, [rawWorkHours, rawRates, selectedTechnician, isAdmin, selectedMonth]);
+  // —————— 2) Maand-filter voor admin toevoegen ——————
+  if (isAdmin && selectedMonth) {
+    const [year, month] = selectedMonth.split('-').map(n => parseInt(n, 10));
+    filtered = filtered.filter(e => {
+      const d = new Date(e.date);
+      return d.getFullYear() === year && d.getMonth() + 1 === month;
+    });
+  }
+
+  // —————— verwerk en zet state ——————
+  setTechnicianData(processTechnicianData(filtered, rawRates));
+  setWeeklyData(processWeeklyData(filtered));
+}, [rawWorkHours, rawRates, selectedTechnician, selectedMonth, isAdmin]);
+
 
   const fetchDashboardData = async () => {
     setLoading(true);
@@ -202,30 +213,35 @@ const Dashboard: React.FC = () => {
   return (
     <div className="p-6 bg-gray-50 min-h-screen">
       <div className="max-w-7xl mx-auto">
-        {isAdmin ? (
-          <TechnicianFilter
-            technicians={availableTechnicians}
-            selectedTechnician={selectedTechnician}
-            onTechnicianChange={setSelectedTechnician}
-          />
-        ) : (
-          <div className="mb-4 flex items-center space-x-4">
-            <label htmlFor="monthPicker" className="text-gray-600">Select month:</label>
-            <input
-              id="monthPicker"
-              type="month"
-              value={selectedMonth}
-              onChange={e => setSelectedMonth(e.target.value)}
-              className="border rounded p-1"
-            />
-            <button
-              onClick={() => setSelectedMonth('')}
-              className="px-3 py-1 bg-red-600 text-white rounded hover:bg-red-700"
-            >
-              Alles weergeven
-            </button>
-          </div>
-        )}
+       <div className="mb-4 flex items-center space-x-6">
+  {/* 1. Technician dropdown (admin én user nodig?) */}
+  {isAdmin && (
+    <TechnicianFilter
+      technicians={availableTechnicians}
+      selectedTechnician={selectedTechnician}
+      onTechnicianChange={setSelectedTechnician}
+    />
+  )}
+
+  {/* 2. Maand-picker + “Alles weergeven” */}
+  <div className="flex items-center space-x-2">
+    <label htmlFor="monthPicker" className="text-gray-600">Select month:</label>
+    <input
+      id="monthPicker"
+      type="month"
+      value={selectedMonth}
+      onChange={e => setSelectedMonth(e.target.value)}
+      className="border rounded p-1"
+    />
+    <button
+      onClick={() => setSelectedMonth('')}
+      className="px-3 py-1 bg-red-600 text-white rounded hover:bg-red-700"
+    >
+      Alles weergeven
+    </button>
+  </div>
+</div>
+
         <header className="mb-8">
           <h1 className="text-3xl font-bold text-gray-900 mb-2">
             Dashboard — {isAdmin ? 'Admin View' : 'Personal View'}
