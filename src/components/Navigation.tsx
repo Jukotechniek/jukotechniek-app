@@ -49,6 +49,7 @@ const Navigation: React.FC<NavigationProps> = ({ activeTab, onTabChange }) => {
     { id: 'hours', label: 'Mijn Uren', icon: Clock },
     { id: 'projects', label: 'Mijn Projecten', icon: Briefcase },
     { id: 'schedule', label: 'Agenda', icon: CalendarDays },
+    { id: 'users', label: 'Mijn Account', icon: Users },
     { id: 'chatbot', label: 'AI Assistent', icon: Bot }
   ];
 
@@ -122,7 +123,7 @@ const Navigation: React.FC<NavigationProps> = ({ activeTab, onTabChange }) => {
 
           {/* Desktop user (welkom + uitloggen) */}
           <div className="items-center space-x-4 hidden md:flex">
-            <span className="text-sm text-gray-300">Welkom, {user?.fullName}</span>
+            <span className="text-sm text-gray-300">Welkom, {user?.fullName || user?.username}</span>
             <Button
               variant="outline"
               onClick={logout}
