@@ -33,30 +33,30 @@ const Navigation: React.FC<NavigationProps> = ({ activeTab, onTabChange }) => {
 
   const adminTabs = [
     { id: 'dashboard', label: 'Dashboard', icon: BarChart3 },
-    { id: 'hours', label: 'Work Hours', icon: Clock },
-    { id: 'projects', label: 'Projects', icon: Briefcase },
-    { id: 'schedule', label: 'Schedule', icon: CalendarDays },
-    { id: 'customers', label: 'Customers', icon: Building2 },
-    { id: 'billing', label: 'Billing', icon: DollarSign },
-    { id: 'verification', label: 'Hour Verification', icon: CheckCircle },
-    { id: 'users', label: 'User Management', icon: Users },
-    { id: 'reports', label: 'Reports', icon: FileText },
-    { id: 'chatbot', label: 'AI Assistant', icon: Bot }
+    { id: 'hours', label: 'Werk Uren', icon: Clock },
+    { id: 'projects', label: 'Projecten', icon: Briefcase },
+    { id: 'schedule', label: 'Agenda', icon: CalendarDays },
+    { id: 'customers', label: 'Klanten', icon: Building2 },
+    { id: 'billing', label: 'Tarieven', icon: DollarSign },
+    { id: 'verification', label: 'Uren Verificatie', icon: CheckCircle },
+    { id: 'users', label: 'Gebruikersbeheer', icon: Users },
+    { id: 'reports', label: 'Rapporten', icon: FileText },
+    { id: 'chatbot', label: 'AI Assistent', icon: Bot }
   ];
 
   const technicianTabs = [
     { id: 'dashboard', label: 'Dashboard', icon: BarChart3 },
-    { id: 'hours', label: 'My Hours', icon: Clock },
-    { id: 'projects', label: 'My Projects', icon: Briefcase },
+    { id: 'hours', label: 'Mijn Uren', icon: Clock },
+    { id: 'projects', label: 'Mijn Projecten', icon: Briefcase },
     { id: 'schedule', label: 'Agenda', icon: CalendarDays },
-    { id: 'chatbot', label: 'AI Assistant', icon: Bot }
+    { id: 'chatbot', label: 'AI Assistent', icon: Bot }
   ];
 
   const opdrachtgeverTabs = [
     { id: 'dashboard', label: 'Dashboard', icon: BarChart3 },
-    { id: 'projects', label: 'Projects', icon: Briefcase },
-    { id: 'schedule', label: 'Schedule', icon: CalendarDays },
-    { id: 'chatbot', label: 'AI Assistant', icon: Bot }
+    { id: 'projects', label: 'Projecten', icon: Briefcase },
+    { id: 'schedule', label: 'Agenda', icon: CalendarDays },
+    { id: 'chatbot', label: 'AI Assistent', icon: Bot }
   ];
 
   const tabs = isAdmin ? adminTabs : isOpdrachtgever ? opdrachtgeverTabs : technicianTabs;
@@ -147,14 +147,29 @@ const Navigation: React.FC<NavigationProps> = ({ activeTab, onTabChange }) => {
           </div>
 
           <div className="flex items-center space-x-4">
-            <span className="text-sm text-gray-300">Welcome, {user?.fullName}</span>
-            <Button
-              variant="outline"
-              onClick={logout}
-              className="border-gray-600 text-gray-300 hover:bg-red-600 hover:text-white hover:border-red-600"
-            >
-              Logout
-            </Button>
+            <span className="text-sm text-gray-300">Welkom, {user?.fullName}</span>
+           <Button
+  variant="outline"
+  onClick={logout}
+  className="
+    bg-red-600         /* standaard rode achtergrond */
+    text-white         /* standaard witte tekst */
+    border-2           /* iets dikkere rand */
+    border-red-600     /* rand in rode kleur */
+    px-4 py-2          /* padding */
+    rounded-lg         /* afgeronde hoeken */
+    font-medium        /* iets vetter lettertype */
+    transition-colors  /* vloeiende overgang */
+    duration-200       /* 200ms animatie */
+    hover:bg-white     /* bij hover witte achtergrond */
+    hover:text-red-600 /* bij hover rode tekst */
+    hover:border-red-600
+  "
+>
+  Uitloggen
+</Button>
+
+
           </div>
         </div>
       </div>
