@@ -256,26 +256,26 @@ const Dashboard: React.FC = () => {
         {/* Key Metrics */}
         <div className={`grid grid-cols-1 md:grid-cols-2 lg:grid-cols-${isAdmin ? '4' : '3'} gap-6 mb-8`}>
           <Card><CardContent>
-            <p className="text-sm text-gray-600">Total Hours</p>
+            <p className="text-sm text-gray-600">Totale uren</p>
             <p className="text-2xl font-bold">{totalHours.toFixed(1)}h</p>
           </CardContent></Card>
 
           {isAdmin && (
             <Card><CardContent>
-              <p className="text-sm text-gray-600">Total Revenue</p>
+              <p className="text-sm text-gray-600">Totale omzet</p>
               <p className="text-2xl font-bold">{formatCurrency(technicianData.reduce((s,t)=>s+t.revenue,0))}</p>
             </CardContent></Card>
           )}
 
           {isAdmin && (
             <Card><CardContent>
-              <p className="text-sm text-gray-600">Total Profit</p>
+              <p className="text-sm text-gray-600">Totale winst</p>
               <p className="text-2xl font-bold">{formatCurrency(technicianData.reduce((s,t)=>s+t.profit,0))}</p>
             </CardContent></Card>
           )}
 
           <Card><CardContent>
-            <p className="text-sm text-gray-600">Avg Hours/Day</p>
+            <p className="text-sm text-gray-600">Gemiddelde uren/dag</p>
             <p className="text-2xl font-bold">{avgHoursPerDay}h</p>
           </CardContent></Card>
 
@@ -291,7 +291,7 @@ const Dashboard: React.FC = () => {
 
         {/* Charts */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
-          <Card><CardHeader><CardTitle>Weekly Hours Trend</CardTitle></CardHeader><CardContent>
+          <Card><CardHeader><CardTitle>Wekelijkse uren</CardTitle></CardHeader><CardContent>
             <ResponsiveContainer width="100%" height={300}>
               <BarChart data={weeklyData}>
                 <CartesianGrid strokeDasharray="3 3" />
@@ -304,7 +304,7 @@ const Dashboard: React.FC = () => {
           </CardContent></Card>
 
           {isAdmin && (
-            <Card><CardHeader><CardTitle>Profit Distribution</CardTitle></CardHeader><CardContent>
+            <Card><CardHeader><CardTitle>Winstverdeling</CardTitle></CardHeader><CardContent>
               <ResponsiveContainer width="100%" height={300}>
                 <PieChart>
                   <Pie
@@ -324,7 +324,7 @@ const Dashboard: React.FC = () => {
 
         {/* Overtime Breakdown (Admin) */}
         {isAdmin && (
-          <Card className="mb-8"><CardHeader><CardTitle>Overtime by Technician (125%, 150%, 200%)</CardTitle></CardHeader><CardContent>
+          <Card className="mb-8"><CardHeader><CardTitle>Overtime per monteur (125%, 150%, 200%)</CardTitle></CardHeader><CardContent>
             <ResponsiveContainer width="100%" height={300}>
               <BarChart data={technicianData}>
                 <CartesianGrid strokeDasharray="3 3" />
@@ -342,13 +342,13 @@ const Dashboard: React.FC = () => {
 
         {/* Admin Performance Table */}
         {isAdmin && (
-          <Card><CardHeader><CardTitle>Technician Performance Overview</CardTitle></CardHeader><CardContent>
+          <Card><CardHeader><CardTitle>Monteur Prestatie Overzicht</CardTitle></CardHeader><CardContent>
             <div className="overflow-x-auto">
               <table className="w-full text-left">
                 <thead>
                   <tr className="border-b">
-                    <th>Technician</th><th>Total Hours</th><th>Days Worked</th>
-                    <th>Revenue</th><th>Costs</th><th>Profit</th><th>Margin %</th><th>Last Worked</th>
+                    <th>Monteur</th><th>Totaal Uren</th><th>Dagen Gewerkt</th>
+                    <th>Omzet</th><th>Kosten</th><th>Winst</th><th>Margin %</th><th>Laatste Werkdag</th>
                   </tr>
                 </thead>
                 <tbody>
