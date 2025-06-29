@@ -9,8 +9,8 @@ import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 
 const LoginForm = () => {
-  const [credentials, setCredentials] = useState({ 
-    username: '', 
+  const [credentials, setCredentials] = useState({
+    email: '',
     password: ''
   });
   const [loading, setLoading] = useState(false);
@@ -26,14 +26,14 @@ const LoginForm = () => {
 
   try {
     const success = await login({
-      username: credentials.username,
+      email: credentials.email,
       password: credentials.password
     });
 
     if (!success) {
       toast({
         title: "Login Failed",
-        description: "Invalid username or password",
+        description: "Invalid email or password",
         variant: "destructive"
       });
     }
@@ -129,13 +129,13 @@ const LoginForm = () => {
           ) : (
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="username">Username</Label>
+                <Label htmlFor="email">Email</Label>
                 <Input
-                  id="username"
-                  type="text"
-                  value={credentials.username}
-                  onChange={(e) => setCredentials({ ...credentials, username: e.target.value })}
-                  placeholder="Enter your username"
+                  id="email"
+                  type="email"
+                  value={credentials.email}
+                  onChange={(e) => setCredentials({ ...credentials, email: e.target.value })}
+                  placeholder="Enter your email"
                   required
                   className="border-gray-300 focus:border-red-500"
                 />

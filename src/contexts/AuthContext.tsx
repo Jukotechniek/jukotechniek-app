@@ -7,7 +7,7 @@ import { Session } from '@supabase/supabase-js';
 interface AuthContextType extends AuthState {
   login: (credentials: LoginCredentials) => Promise<boolean>;
   logout: () => void;
-  signUp: (credentials: LoginCredentials & { email: string; fullName: string }) => Promise<boolean>;
+  signUp: (credentials: LoginCredentials & { username: string; fullName: string }) => Promise<boolean>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -133,11 +133,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const login = async (credentials: LoginCredentials): Promise<boolean> => {
-    console.log('Login attempt for:', credentials.username);
-    
+    console.log('Login attempt for:', credentials.email);
+
     try {
       const { data, error } = await supabase.auth.signInWithPassword({
-        email: credentials.username.includes('@') ? credentials.username : `${credentials.username}@jukotechniek.nl`,
+        email: credentials.email,
         password: credentials.password
       });
 
@@ -154,7 +154,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const signUp = async (credentials: LoginCredentials & { email: string; fullName: string }): Promise<boolean> => {
+  const signUp = async (credentials: LoginCredentials & { username: string; fullName: string }): Promise<boolean> => {
     try {
       const { data, error } = await supabase.auth.signUp({
         email: credentials.email,
