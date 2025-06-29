@@ -52,7 +52,6 @@ const Projects = () => {
     'completed': false
   });
 
-  // Ophalen van ALLE monteurs (profielen)
   const fetchData = async () => {
     setLoading(true);
     try {
@@ -103,7 +102,6 @@ const Projects = () => {
 
   const isAdmin = user?.role === 'admin' || user?.role === 'opdrachtgever';
 
-  // Voor het filtermenu blijven we de oude technicians array gebruiken
   const technicians = Array.from(
     new Map(projects.map(p => [p.technicianId, p.technicianName])).entries()
   ).filter(([id]) => !!id && !!id.trim())
@@ -151,23 +149,27 @@ const Projects = () => {
     setSelectedImages(prev => prev.filter((_, i) => i !== index));
   };
 
+  // Uren alleen verplicht als status "completed" is
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (
       !newProject.title ||
       !newProject.date ||
-      !newProject.hoursSpent ||
       !newProject.customerId ||
-      (isAdmin && !newProject.technicianId)
+      (isAdmin && !newProject.technicianId) ||
+      (newProject.status === 'completed' && !newProject.hoursSpent)
     ) {
       toast({ title: "Fout", description: "Vul alle verplichte velden in", variant: "destructive" });
       return;
     }
-    const hours = parseFloat(newProject.hoursSpent);
-    if (hours <= 0 || hours > 24) {
-      toast({ title: "Fout", description: "Uren moeten tussen 0 en 24 liggen", variant: "destructive" });
-      return;
+    if (newProject.status === 'completed') {
+      const hours = parseFloat(newProject.hoursSpent);
+      if (isNaN(hours) || hours <= 0 || hours > 24) {
+        toast({ title: "Fout", description: "Uren moeten tussen 0 en 24 liggen", variant: "destructive" });
+        return;
+      }
     }
+
     const technicianIdToSave = isAdmin
       ? newProject.technicianId
       : user?.id;
@@ -179,7 +181,7 @@ const Projects = () => {
           title: newProject.title,
           description: newProject.description,
           date: newProject.date,
-          hours_spent: hours,
+          hours_spent: newProject.status === 'completed' ? parseFloat(newProject.hoursSpent) : null,
           status: newProject.status,
           customer_id: newProject.customerId,
           technician_id: technicianIdToSave
@@ -197,7 +199,7 @@ const Projects = () => {
         title: newProject.title,
         description: newProject.description,
         date: newProject.date,
-        hours_spent: hours,
+        hours_spent: newProject.status === 'completed' ? parseFloat(newProject.hoursSpent) : null,
         status: newProject.status,
         images: []
       }]);
@@ -232,7 +234,7 @@ const Projects = () => {
     setNewProject({
       title: project.title,
       description: project.description,
-      hoursSpent: project.hoursSpent.toString(),
+      hoursSpent: project.hoursSpent ? project.hoursSpent.toString() : '',
       customerId: project.customerId,
       date: project.date,
       status: project.status,
@@ -256,21 +258,22 @@ const Projects = () => {
     fetchData();
   };
 
-  const handleStatusChange = async (projectId: string, newStatus: Project['status']) => {
+  // Status-knoppen per project: admin of toegewezen monteur mag status zetten
+  const handleStatusChange = async (project: Project, newStatus: Project['status']) => {
+    // Alleen uren verplicht als je op voltooid zet
+    if (newStatus === 'completed' && (!project.hoursSpent || project.hoursSpent <= 0)) {
+      toast({ title: 'Fout', description: 'Voer eerst het aantal bestede uren in via "Bewerken"', variant: 'destructive' });
+      return;
+    }
     const { error } = await supabase
       .from('projects')
       .update({ status: newStatus })
-      .eq('id', projectId);
+      .eq('id', project.id);
     if (error) {
       toast({ title: 'Fout', description: error.message, variant: 'destructive' });
       return;
     }
-    const statusText = newStatus === 'completed'
-      ? 'voltooid'
-      : newStatus === 'needs-review'
-        ? 'heeft controle nodig'
-        : 'in behandeling';
-    toast({ title: 'Succes', description: `Project status bijgewerkt naar: ${statusText}` });
+    toast({ title: 'Succes', description: `Project status bijgewerkt naar: ${getStatusText(newStatus)}` });
     fetchData();
   };
 
@@ -289,57 +292,87 @@ const Projects = () => {
     }
   };
 
-  const renderProjectCard = (project: Project) => {
-    const card = (
-      <Card key={project.id} className="bg-white">
-        <CardHeader>
-          <div className="flex justify-between items-start">
-            <div>
-              <CardTitle className="text-lg font-semibold text-gray-900">
-                {project.title}
-              </CardTitle>
-              {isAdmin && <p className="text-sm text-gray-600">{project.technicianName}</p>}
-              <p className="text-sm text-gray-600">{project.customerName}</p>
-            </div>
-            <div className="text-right">
-              <p className="text-sm text-gray-600">
-                {new Date(project.date).toLocaleDateString('nl-NL')}
-              </p>
-              <p className="text-lg font-semibold text-red-600">{project.hoursSpent}u</p>
-              <div className="flex space-x-1 mt-2">
-                {(isAdmin || project.technicianId === user?.id) && (
-                  <>
-                    <Button size="sm" variant="outline" onClick={() => handleEdit(project)} className="h-8 w-8 p-0">
-                      <Edit2 className="h-4 w-4" />
-                    </Button>
-                    <Button size="sm" variant="outline" onClick={() => handleDelete(project.id, project)} className="h-8 w-8 p-0 border-red-300 text-red-600 hover:bg-red-50">
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </>
-                )}
+  const canStatusChange = (project: Project) =>
+    isAdmin || project.technicianId === user?.id;
+
+  // PROJECTCARD inclusief tooltip op hover én statusknoppen
+  const renderProjectCard = (project: Project) => (
+    <Tooltip key={project.id}>
+      <TooltipTrigger asChild>
+        <Card className="bg-white hover:shadow-lg transition-shadow duration-200 cursor-pointer">
+          <CardHeader>
+            <div className="flex justify-between items-start">
+              <div>
+                <CardTitle className="text-lg font-semibold text-gray-900">
+                  {project.title}
+                </CardTitle>
+                {isAdmin && <p className="text-sm text-gray-600">{project.technicianName}</p>}
+                <p className="text-sm text-gray-600">{project.customerName}</p>
+                <div className="flex items-center mt-2">
+                  {getStatusIcon(project.status)}
+                  <span className="ml-1 text-sm font-medium">{getStatusText(project.status)}</span>
+                </div>
+              </div>
+              <div className="text-right">
+                <p className="text-sm text-gray-600">
+                  {new Date(project.date).toLocaleDateString('nl-NL')}
+                </p>
+                <p className="text-lg font-semibold text-red-600">{project.hoursSpent ? project.hoursSpent + 'u' : ''}</p>
+                <div className="flex space-x-1 mt-2">
+                  {(isAdmin || project.technicianId === user?.id) && (
+                    <>
+                      <Button size="sm" variant="outline" onClick={() => handleEdit(project)} className="h-8 w-8 p-0">
+                        <Edit2 className="h-4 w-4" />
+                      </Button>
+                      <Button size="sm" variant="outline" onClick={() => handleDelete(project.id, project)} className="h-8 w-8 p-0 border-red-300 text-red-600 hover:bg-red-50">
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </>
+                  )}
+                </div>
               </div>
             </div>
-          </div>
-        </CardHeader>
-        <CardContent>
-          {project.status !== 'completed' && <p className="mb-4 text-gray-700">{project.description}</p>}
-        </CardContent>
-      </Card>
-    );
-
-    if (project.status === 'completed') {
-      return (
-        <Tooltip key={project.id}>
-          <TooltipTrigger asChild>{card}</TooltipTrigger>
-          <TooltipContent side="top" className="max-w-xs">
-            <p className="mb-1 font-semibold">{project.title}</p>
-            <p className="text-sm">{project.description || 'Geen omschrijving'}</p>
-          </TooltipContent>
-        </Tooltip>
-      );
-    }
-    return card;
-  };
+          </CardHeader>
+          <CardContent>
+            {canStatusChange(project) && (
+              <div className="flex flex-wrap gap-2 mb-2">
+                <Button
+                  size="sm"
+                  onClick={() => handleStatusChange(project, 'in-progress')}
+                  variant={project.status === 'in-progress' ? 'default' : 'outline'}
+                  className="text-xs"
+                >
+                  <Clock className="h-3 w-3 mr-1" /> In Behandeling
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={() => handleStatusChange(project, 'needs-review')}
+                  variant={project.status === 'needs-review' ? 'default' : 'outline'}
+                  className="text-xs"
+                >
+                  <AlertCircle className="h-3 w-3 mr-1" /> Controle Nodig
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={() => handleStatusChange(project, 'completed')}
+                  variant={project.status === 'completed' ? 'default' : 'outline'}
+                  className="text-xs"
+                >
+                  <CheckCircle className="h-3 w-3 mr-1" /> Voltooid
+                </Button>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </TooltipTrigger>
+      <TooltipContent side="top" className="max-w-xs text-wrap">
+        <p className="font-semibold mb-1">{project.title}</p>
+        <p className="text-sm text-gray-700">
+          {project.description || 'Geen omschrijving'}
+        </p>
+      </TooltipContent>
+    </Tooltip>
+  );
 
   return (
     <div className="p-6 bg-gray-50 min-h-screen">
@@ -401,7 +434,6 @@ const Projects = () => {
             </CardHeader>
             <CardContent>
               <form onSubmit={handleSubmit} className="space-y-4">
-                {/* TITEL */}
                 <div>
                   <Label htmlFor="title">Project Titel *</Label>
                   <Input
@@ -411,7 +443,6 @@ const Projects = () => {
                     onChange={e => setNewProject({ ...newProject, title: e.target.value })}
                   />
                 </div>
-                {/* KLANT */}
                 <div>
                   <Label htmlFor="customer">Klant *</Label>
                   <select
@@ -427,7 +458,6 @@ const Projects = () => {
                     ))}
                   </select>
                 </div>
-                {/* MONTEUR (altijd de complete lijst uit Supabase) */}
                 {isAdmin && (
                   <div>
                     <Label htmlFor="technician">Monteur *</Label>
@@ -445,7 +475,6 @@ const Projects = () => {
                     </select>
                   </div>
                 )}
-                {/* DATUM & UREN */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <Label htmlFor="date">Datum *</Label>
@@ -458,20 +487,22 @@ const Projects = () => {
                     />
                   </div>
                   <div>
-                    <Label htmlFor="hours">Bestede Uren *</Label>
+                    <Label htmlFor="hours">
+                      Bestede Uren {newProject.status === 'completed' && '*'}
+                      {newProject.status !== 'completed' && ' (optioneel)'}
+                    </Label>
                     <Input
                       id="hours"
                       type="number"
                       step="0.5"
                       min="0.5"
                       max="24"
-                      required
+                      required={newProject.status === 'completed'}
                       value={newProject.hoursSpent}
                       onChange={e => setNewProject({ ...newProject, hoursSpent: e.target.value })}
                     />
                   </div>
                 </div>
-                {/* STATUS */}
                 <div>
                   <Label htmlFor="status">Status</Label>
                   <select
@@ -485,7 +516,6 @@ const Projects = () => {
                     <option value="completed">Voltooid</option>
                   </select>
                 </div>
-                {/* OMSCHRIJVING */}
                 <div>
                   <Label htmlFor="description">Omschrijving</Label>
                   <Textarea
@@ -495,7 +525,6 @@ const Projects = () => {
                     onChange={e => setNewProject({ ...newProject, description: e.target.value })}
                   />
                 </div>
-                {/* AFBEELDINGEN */}
                 <div>
                   <Label>Project Afbeeldingen (max 5)</Label>
                   <div className="rounded border-2 border-dashed p-4 text-center">
@@ -533,7 +562,6 @@ const Projects = () => {
                     )}
                   </div>
                 </div>
-                {/* SUBMIT */}
                 <Button type="submit" className="bg-red-600 hover:bg-red-700 text-white">
                   <Save className="mr-2 h-4 w-4" />
                   {editingProject ? 'Opslaan' : 'Toevoegen'}
@@ -551,7 +579,6 @@ const Projects = () => {
                 className="mb-4 flex cursor-pointer items-center select-none text-xl font-semibold text-gray-900"
               >
                 {getStatusText(status)} ({projectsByStatus[status].length})
-
                 <ChevronDown
                   className={`ml-2 h-4 w-4 transition-transform ${collapsed[status] ? '-rotate-90' : ''}`}
                 />
