@@ -23,12 +23,14 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 
 interface Customer { id: string; name: string; }
+interface Technician { id: string; name: string; }
 
 const Projects = () => {
   const { user } = useAuth();
   const { toast } = useToast();
   const [projects, setProjects] = useState<Project[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
+  const [techniciansList, setTechniciansList] = useState<Technician[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingProject, setEditingProject] = useState<Project | null>(null);
@@ -39,7 +41,8 @@ const Projects = () => {
     hoursSpent: '',
     customerId: '',
     date: new Date().toISOString().split('T')[0],
-    status: 'in-progress' as Project['status']
+    status: 'in-progress' as Project['status'],
+    technicianId: ''
   });
   const [selectedTech, setSelectedTech] = useState<string>('all');
   const [selectedMonth, setSelectedMonth] = useState<string>('');
@@ -49,6 +52,7 @@ const Projects = () => {
     'completed': false
   });
 
+  // Ophalen van ALLE monteurs (profielen)
   const fetchData = async () => {
     setLoading(true);
     try {
@@ -56,11 +60,21 @@ const Projects = () => {
         .from('customers')
         .select('*')
         .order('name');
+      const { data: profilesData } = await supabase
+        .from('profiles')
+        .select('id, full_name')
+        .order('full_name', { ascending: true });
       const { data: projectData } = await supabase
         .from('projects')
         .select('*, customers(name), profiles(full_name)')
         .order('date', { ascending: false });
       setCustomers(customerData || []);
+      setTechniciansList(
+        (profilesData || []).map(t => ({
+          id: t.id,
+          name: t.full_name
+        }))
+      );
       const formatted = (projectData || []).map(p => ({
         id: p.id,
         technicianId: p.technician_id || '',
@@ -89,9 +103,11 @@ const Projects = () => {
 
   const isAdmin = user?.role === 'admin' || user?.role === 'opdrachtgever';
 
+  // Voor het filtermenu blijven we de oude technicians array gebruiken
   const technicians = Array.from(
     new Map(projects.map(p => [p.technicianId, p.technicianName])).entries()
-  ).map(([id, name]) => ({ id, name }));
+  ).filter(([id]) => !!id && !!id.trim())
+   .map(([id, name]) => ({ id, name }));
 
   const filteredProjects = projects.filter(p => {
     if (!isAdmin && p.technicianId !== user?.id) return false;
@@ -104,7 +120,6 @@ const Projects = () => {
     return true;
   });
 
-  // Één enkele declaratie van projectsByStatus
   const projectsByStatus: Record<Project['status'], Project[]> = {
     'in-progress': [],
     'needs-review': [],
@@ -138,7 +153,13 @@ const Projects = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newProject.title || !newProject.date || !newProject.hoursSpent || !newProject.customerId) {
+    if (
+      !newProject.title ||
+      !newProject.date ||
+      !newProject.hoursSpent ||
+      !newProject.customerId ||
+      (isAdmin && !newProject.technicianId)
+    ) {
       toast({ title: "Fout", description: "Vul alle verplichte velden in", variant: "destructive" });
       return;
     }
@@ -147,6 +168,9 @@ const Projects = () => {
       toast({ title: "Fout", description: "Uren moeten tussen 0 en 24 liggen", variant: "destructive" });
       return;
     }
+    const technicianIdToSave = isAdmin
+      ? newProject.technicianId
+      : user?.id;
 
     if (editingProject) {
       const { error } = await supabase
@@ -157,7 +181,8 @@ const Projects = () => {
           date: newProject.date,
           hours_spent: hours,
           status: newProject.status,
-          customer_id: newProject.customerId
+          customer_id: newProject.customerId,
+          technician_id: technicianIdToSave
         })
         .eq('id', editingProject.id);
       if (error) {
@@ -167,7 +192,7 @@ const Projects = () => {
       toast({ title: 'Succes', description: 'Project succesvol bijgewerkt' });
     } else {
       const { error } = await supabase.from('projects').insert([{
-        technician_id: user?.id,
+        technician_id: technicianIdToSave,
         customer_id: newProject.customerId,
         title: newProject.title,
         description: newProject.description,
@@ -190,7 +215,8 @@ const Projects = () => {
       hoursSpent: '',
       customerId: '',
       date: new Date().toISOString().split('T')[0],
-      status: 'in-progress'
+      status: 'in-progress',
+      technicianId: ''
     });
     setSelectedImages([]);
     setShowAddForm(false);
@@ -198,7 +224,6 @@ const Projects = () => {
   };
 
   const handleEdit = (project: Project) => {
-    // admin mag altijd, monteurs alleen eigen projecten
     if (!isAdmin && project.technicianId !== user?.id) {
       toast({ title: "Fout", description: "Je kunt alleen je eigen projecten bewerken", variant: "destructive" });
       return;
@@ -210,7 +235,8 @@ const Projects = () => {
       hoursSpent: project.hoursSpent.toString(),
       customerId: project.customerId,
       date: project.date,
-      status: project.status
+      status: project.status,
+      technicianId: project.technicianId
     });
     setShowAddForm(true);
   };
@@ -297,7 +323,6 @@ const Projects = () => {
         </CardHeader>
         <CardContent>
           {project.status !== 'completed' && <p className="mb-4 text-gray-700">{project.description}</p>}
-          {/* status-buttons, afbeeldingen, tooltip, etc. */}
         </CardContent>
       </Card>
     );
@@ -305,7 +330,7 @@ const Projects = () => {
     if (project.status === 'completed') {
       return (
         <Tooltip key={project.id}>
-          <TooltipTrigger asChild>{card}</TooltipTrigger>  
+          <TooltipTrigger asChild>{card}</TooltipTrigger>
           <TooltipContent side="top" className="max-w-xs">
             <p className="mb-1 font-semibold">{project.title}</p>
             <p className="text-sm">{project.description || 'Geen omschrijving'}</p>
@@ -334,7 +359,8 @@ const Projects = () => {
                 hoursSpent: '',
                 customerId: '',
                 date: new Date().toISOString().split('T')[0],
-                status: 'in-progress'
+                status: 'in-progress',
+                technicianId: ''
               });
             }}
             className="bg-red-600 text-white hover:bg-red-700"
@@ -401,6 +427,24 @@ const Projects = () => {
                     ))}
                   </select>
                 </div>
+                {/* MONTEUR (altijd de complete lijst uit Supabase) */}
+                {isAdmin && (
+                  <div>
+                    <Label htmlFor="technician">Monteur *</Label>
+                    <select
+                      id="technician"
+                      required
+                      value={newProject.technicianId}
+                      onChange={e => setNewProject({ ...newProject, technicianId: e.target.value })}
+                      className="w-full rounded border p-2"
+                    >
+                      <option value="">Selecteer Monteur</option>
+                      {techniciansList.map(t => (
+                        <option key={t.id} value={t.id}>{t.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
                 {/* DATUM & UREN */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
