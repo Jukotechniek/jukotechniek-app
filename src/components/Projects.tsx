@@ -10,6 +10,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Project } from '@/types/projects';
 import { supabase } from '@/integrations/supabase/client';
 import { Camera, X, Plus, Trash2, Edit2, Save, CheckCircle, AlertCircle, Clock } from 'lucide-react';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 
 interface Customer { id: string; name: string; }
 
@@ -74,6 +75,15 @@ const Projects = () => {
   const filteredProjects = isAdmin
     ? projects
     : projects.filter(project => project.technicianId === user?.id);
+
+  const projectsByStatus: Record<Project['status'], Project[]> = {
+    'in-progress': [],
+    'needs-review': [],
+    'completed': []
+  };
+  filteredProjects.forEach(p => {
+    projectsByStatus[p.status].push(p);
+  });
 
   if (loading) {
     return (
@@ -253,6 +263,126 @@ const Projects = () => {
       default:
         return 'In Behandeling';
     }
+  };
+
+  const renderProjectCard = (project: Project) => {
+    const card = (
+      <Card key={project.id} className="bg-white">
+        <CardHeader>
+          <div className="flex justify-between items-start">
+            <div className="flex-1">
+              <CardTitle className="text-lg font-semibold text-gray-900">
+                {project.title}
+              </CardTitle>
+              {isAdmin && (
+                <p className="text-sm text-gray-600">{project.technicianName}</p>
+              )}
+              <p className="text-sm text-gray-600">{project.customerName}</p>
+              <div className="flex items-center mt-2">
+                {getStatusIcon(project.status)}
+                <span className="ml-1 text-sm font-medium">
+                  {getStatusText(project.status)}
+                </span>
+              </div>
+            </div>
+            <div className="text-right">
+              <p className="text-sm text-gray-600">
+                {new Date(project.date).toLocaleDateString('nl-NL')}
+              </p>
+              <p className="text-lg font-semibold text-red-600">
+                {project.hoursSpent}u
+              </p>
+              <div className="flex space-x-1 mt-2">
+                {(isAdmin || project.technicianId === user?.id) && (
+                  <>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => handleEdit(project)}
+                      className="h-8 w-8 p-0"
+                    >
+                      <Edit2 className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => handleDelete(project.id, project)}
+                      className="h-8 w-8 p-0 border-red-300 text-red-600 hover:bg-red-50"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {project.status !== 'completed' && (
+            <p className="text-gray-700 mb-4">{project.description}</p>
+          )}
+
+          {project.technicianId === user?.id && (
+            <div className="flex flex-wrap gap-2 mb-4">
+              <Button
+                size="sm"
+                onClick={() => handleStatusChange(project.id, 'in-progress')}
+                variant={project.status === 'in-progress' ? 'default' : 'outline'}
+                className="text-xs"
+              >
+                <Clock className="h-3 w-3 mr-1" />
+                In Behandeling
+              </Button>
+              <Button
+                size="sm"
+                onClick={() => handleStatusChange(project.id, 'needs-review')}
+                variant={project.status === 'needs-review' ? 'default' : 'outline'}
+                className="text-xs"
+              >
+                <AlertCircle className="h-3 w-3 mr-1" />
+                Controle Nodig
+              </Button>
+              <Button
+                size="sm"
+                onClick={() => handleStatusChange(project.id, 'completed')}
+                variant={project.status === 'completed' ? 'default' : 'outline'}
+                className="text-xs"
+              >
+                <CheckCircle className="h-3 w-3 mr-1" />
+                Voltooid
+              </Button>
+            </div>
+          )}
+
+          {project.images.length > 0 && (
+            <div className="grid grid-cols-3 gap-2">
+              {project.images.map((image, index) => (
+                <img
+                  key={index}
+                  src={image}
+                  alt={`Project afbeelding ${index + 1}`}
+                  className="w-full h-20 object-cover rounded"
+                />
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    );
+
+    if (project.status === 'completed') {
+      return (
+        <Tooltip key={project.id}>
+          <TooltipTrigger asChild>{card}</TooltipTrigger>
+          <TooltipContent side="top" className="max-w-xs text-wrap">
+            <p className="font-semibold mb-1">{project.title}</p>
+            <p className="text-sm text-gray-700">{project.description || 'Geen omschrijving'}</p>
+          </TooltipContent>
+        </Tooltip>
+      );
+    }
+
+    return card;
   };
 
   return (
@@ -441,113 +571,23 @@ const Projects = () => {
         )}
 
         {/* Projects List */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {filteredProjects.length === 0 ? (
-            <div className="col-span-2 text-center py-8 text-gray-500">
-              Geen projecten gevonden
-            </div>
-          ) : (
-            filteredProjects.map((project) => (
-              <Card key={project.id} className="bg-white">
-                <CardHeader>
-                  <div className="flex justify-between items-start">
-                    <div className="flex-1">
-                      <CardTitle className="text-lg font-semibold text-gray-900">
-                        {project.title}
-                      </CardTitle>
-                      {isAdmin && (
-                        <p className="text-sm text-gray-600">{project.technicianName}</p>
-                      )}
-                      <p className="text-sm text-gray-600">{project.customerName}</p>
-                      <div className="flex items-center mt-2">
-                        {getStatusIcon(project.status)}
-                        <span className="ml-1 text-sm font-medium">{getStatusText(project.status)}</span>
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-sm text-gray-600">
-                        {new Date(project.date).toLocaleDateString('nl-NL')}
-                      </p>
-                      <p className="text-lg font-semibold text-red-600">
-                        {project.hoursSpent}u
-                      </p>
-                      <div className="flex space-x-1 mt-2">
-                        {(isAdmin || project.technicianId === user?.id) && (
-                          <>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => handleEdit(project)}
-                              className="h-8 w-8 p-0"
-                            >
-                              <Edit2 className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => handleDelete(project.id, project)}
-                              className="h-8 w-8 p-0 border-red-300 text-red-600 hover:bg-red-50"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </>
-                        )}
-                      </div>
-                    </div>
+        <div className="space-y-10">
+          {(['in-progress', 'needs-review', 'completed'] as Project['status'][]).map(status => (
+            <div key={status}>
+              <h2 className="text-xl font-semibold text-gray-900 mb-4">
+                {getStatusText(status)}
+              </h2>
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {projectsByStatus[status].length === 0 ? (
+                  <div className="col-span-2 text-center py-8 text-gray-500">
+                    Geen projecten gevonden
                   </div>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-gray-700 mb-4">{project.description}</p>
-                  
-                  {/* Status change buttons for technicians */}
-                  {project.technicianId === user?.id && (
-                    <div className="flex flex-wrap gap-2 mb-4">
-                      <Button
-                        size="sm"
-                        onClick={() => handleStatusChange(project.id, 'in-progress')}
-                        variant={project.status === 'in-progress' ? 'default' : 'outline'}
-                        className="text-xs"
-                      >
-                        <Clock className="h-3 w-3 mr-1" />
-                        In Behandeling
-                      </Button>
-                      <Button
-                        size="sm"
-                        onClick={() => handleStatusChange(project.id, 'needs-review')}
-                        variant={project.status === 'needs-review' ? 'default' : 'outline'}
-                        className="text-xs"
-                      >
-                        <AlertCircle className="h-3 w-3 mr-1" />
-                        Controle Nodig
-                      </Button>
-                      <Button
-                        size="sm"
-                        onClick={() => handleStatusChange(project.id, 'completed')}
-                        variant={project.status === 'completed' ? 'default' : 'outline'}
-                        className="text-xs"
-                      >
-                        <CheckCircle className="h-3 w-3 mr-1" />
-                        Voltooid
-                      </Button>
-                    </div>
-                  )}
-                  
-                  {project.images.length > 0 && (
-                    <div className="grid grid-cols-3 gap-2">
-                      {project.images.map((image, index) => (
-                        <img
-                          key={index}
-                          src={image}
-                          alt={`Project afbeelding ${index + 1}`}
-                          className="w-full h-20 object-cover rounded"
-                        />
-                      ))}
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            ))
-          )}
+                ) : (
+                  projectsByStatus[status].map(project => renderProjectCard(project))
+                )}
+              </div>
+            </div>
+          ))}
         </div>
       </div>
     </div>

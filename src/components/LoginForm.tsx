@@ -88,8 +88,8 @@ const LoginForm = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-black to-red-950 flex items-center justify-center p-4">
-      <Card className="w-full max-w-md bg-white/95 backdrop-blur">
+    <div className="min-h-screen bg-gradient-to-tr from-gray-800 via-gray-900 to-red-700 flex items-center justify-center py-12 px-4">
+      <Card className="w-full max-w-md bg-white/95 backdrop-blur shadow-2xl rounded-xl px-6 py-8">
         <CardHeader className="text-center pb-8">
           <div className="mb-4">
             <h1 className="text-3xl font-bold text-black">JukoTechniek</h1>
