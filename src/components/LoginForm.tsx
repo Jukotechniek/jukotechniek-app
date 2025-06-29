@@ -21,37 +21,33 @@ const LoginForm = () => {
   const { toast } = useToast();
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
+  e.preventDefault();
+  setLoading(true);
 
-    try {
-      const success = await login({
-        username: credentials.username,
-        password: credentials.password
-      });
-      
-      if (success) {
-        toast({
-          title: "Login Successful",
-          description: "Welcome to JukoTechniek Work Hours"
-        });
-      } else {
-        toast({
-          title: "Login Failed",
-          description: "Invalid username or password",
-          variant: "destructive"
-        });
-      }
-    } catch (error) {
+  try {
+    const success = await login({
+      username: credentials.username,
+      password: credentials.password
+    });
+
+    if (!success) {
       toast({
-        title: "Error",
-        description: "An error occurred during login",
+        title: "Login Failed",
+        description: "Invalid username or password",
         variant: "destructive"
       });
-    } finally {
-      setLoading(false);
     }
-  };
+  } catch (error) {
+    toast({
+      title: "Error",
+      description: "An error occurred during login",
+      variant: "destructive"
+    });
+  } finally {
+    setLoading(false);
+  }
+};
+
 
   const handleForgotPassword = async (e: React.FormEvent) => {
     e.preventDefault();

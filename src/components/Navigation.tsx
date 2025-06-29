@@ -68,13 +68,13 @@ const Navigation: React.FC<NavigationProps> = ({ activeTab, onTabChange }) => {
     <nav className="bg-black text-white shadow-lg">
       <div className="max-w-7xl mx-auto px-4">
         <div className="flex items-center justify-between h-12">
-          <div className="flex items-center space-x-8">
+          <div className="flex items-center">
             <div className="flex items-center">
               <h1 className="text-xl font-bold">JukoTechniek</h1>
               <div className="w-1 h-6 bg-red-600 ml-2"></div>
             </div>
-
-            <div className="hidden md:flex space-x-1">
+            {/* Tabs desktop */}
+            <div className="hidden md:flex space-x-1 ml-8">
               {visibleTabs.map(tab => {
                 const Icon = tab.icon;
                 return (
@@ -94,36 +94,10 @@ const Navigation: React.FC<NavigationProps> = ({ activeTab, onTabChange }) => {
                 );
               })}
             </div>
-
-            {/* Mobile menu */}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" className="text-gray-300 hover:text-white md:hidden">
-                  <Menu size={16} />
-                  <span className="sr-only">Menu</span>
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent className="md:hidden">
-                {tabs.map(tab => {
-                  const Icon = tab.icon;
-                  return (
-                    <DropdownMenuItem
-                      key={tab.id}
-                      onSelect={() => onTabChange(tab.id)}
-                      className={activeTab === tab.id ? 'font-semibold text-red-600' : ''}
-                    >
-                      <Icon className="mr-2 h-4 w-4" />
-                      {tab.label}
-                    </DropdownMenuItem>
-                  );
-                })}
-              </DropdownMenuContent>
-            </DropdownMenu>
-
             {/* Desktop dropdown for secondary tabs */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" className="text-gray-300 hover:text-white hidden md:block">
+                <Button variant="ghost" className="text-gray-300 hover:text-white hidden md:block ml-2">
                   <Menu size={16} />
                   <span className="sr-only">Menu</span>
                 </Button>
@@ -146,30 +120,52 @@ const Navigation: React.FC<NavigationProps> = ({ activeTab, onTabChange }) => {
             </DropdownMenu>
           </div>
 
-          <div className="flex items-center space-x-4">
+          {/* Desktop user (welkom + uitloggen) */}
+          <div className="items-center space-x-4 hidden md:flex">
             <span className="text-sm text-gray-300">Welkom, {user?.fullName}</span>
-           <Button
-  variant="outline"
-  onClick={logout}
-  className="
-    bg-red-600         /* standaard rode achtergrond */
-    text-white         /* standaard witte tekst */
-    border-2           /* iets dikkere rand */
-    border-red-600     /* rand in rode kleur */
-    px-4 py-2          /* padding */
-    rounded-lg         /* afgeronde hoeken */
-    font-medium        /* iets vetter lettertype */
-    transition-colors  /* vloeiende overgang */
-    duration-200       /* 200ms animatie */
-    hover:bg-white     /* bij hover witte achtergrond */
-    hover:text-red-600 /* bij hover rode tekst */
-    hover:border-red-600
-  "
->
-  Uitloggen
-</Button>
+            <Button
+              variant="outline"
+              onClick={logout}
+              className="
+                bg-red-600 text-white border-2 border-red-600 px-4 py-2 rounded-lg font-medium
+                transition-colors duration-200 hover:bg-white hover:text-red-600 hover:border-red-600
+              "
+            >
+              Uitloggen
+            </Button>
+          </div>
 
-
+          {/* Mobile: menu button helemaal rechts */}
+          <div className="md:hidden flex items-center justify-end flex-1">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" className="text-gray-300 hover:text-white">
+                  <Menu size={22} />
+                  <span className="sr-only">Menu</span>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                {tabs.map(tab => {
+                  const Icon = tab.icon;
+                  return (
+                    <DropdownMenuItem
+                      key={tab.id}
+                      onSelect={() => onTabChange(tab.id)}
+                      className={activeTab === tab.id ? 'font-semibold text-red-600' : ''}
+                    >
+                      <Icon className="mr-2 h-4 w-4" />
+                      {tab.label}
+                    </DropdownMenuItem>
+                  );
+                })}
+                <DropdownMenuItem
+                  onSelect={logout}
+                  className="text-red-600 font-semibold border-t mt-2"
+                >
+                  Uitloggen
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
       </div>

@@ -213,19 +213,21 @@ const Dashboard: React.FC = () => {
   return (
     <div className="p-6 bg-gray-50 min-h-screen">
       <div className="max-w-7xl mx-auto">
-       <div className="mb-4 flex items-center space-x-6">
-  {/* 1. Technician dropdown (admin én user nodig?) */}
+       <div className="mb-4 flex flex-col md:flex-row md:items-center md:space-x-6 space-y-3 md:space-y-0">
+  {/* 1. Technician dropdown */}
   {isAdmin && (
-    <TechnicianFilter
-      technicians={availableTechnicians}
-      selectedTechnician={selectedTechnician}
-      onTechnicianChange={setSelectedTechnician}
-    />
+    <div>
+      <TechnicianFilter
+        technicians={availableTechnicians}
+        selectedTechnician={selectedTechnician}
+        onTechnicianChange={setSelectedTechnician}
+      />
+    </div>
   )}
 
   {/* 2. Maand-picker + “Alles weergeven” */}
   <div className="flex items-center space-x-2">
-    <label htmlFor="monthPicker" className="text-gray-600">Select month:</label>
+    <label htmlFor="monthPicker" className="text-gray-600 whitespace-nowrap">Select month:</label>
     <input
       id="monthPicker"
       type="month"
@@ -241,6 +243,7 @@ const Dashboard: React.FC = () => {
     </button>
   </div>
 </div>
+
 
         <header className="mb-8">
           <h1 className="text-3xl font-bold text-gray-900 mb-2">
