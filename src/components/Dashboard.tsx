@@ -421,27 +421,26 @@ const Dashboard: React.FC = () => {
         ) : (
           // MONTEUR: Alleen hun eigen uren in een grafiek
           <Card className="mb-8">
-            <CardHeader>
-              <CardTitle>Jouw gewerkte uren per week</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <ResponsiveContainer width="100%" height={300}>
-                <BarChart data={weeklyData}>
-                  <defs>
-                    <linearGradient id="monteurGradient" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#dc2626" stopOpacity={0.8} />
-                      <stop offset="100%" stopColor="#991b1b" stopOpacity={0.7} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="week" fontSize={13} />
-                  <YAxis fontSize={13} />
-                  <RechartTooltip />
-                  <Bar dataKey="uren" fill="url(#monteurGradient)" radius={[8, 8, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </CardContent>
-          </Card>
+  <CardHeader>
+    <CardTitle>Jouw gewerkte uren per week</CardTitle>
+  </CardHeader>
+  <CardContent>
+    <ResponsiveContainer width="100%" height={300}>
+      <BarChart data={weeklyData}>
+        <CartesianGrid strokeDasharray="3 3" />
+        <XAxis dataKey="week" fontSize={13} />
+        <YAxis fontSize={13} />
+        <RechartTooltip />
+        <Bar
+          dataKey="uren"
+          fill="#dc2626"
+          radius={[8, 8, 0, 0]}
+        />
+      </BarChart>
+    </ResponsiveContainer>
+  </CardContent>
+</Card>
+
         )}
 
         {/* Admin: Performance cards/table */}
