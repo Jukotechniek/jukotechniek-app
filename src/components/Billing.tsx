@@ -180,50 +180,50 @@ const TravelExpenseManagement = () => {
       <div className="max-w-7xl mx-auto">
         <div className="mb-8 flex justify-between items-center">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">Travel Expense Management</h1>
-            <p className="text-gray-600">Set travel expenses per technician per customer</p>
+            <h1 className="text-3xl font-bold text-gray-900 mb-2">Tarieven</h1>
+            <p className="text-gray-600">Stel tarieven per monteur per klant in</p>
           </div>
           <Button onClick={() => setShowAddForm(!showAddForm)} className="bg-red-600 hover:bg-red-700 text-white">
-            {showAddForm ? 'Cancel' : 'Add Travel Rate'}
+            {showAddForm ? 'Annuleren' : 'Voeg Tarief Toe'}
           </Button>
         </div>
 
         {showAddForm && (
           <Card className="bg-white mb-6">
-            <CardHeader><CardTitle className="text-lg font-semibold text-gray-900">Add Travel Expense Rate</CardTitle></CardHeader>
+            <CardHeader><CardTitle className="text-lg font-semibold text-gray-900">Voeg kosten monteur toe</CardTitle></CardHeader>
             <CardContent>
               <form onSubmit={handleAddRate} className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="customer">Customer</Label>
+                  <Label htmlFor="customer">Klant</Label>
                   <select id="customer" value={newRate.customerId} onChange={e => setNewRate({ ...newRate, customerId: e.target.value })} className="w-full p-2 border rounded" required>
-                    <option value="">Select Customer</option>
+                    <option value="">Selecteer Klant</option>
                     {customers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                   </select>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="technician">Technician</Label>
+                  <Label htmlFor="technician">Monteur</Label>
                   <select id="technician" value={newRate.technicianId} onChange={e => setNewRate({ ...newRate, technicianId: e.target.value })} className="w-full p-2 border rounded" required>
-                    <option value="">Select Technician</option>
+                    <option value="">Selecteer Monteur</option>
                     {technicians.map(t => <option key={t.id} value={t.id}>{t.full_name}</option>)}
                   </select>
                 </div>
-                <Input id="toTechnician" type="number" step="0.01" placeholder="To Technician (€)" value={newRate.toTechnician} onChange={e => setNewRate({ ...newRate, toTechnician: e.target.value })} />
-                <Input id="fromClient" type="number" step="0.01" placeholder="From Client (€)" value={newRate.fromClient} onChange={e => setNewRate({ ...newRate, fromClient: e.target.value })} />
-                <Input id="hourlyRate" type="number" step="0.01" placeholder="Hourly (€)" value={newRate.hourlyRate} onChange={e => setNewRate({ ...newRate, hourlyRate: e.target.value })} />
-                <Input id="billableRate" type="number" step="0.01" placeholder="Billable (€)" value={newRate.billableRate} onChange={e => setNewRate({ ...newRate, billableRate: e.target.value })} />
-                <Button type="submit" className="md:col-span-2 bg-red-600 hover:bg-red-700 text-white">Add Travel Rate</Button>
+                <Input id="toTechnician" type="number" step="0.01" placeholder="Reiskosten aan Monteur (€)" value={newRate.toTechnician} onChange={e => setNewRate({ ...newRate, toTechnician: e.target.value })} />
+                <Input id="fromClient" type="number" step="0.01" placeholder="Reiskosten van Klant (€)" value={newRate.fromClient} onChange={e => setNewRate({ ...newRate, fromClient: e.target.value })} />
+                <Input id="hourlyRate" type="number" step="0.01" placeholder="Uurtarief (€)" value={newRate.hourlyRate} onChange={e => setNewRate({ ...newRate, hourlyRate: e.target.value })} />
+                <Input id="billableRate" type="number" step="0.01" placeholder="Factureerbaar (€)" value={newRate.billableRate} onChange={e => setNewRate({ ...newRate, billableRate: e.target.value })} />
+                <Button type="submit" className="md:col-span-2 bg-red-600 hover:bg-red-700 text-white">Voeg Tarief Toe</Button>
               </form>
             </CardContent>
           </Card>
         )}
 
         <Card className="bg-white">
-          <CardHeader><CardTitle className="text-lg font-semibold text-gray-900">Travel Expense Rates ({travelRates.length})</CardTitle></CardHeader>
+          <CardHeader><CardTitle className="text-lg font-semibold text-gray-900">Tarieven ({travelRates.length})</CardTitle></CardHeader>
           <CardContent>
             <div className="overflow-x-auto">
               <table className="w-full text-left">
                 <thead>
-                  <tr className="border-b"><th>Customer</th><th>Technician</th><th>To (€)</th><th>From (€)</th><th>Hourly</th><th>Billable</th><th>Actions</th></tr>
+                  <tr className="border-b"><th>Klant</th><th>Monteur</th><th>Aan (€)</th><th>Van (€)</th><th>Uurtarief</th><th>Factureerbaar</th><th>Acties</th></tr>
                 </thead>
                 <tbody>
                   {travelRates.map(rate => (
@@ -234,7 +234,7 @@ const TravelExpenseManagement = () => {
                       <td className="py-3">€{rate.travel_expense_from_client.toFixed(2)}</td>
                       <td className="py-3">€{rate.hourly_rate.toFixed(2)}</td>
                       <td className="py-3">€{rate.billable_rate.toFixed(2)}</td>
-                      <td className="py-3"><Button size="sm" variant="outline" onClick={() => handleDeleteRate(rate.id)}>Delete</Button></td>
+                      <td className="py-3"><Button size="sm" variant="outline" onClick={() => handleDeleteRate(rate.id)}>Verwijder</Button></td>
                     </tr>
                   ))}
                 </tbody>

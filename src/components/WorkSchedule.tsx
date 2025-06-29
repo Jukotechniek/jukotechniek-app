@@ -70,17 +70,22 @@ const WorkSchedulePage: React.FC = () => {
   async function fetchTechnicians() {
     const { data } = await supabase.from('profiles').select('id, full_name');
     const list = data || [];
-    // Voeg éénmalig "Alle monteurs" toe en dedupe
-    const initial = isPlanner
-      ? [{ id: 'all', full_name: 'Alle monteurs' }, ...list]
+
+    // 1) Raw: alle technici uit de DB, of alleen de ingelogde tech als geen planner
+    const raw = isPlanner
+      ? list
       : list.filter(t => t.id === user?.id);
-    const visible = initial.filter((t, i, a) => a.findIndex(x => x.id === t.id) === i);
-    // Assign kleuren
+
+    // 2) Dedupe op id, mocht de DB duplicates bevatten
+    const unique = raw.filter((t, i, arr) => arr.findIndex(x => x.id === t.id) === i);
+
+    // 3) Kleuren toewijzen (skip 'all' want de filter voegt dat zelf)
     const cmap: Record<string, string> = {};
-    visible.forEach((t, i) => {
-      if (t.id !== 'all') cmap[t.id] = colors[i % colors.length];
+    unique.forEach((t, i) => {
+      cmap[t.id] = colors[i % colors.length];
     });
-    setTechnicians(visible);
+
+    setTechnicians(unique);
     setTechColors(cmap);
   }
 
@@ -361,17 +366,15 @@ const WorkSchedulePage: React.FC = () => {
             <span>Vakantie</span>
           </div>
           {selectedTech === 'all' &&
-            technicians
-              .filter(t => t.id !== 'all')
-              .map(t => (
-                <div key={t.id} className="flex items-center space-x-1">
-                  <span
-                    className="w-3 h-3 inline-block"
-                    style={{ backgroundColor: techColors[t.id] }}
-                  />
-                  <span>{t.full_name}</span>
-                </div>
-              ))}
+            technicians.map(t => (
+              <div key={t.id} className="flex items-center space-x-1">
+                <span
+                  className="w-3 h-3 inline-block"
+                  style={{ backgroundColor: techColors[t.id] }}
+                />
+                <span>{t.full_name}</span>
+              </div>
+            ))}
         </div>
 
         {/* Aanvragen */}
@@ -387,26 +390,35 @@ const WorkSchedulePage: React.FC = () => {
                 <TabsTrigger value="denied">Afgekeurd</TabsTrigger>
               </TabsList>
 
-              {/* Pending */}
               <TabsContent value="pending">
                 {requests
                   .filter(r => r.status === 'pending')
                   .map(r => (
                     <div key={r.id} className="flex justify-between items-center mb-2">
-                      <span>{r.technicianName} {r.startDate} – {r.endDate}</span>
+                      <span>
+                        {r.technicianName} {r.startDate} – {r.endDate}
+                      </span>
                       <div className="space-x-2">
                         {isAdmin && (
                           <>
                             <Button size="sm" onClick={() => updateStatus(r.id, 'approved')}>
                               Akkoord
                             </Button>
-                            <Button size="sm" variant="outline" onClick={() => updateStatus(r.id, 'denied')}>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => updateStatus(r.id, 'denied')}
+                            >
                               Weiger
                             </Button>
                           </>
                         )}
                         {(isAdmin || r.technicianId === user?.id) && (
-                          <Button size="sm" variant="destructive" onClick={() => deleteVacation(r.id)}>
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            onClick={() => deleteVacation(r.id)}
+                          >
                             Verwijder
                           </Button>
                         )}
@@ -415,28 +427,38 @@ const WorkSchedulePage: React.FC = () => {
                   ))}
               </TabsContent>
 
-              {/* Approved */}
               <TabsContent value="approved">
                 {requests
                   .filter(r => r.status === 'approved')
                   .map(r => (
                     <div key={r.id} className="flex justify-between items-center mb-2">
-                      <span>{r.technicianName} {r.startDate} – {r.endDate}</span>
-                      <Button size="sm" variant="destructive" onClick={() => deleteVacation(r.id)}>
+                      <span>
+                        {r.technicianName} {r.startDate} – {r.endDate}
+                      </span>
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        onClick={() => deleteVacation(r.id)}
+                      >
                         Verwijder
                       </Button>
                     </div>
                   ))}
               </TabsContent>
 
-              {/* Denied */}
               <TabsContent value="denied">
                 {requests
                   .filter(r => r.status === 'denied')
                   .map(r => (
                     <div key={r.id} className="flex justify-between items-center mb-2">
-                      <span>{r.technicianName} {r.startDate} – {r.endDate}</span>
-                      <Button size="sm" variant="destructive" onClick={() => deleteVacation(r.id)}>
+                      <span>
+                        {r.technicianName} {r.startDate} – {r.endDate}
+                      </span>
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        onClick={() => deleteVacation(r.id)}
+                      >
                         Verwijder
                       </Button>
                     </div>
@@ -445,7 +467,6 @@ const WorkSchedulePage: React.FC = () => {
             </Tabs>
           </CardContent>
         </Card>
-
       </div>
     </div>
   );
