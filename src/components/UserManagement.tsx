@@ -70,7 +70,9 @@ const UserManagement = () => {
         id: profile.id,
         username: profile.username || '',
         email: '', // Email is not stored in profiles for security
-        role: profile.role || 'technician',
+        role: (['admin', 'technician', 'opdrachtgever'].includes(profile.role)
+          ? profile.role
+          : 'technician') as 'admin' | 'technician' | 'opdrachtgever',
         fullName: profile.full_name || '',
         createdAt: profile.created_at || new Date().toISOString()
       }));
