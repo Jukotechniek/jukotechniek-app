@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -26,6 +26,27 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 interface Customer { id: string; name: string; }
 interface Technician { id: string; name: string; }
 
+// Helper: haal een lijst met signed URLs op voor een lijst met storage paths
+const getSignedUrls = async (paths: string[]) => {
+  if (!paths || paths.length === 0) return [];
+  const storagePaths = paths.map(url =>
+    url.includes('/project-images/')
+      ? url.split('/project-images/')[1]
+      : url
+  );
+  const { data, error } = await supabase.storage.from('project-images').createSignedUrls(storagePaths, 3600);
+  if (error) {
+    console.error('Kan signed urls niet ophalen:', error);
+    return [];
+  }
+  return data.map(item => item.signedUrl);
+};
+
+// Helper voor safe mod
+function mod(n: number, m: number) {
+  return ((n % m) + m) % m;
+}
+
 const Projects = () => {
   const { user } = useAuth();
   const { toast } = useToast();
@@ -52,6 +73,150 @@ const Projects = () => {
     'needs-review': false,
     'completed': false
   });
+
+  // Modal state voor details
+  const [selectedProject, setSelectedProject] = useState<Project | null>(null);
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const [signedImageUrls, setSignedImageUrls] = useState<string[]>([]);
+  const [signedPreviewUrls, setSignedPreviewUrls] = useState<{ [projectId: string]: string[] }>({});
+
+  // Fullscreen galerij state (welke index van signedImageUrls)
+  const [fullscreenImageIndex, setFullscreenImageIndex] = useState<number | null>(null);
+
+  // Ref voor swipe
+  const swipeRef = useRef<HTMLDivElement | null>(null);
+  const swipeStart = useRef<number | null>(null);
+
+  // Fullscreen afsluiten & pijltjes navigatie (escape, left, right)
+  useEffect(() => {
+    if (fullscreenImageIndex === null) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setFullscreenImageIndex(null);
+      if (e.key === 'ArrowLeft')
+        setFullscreenImageIndex(i =>
+          i === null
+            ? 0
+            : mod(i - 1, signedImageUrls.length)
+        );
+      if (e.key === 'ArrowRight')
+        setFullscreenImageIndex(i =>
+          i === null
+            ? 0
+            : mod(i + 1, signedImageUrls.length)
+        );
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [fullscreenImageIndex, signedImageUrls.length]);
+
+  // Swipe (touch én mouse)
+  useEffect(() => {
+    if (fullscreenImageIndex === null) return;
+    const el = swipeRef.current;
+    if (!el) return;
+
+    let x0: number | null = null;
+    let lastX: number | null = null;
+
+    const onTouchStart = (e: TouchEvent) => {
+      x0 = e.touches[0].clientX;
+      lastX = x0;
+    };
+    const onTouchMove = (e: TouchEvent) => {
+      lastX = e.touches[0].clientX;
+    };
+    const onTouchEnd = () => {
+      if (x0 !== null && lastX !== null) {
+        const dx = lastX - x0;
+        if (Math.abs(dx) > 60) {
+          if (dx > 0) { // swipe right
+            setFullscreenImageIndex(i =>
+              i === null ? 0 : mod(i - 1, signedImageUrls.length)
+            );
+          } else { // swipe left
+            setFullscreenImageIndex(i =>
+              i === null ? 0 : mod(i + 1, signedImageUrls.length)
+            );
+          }
+        }
+      }
+      x0 = null;
+      lastX = null;
+    };
+    el.addEventListener('touchstart', onTouchStart);
+    el.addEventListener('touchmove', onTouchMove);
+    el.addEventListener('touchend', onTouchEnd);
+
+    // Mouse events voor desktop swipe (optioneel)
+    let mouseDown = false;
+    let mx0 = null as number | null;
+    let mxLast = null as number | null;
+    const onMouseDown = (e: MouseEvent) => {
+      mouseDown = true;
+      mx0 = e.clientX;
+      mxLast = mx0;
+    };
+    const onMouseMove = (e: MouseEvent) => {
+      if (!mouseDown) return;
+      mxLast = e.clientX;
+    };
+    const onMouseUp = () => {
+      if (mouseDown && mx0 !== null && mxLast !== null) {
+        const dx = mxLast - mx0;
+        if (Math.abs(dx) > 60) {
+          if (dx > 0) { // swipe right
+            setFullscreenImageIndex(i =>
+              i === null ? 0 : mod(i - 1, signedImageUrls.length)
+            );
+          } else { // swipe left
+            setFullscreenImageIndex(i =>
+              i === null ? 0 : mod(i + 1, signedImageUrls.length)
+            );
+          }
+        }
+      }
+      mouseDown = false;
+      mx0 = null;
+      mxLast = null;
+    };
+    el.addEventListener('mousedown', onMouseDown);
+    el.addEventListener('mousemove', onMouseMove);
+    el.addEventListener('mouseup', onMouseUp);
+    el.addEventListener('mouseleave', onMouseUp);
+
+    return () => {
+      el.removeEventListener('touchstart', onTouchStart);
+      el.removeEventListener('touchmove', onTouchMove);
+      el.removeEventListener('touchend', onTouchEnd);
+      el.removeEventListener('mousedown', onMouseDown);
+      el.removeEventListener('mousemove', onMouseMove);
+      el.removeEventListener('mouseup', onMouseUp);
+      el.removeEventListener('mouseleave', onMouseUp);
+    };
+  }, [fullscreenImageIndex, signedImageUrls.length]);
+
+  // --- DATA ophalen en prepareren ---
+  useEffect(() => {
+    async function fetchAllSignedPreviews() {
+      const allUrls: { [projectId: string]: string[] } = {};
+      for (let project of projects) {
+        if (project.images && project.images.length > 0) {
+          const urls = await getSignedUrls(project.images);
+          allUrls[project.id] = urls;
+        }
+      }
+      setSignedPreviewUrls(allUrls);
+    }
+    if (projects.length > 0) fetchAllSignedPreviews();
+  }, [projects]);
+
+  useEffect(() => {
+    if (detailsOpen && selectedProject && selectedProject.images && selectedProject.images.length > 0) {
+      getSignedUrls(selectedProject.images).then(urls => setSignedImageUrls(urls));
+    } else {
+      setSignedImageUrls([]);
+    }
+  }, [selectedProject, detailsOpen]);
 
   const fetchData = async () => {
     setLoading(true);
@@ -101,7 +266,6 @@ const Projects = () => {
     fetchData();
   }, []);
 
-  // *** AUTOSELECT KLIENT ALS MAAR 1 KLANT ***
   useEffect(() => {
     if (
       customers.length === 1 &&
@@ -162,7 +326,6 @@ const Projects = () => {
     setSelectedImages(prev => prev.filter((_, i) => i !== index));
   };
 
-  // Uren alleen verplicht als status "completed" is
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (
@@ -288,9 +451,7 @@ const Projects = () => {
     fetchData();
   };
 
-  // Status-knoppen per project: admin of toegewezen monteur mag status zetten
   const handleStatusChange = async (project: Project, newStatus: Project['status']) => {
-    // Alleen uren verplicht als je op voltooid zet
     if (newStatus === 'completed' && (!project.hoursSpent || project.hoursSpent <= 0)) {
       toast({ title: 'Fout', description: 'Voer eerst het aantal bestede uren in via "Bewerken"', variant: 'destructive' });
       return;
@@ -325,11 +486,20 @@ const Projects = () => {
   const canStatusChange = (project: Project) =>
     isAdmin || project.technicianId === user?.id;
 
+  // --- Details modal open/close ---
+  const openDetails = (project: Project) => {
+    setSelectedProject(project);
+    setDetailsOpen(true);
+  };
+
   // PROJECTCARD inclusief tooltip op hover én statusknoppen
   const renderProjectCard = (project: Project) => (
     <Tooltip key={project.id}>
       <TooltipTrigger asChild>
-        <Card className="bg-white hover:shadow-lg transition-shadow duration-200 cursor-pointer">
+        <Card
+          className="bg-white hover:shadow-lg transition-shadow duration-200 cursor-pointer"
+          onClick={() => openDetails(project)}
+        >
           <CardHeader>
             <div className="flex justify-between items-start">
               <div>
@@ -351,10 +521,20 @@ const Projects = () => {
                 <div className="flex space-x-1 mt-2">
                   {(isAdmin || project.technicianId === user?.id) && (
                     <>
-                      <Button size="sm" variant="outline" onClick={() => handleEdit(project)} className="h-8 w-8 p-0">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={e => { e.stopPropagation(); handleEdit(project); }}
+                        className="h-8 w-8 p-0"
+                      >
                         <Edit2 className="h-4 w-4" />
                       </Button>
-                      <Button size="sm" variant="outline" onClick={() => handleDelete(project.id, project)} className="h-8 w-8 p-0 border-red-300 text-red-600 hover:bg-red-50">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={e => { e.stopPropagation(); handleDelete(project.id, project); }}
+                        className="h-8 w-8 p-0 border-red-300 text-red-600 hover:bg-red-50"
+                      >
                         <Trash2 className="h-4 w-4" />
                       </Button>
                     </>
@@ -368,7 +548,7 @@ const Projects = () => {
               <div className="flex flex-wrap gap-2 mb-2">
                 <Button
                   size="sm"
-                  onClick={() => handleStatusChange(project, 'in-progress')}
+                  onClick={e => { e.stopPropagation(); handleStatusChange(project, 'in-progress'); }}
                   variant={project.status === 'in-progress' ? 'default' : 'outline'}
                   className="text-xs"
                 >
@@ -376,7 +556,7 @@ const Projects = () => {
                 </Button>
                 <Button
                   size="sm"
-                  onClick={() => handleStatusChange(project, 'needs-review')}
+                  onClick={e => { e.stopPropagation(); handleStatusChange(project, 'needs-review'); }}
                   variant={project.status === 'needs-review' ? 'default' : 'outline'}
                   className="text-xs"
                 >
@@ -384,7 +564,7 @@ const Projects = () => {
                 </Button>
                 <Button
                   size="sm"
-                  onClick={() => handleStatusChange(project, 'completed')}
+                  onClick={e => { e.stopPropagation(); handleStatusChange(project, 'completed'); }}
                   variant={project.status === 'completed' ? 'default' : 'outline'}
                   className="text-xs"
                 >
@@ -392,9 +572,9 @@ const Projects = () => {
                 </Button>
               </div>
             )}
-            {project.images?.length > 0 && (
+            {project.images?.length > 0 && signedPreviewUrls[project.id]?.length > 0 && (
               <div className="mt-2 grid grid-cols-2 gap-2">
-                {project.images.map((url, idx) => (
+                {signedPreviewUrls[project.id].map((url, idx) => (
                   <img
                     key={idx}
                     src={url}
@@ -589,7 +769,7 @@ const Projects = () => {
                           <div key={i} className="relative">
                             <img
                               src={URL.createObjectURL(img)}
-                              alt={`Voorbeeld ${i+1}`}
+                              alt={`Voorbeeld ${i + 1}`}
                               className="h-24 w-full rounded object-cover"
                             />
                             <button
@@ -640,6 +820,98 @@ const Projects = () => {
           ))}
         </div>
       </div>
+      {/* DETAILS MODAL */}
+      {selectedProject && detailsOpen && (
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center">
+          <div className="bg-white rounded-lg shadow-xl p-6 max-w-xl w-full relative">
+            <button
+              className="absolute top-2 right-2 text-gray-400 hover:text-red-500 text-2xl"
+              onClick={() => setDetailsOpen(false)}
+            >
+              &times;
+            </button>
+            <h2 className="text-xl font-bold mb-2">{selectedProject.title}</h2>
+            <div className="mb-2 text-gray-600">{selectedProject.customerName}</div>
+            <div className="mb-2">{selectedProject.description || <span className="text-gray-400">Geen omschrijving</span>}</div>
+            <div className="grid grid-cols-2 gap-3 mt-4">
+              {signedImageUrls && signedImageUrls.length > 0 ? (
+                signedImageUrls.map((url, i) => (
+                  <img
+                    key={i}
+                    src={url}
+                    alt={`Projectafbeelding ${i + 1}`}
+                    className="w-full rounded cursor-zoom-in"
+                    style={{ maxHeight: 140, objectFit: 'cover' }}
+                    onClick={() => setFullscreenImageIndex(i)}
+                  />
+                ))
+              ) : (
+                <div className="col-span-2 text-gray-400">Geen afbeeldingen toegevoegd</div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+      {/* FULLSCREEN GALERIJ OVERLAY */}
+      {fullscreenImageIndex !== null && signedImageUrls.length > 0 && (
+        <div
+          ref={swipeRef}
+          className="fixed inset-0 z-[9999] flex items-center justify-center bg-black bg-opacity-95 select-none"
+          onClick={() => setFullscreenImageIndex(null)}
+          style={{ cursor: 'zoom-out', touchAction: 'none' }}
+        >
+          {/* Vorige */}
+          {signedImageUrls.length > 1 && (
+            <button
+              onClick={e => {
+                e.stopPropagation();
+                setFullscreenImageIndex(i =>
+                  i === null ? 0 : mod(i - 1, signedImageUrls.length)
+                );
+              }}
+              className="absolute left-2 top-1/2 -translate-y-1/2 bg-black/60 hover:bg-black/90 text-white rounded-full p-3 text-3xl z-10"
+              aria-label="Vorige foto"
+              style={{ userSelect: 'none' }}
+            >
+              &#8592;
+            </button>
+          )}
+          {/* Volgende */}
+          {signedImageUrls.length > 1 && (
+            <button
+              onClick={e => {
+                e.stopPropagation();
+                setFullscreenImageIndex(i =>
+                  i === null ? 0 : mod(i + 1, signedImageUrls.length)
+                );
+              }}
+              className="absolute right-2 top-1/2 -translate-y-1/2 bg-black/60 hover:bg-black/90 text-white rounded-full p-3 text-3xl z-10"
+              aria-label="Volgende foto"
+              style={{ userSelect: 'none' }}
+            >
+              &#8594;
+            </button>
+          )}
+          {/* Sluitknop */}
+          <button
+            onClick={e => { e.stopPropagation(); setFullscreenImageIndex(null); }}
+            className="absolute top-4 right-4 bg-black/70 hover:bg-black/90 text-white rounded-full p-3 text-2xl z-10 shadow-md"
+            aria-label="Sluiten"
+            style={{ lineHeight: 1 }}
+          >
+            &times;
+          </button>
+          {/* Foto */}
+          <img
+            src={signedImageUrls[fullscreenImageIndex]}
+            alt={`Projectafbeelding ${fullscreenImageIndex + 1}`}
+            className="w-screen h-screen object-contain bg-black select-none"
+            style={{ display: 'block', maxWidth: '100vw', maxHeight: '100vh' }}
+            draggable={false}
+            onClick={e => e.stopPropagation()}
+          />
+        </div>
+      )}
     </div>
   );
 };
