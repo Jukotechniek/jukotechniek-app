@@ -14,8 +14,6 @@ import {
   Legend,
   AreaChart,
   Area,
-  LineChart,
-  Line,
 } from 'recharts';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
@@ -36,6 +34,31 @@ const ProgressBar = ({ value, max, color = '#dc2626' }) => (
     ></div>
   </div>
 );
+
+// Custom tooltip voor BarChart met dagen details
+const WeekTooltip = ({ active, payload, label }) => {
+  if (!active || !payload?.length) return null;
+  const { dagen } = payload[0].payload;
+  return (
+    <div className="rounded-lg bg-white/95 p-3 shadow-lg border border-gray-100">
+      <div className="font-bold text-base mb-2">{label}</div>
+      <ul className="text-sm space-y-1">
+        {dagen
+          .sort((a, b) => a.date - b.date)
+          .map((dag, i) => (
+            <li key={i}>
+              <span className="font-semibold">
+                {dag.date.toLocaleDateString('nl-NL', { weekday: 'short', day: '2-digit', month: '2-digit' })}
+              </span>
+              {': '}
+              <span className="font-mono">{dag.hours}u</span>
+            </li>
+          ))}
+      </ul>
+      <div className="mt-2 text-xs text-gray-500">Totaal: {payload[0].value}u</div>
+    </div>
+  );
+};
 
 const Dashboard: React.FC = () => {
   const { user } = useAuth();
@@ -197,9 +220,12 @@ const Dashboard: React.FC = () => {
     return Array.from(techMap.values()).sort((a, b) => b.totalHours - a.totalHours);
   };
 
-  // Deze filtert indien nodig op userId (voor monteurs)
+  // Groepeer per week, en voeg ook de dagen+uren per week toe voor de tooltip
   const processWeeklyData = (workHours: any[], filterUserId: string | null = null) => {
-    const weekMap = new Map<string, { week: string; uren: number }>();
+    const weekMap = new Map<
+      string,
+      { week: string; uren: number; dagen: { date: Date; hours: number }[] }
+    >();
     workHours
       .filter(e => !filterUserId || e.technician_id === filterUserId)
       .forEach(e => {
@@ -207,8 +233,14 @@ const Dashboard: React.FC = () => {
         const ws = new Date(d);
         ws.setDate(d.getDate() - d.getDay());
         const key = ws.toISOString().split('T')[0];
-        if (!weekMap.has(key)) weekMap.set(key, { week: `Week ${formatDutchDate(key)}`, uren: 0 });
+        if (!weekMap.has(key))
+          weekMap.set(key, {
+            week: `Week ${formatDutchDate(key)}`,
+            uren: 0,
+            dagen: [],
+          });
         weekMap.get(key)!.uren += Number(e.hours_worked || 0);
+        weekMap.get(key)!.dagen.push({ date: d, hours: Number(e.hours_worked || 0) });
       });
     return Array.from(weekMap.values())
       .sort((a, b) => new Date(a.week.split(' ')[1]).getTime() - new Date(b.week.split(' ')[1]).getTime())
@@ -326,122 +358,106 @@ const Dashboard: React.FC = () => {
           )}
         </div>
 
-        {/* ADMIN: Extra grafieken */}
-        {isAdmin ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-2 gap-8 mb-8">
-            {/* Wekelijkse uren (alle technici, lijn & area voor trend) */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Wekelijkse uren (trend)</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <ResponsiveContainer width="100%" height={300}>
-                  <AreaChart data={weeklyAdminData}>
-                    <defs>
-                      <linearGradient id="colorArea" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#dc2626" stopOpacity={0.7} />
-                        <stop offset="95%" stopColor="#dc2626" stopOpacity={0.15} />
-                      </linearGradient>
-                    </defs>
-                    <XAxis dataKey="week" fontSize={13} />
-                    <YAxis fontSize={13} />
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <RechartTooltip />
-                    <Area type="monotone" dataKey="uren" stroke="#dc2626" fill="url(#colorArea)" />
-                  </AreaChart>
-                </ResponsiveContainer>
-              </CardContent>
-            </Card>
-            {/* BarChart: Wekelijkse uren (vergelijking) */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Wekelijkse uren (bar)</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <ResponsiveContainer width="100%" height={300}>
-                  <BarChart data={weeklyAdminData}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="week" fontSize={13} />
-                    <YAxis fontSize={13} />
-                    <RechartTooltip />
-                    <Bar dataKey="uren" fill="#dc2626" radius={[8, 8, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </CardContent>
-            </Card>
-            {/* PieChart: Winstverdeling */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Winstverdeling</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <ResponsiveContainer width="100%" height={300}>
-                  <PieChart>
-                    <Pie
-                      data={displayData.filter(t => t.profit > 0).slice(0, 5)}
-                      dataKey="profit"
-                      cx="50%"
-                      cy="50%"
-                      outerRadius={80}
-                      label={({ technicianName, profit }) => `${technicianName}: ${formatCurrency(profit)}`}
-                    >
-                      {displayData
-                        .filter(t => t.profit > 0)
-                        .slice(0, 5)
-                        .map((e, i) => (
-                          <Cell key={i} fill={COLORS[i % COLORS.length]} />
-                        ))}
-                    </Pie>
-                    <RechartTooltip formatter={v => formatCurrency(Number(v))} />
-                  </PieChart>
-                </ResponsiveContainer>
-              </CardContent>
-            </Card>
-            {/* Overtime Breakdown */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Overtime per monteur (125%, 150%, 200%)</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <ResponsiveContainer width="100%" height={300}>
-                  <BarChart data={technicianData}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="technicianName" />
-                    <YAxis />
-                    <RechartTooltip formatter={v => `${v}h`} />
-                    <Legend />
-                    <Bar dataKey="overtimeHours" fill={COLORS[1]} name="Overtime 125%" />
-                    <Bar dataKey="weekendHours" fill={COLORS[2]} name="Weekend 150%" />
-                    <Bar dataKey="sundayHours" fill={COLORS[3]} name="Sunday 200%" />
-                  </BarChart>
-                </ResponsiveContainer>
-              </CardContent>
-            </Card>
-          </div>
-        ) : (
-          // MONTEUR: Alleen hun eigen uren in een grafiek
-          <Card className="mb-8">
-  <CardHeader>
-    <CardTitle>Jouw gewerkte uren per week</CardTitle>
-  </CardHeader>
-  <CardContent>
-    <ResponsiveContainer width="100%" height={300}>
-      <BarChart data={weeklyData}>
-        <CartesianGrid strokeDasharray="3 3" />
-        <XAxis dataKey="week" fontSize={13} />
-        <YAxis fontSize={13} />
-        <RechartTooltip />
-        <Bar
-          dataKey="uren"
-          fill="#dc2626"
-          radius={[8, 8, 0, 0]}
-        />
-      </BarChart>
-    </ResponsiveContainer>
-  </CardContent>
-</Card>
-
-        )}
+        {/* ADMIN & MONTEUR: Gedeelde BarChart met week details */}
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-2 gap-8 mb-8">
+          <Card>
+            <CardHeader>
+              <CardTitle>
+                {isAdmin ? 'Wekelijkse uren per monteur(s)' : 'Jouw gewerkte uren per week'}
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart data={isAdmin ? weeklyData : weeklyData}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="week" fontSize={13} />
+                  <YAxis fontSize={13} />
+                  <Bar
+                    dataKey="uren"
+                    fill="#dc2626"
+                    radius={[8, 8, 0, 0]}
+                  />
+                  <RechartTooltip content={WeekTooltip} />
+                </BarChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+          {/* Alleen admin ziet extra grafieken */}
+          {isAdmin && (
+            <>
+              <Card>
+                <CardHeader>
+                  <CardTitle>Wekelijkse uren (trend)</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <ResponsiveContainer width="100%" height={300}>
+                    <AreaChart data={weeklyAdminData}>
+                      <defs>
+                        <linearGradient id="colorArea" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#dc2626" stopOpacity={0.7} />
+                          <stop offset="95%" stopColor="#dc2626" stopOpacity={0.15} />
+                        </linearGradient>
+                      </defs>
+                      <XAxis dataKey="week" fontSize={13} />
+                      <YAxis fontSize={13} />
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <RechartTooltip />
+                      <Area type="monotone" dataKey="uren" stroke="#dc2626" fill="url(#colorArea)" />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader>
+                  <CardTitle>Winstverdeling</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <ResponsiveContainer width="100%" height={300}>
+                    <PieChart>
+                      <Pie
+                        data={displayData.filter(t => t.profit > 0).slice(0, 5)}
+                        dataKey="profit"
+                        cx="50%"
+                        cy="50%"
+                        outerRadius={80}
+                        label={({ technicianName, profit }) =>
+                          `${technicianName}: ${formatCurrency(profit)}`
+                        }
+                      >
+                        {displayData
+                          .filter(t => t.profit > 0)
+                          .slice(0, 5)
+                          .map((e, i) => (
+                            <Cell key={i} fill={COLORS[i % COLORS.length]} />
+                          ))}
+                      </Pie>
+                      <RechartTooltip formatter={v => formatCurrency(Number(v))} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader>
+                  <CardTitle>Overtime per monteur (125%, 150%, 200%)</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <ResponsiveContainer width="100%" height={300}>
+                    <BarChart data={technicianData}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="technicianName" />
+                      <YAxis />
+                      <RechartTooltip formatter={v => `${v}h`} />
+                      <Legend />
+                      <Bar dataKey="overtimeHours" fill={COLORS[1]} name="Overtime 125%" />
+                      <Bar dataKey="weekendHours" fill={COLORS[2]} name="Weekend 150%" />
+                      <Bar dataKey="sundayHours" fill={COLORS[3]} name="Sunday 200%" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </CardContent>
+              </Card>
+            </>
+          )}
+        </div>
 
         {/* Admin: Performance cards/table */}
         {isAdmin && (
@@ -450,7 +466,6 @@ const Dashboard: React.FC = () => {
               <CardTitle>Monteur Prestatie Overzicht</CardTitle>
             </CardHeader>
             <CardContent>
-              {/* Desktop: modern grid */}
               <div className="hidden md:grid grid-cols-1 gap-6">
                 <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
                   {displayData.map((t, i) => {
