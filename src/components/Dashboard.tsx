@@ -345,40 +345,106 @@ const Dashboard: React.FC = () => {
 
         {/* Admin Performance Table */}
         {isAdmin && (
-          <Card><CardHeader><CardTitle>Monteur Prestatie Overzicht</CardTitle></CardHeader><CardContent>
-            <div className="overflow-x-auto">
-              <table className="w-full text-left">
-                <thead>
-                  <tr className="border-b">
-                    <th>Monteur</th><th>Totaal Uren</th><th>Dagen Gewerkt</th>
-                    <th>Omzet</th><th>Kosten</th><th>Winst</th><th>Margin %</th><th>Laatste Werkdag</th>
+  <Card className="mb-10">
+    <CardHeader>
+      <CardTitle>Monteur Prestatie Overzicht</CardTitle>
+    </CardHeader>
+    <CardContent>
+      {/* Desktop-tablet: Table */}
+      <div className="hidden md:block">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-sm">
+            <thead>
+              <tr className="border-b text-gray-800">
+                <th className="py-2 px-2 font-semibold">Monteur</th>
+                <th className="py-2 px-2 font-semibold">Totaal Uren</th>
+                <th className="py-2 px-2 font-semibold">Dagen</th>
+                <th className="py-2 px-2 font-semibold">Omzet</th>
+                <th className="py-2 px-2 font-semibold">Kosten</th>
+                <th className="py-2 px-2 font-semibold">Winst</th>
+                <th className="py-2 px-2 font-semibold">Margin %</th>
+                <th className="py-2 px-2 font-semibold">Laatste Werkdag</th>
+              </tr>
+            </thead>
+            <tbody>
+              {displayData.map((t, i) => {
+                const margin = t.revenue > 0 ? ((t.profit / t.revenue) * 100).toFixed(1) : '0';
+                return (
+                  <tr key={t.technicianId} className={`border-b hover:bg-gray-50 ${i % 2 === 1 ? 'bg-gray-50/50' : ''}`}>
+                    <td className="py-2 px-2 font-medium">{t.technicianName}</td>
+                    <td className="py-2 px-2">{t.totalHours.toFixed(1)}h</td>
+                    <td className="py-2 px-2">{t.daysWorked}</td>
+                    <td className="py-2 px-2">{formatCurrency(t.revenue)}</td>
+                    <td className="py-2 px-2">{formatCurrency(t.costs)}</td>
+                    <td className={`py-2 px-2 font-semibold ${t.profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                      {formatCurrency(t.profit)}
+                    </td>
+                    <td className={`py-2 px-2 font-semibold ${parseFloat(margin) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                      {margin}%
+                    </td>
+                    <td className="py-2 px-2">{new Date(t.lastWorked).toLocaleDateString('nl-NL')}</td>
                   </tr>
-                </thead>
-                <tbody>
-                  {displayData.map(t => {
-                    const margin = t.revenue>0?((t.profit/t.revenue)*100).toFixed(1):'0';
-                    return (
-                      <tr key={t.technicianId} className="border-b hover:bg-gray-50">
-                        <td>{t.technicianName}</td>
-                        <td>{t.totalHours.toFixed(1)}h</td>
-                        <td>{t.daysWorked}</td>
-                        <td>{formatCurrency(t.revenue)}</td>
-                        <td>{formatCurrency(t.costs)}</td>
-                        <td className={t.profit>=0?'text-green-600':'text-red-600'}>
-                          {formatCurrency(t.profit)}
-                        </td>
-                        <td className={parseFloat(margin)>=0?'text-green-600':'text-red-600'}>
-                          {margin}% 
-                        </td>
-                        <td>{new Date(t.lastWorked).toLocaleDateString('nl-NL')}</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      {/* Mobiel: Cards */}
+      <div className="space-y-4 md:hidden">
+        {displayData.map((t, i) => {
+          const margin = t.revenue > 0 ? ((t.profit / t.revenue) * 100).toFixed(1) : '0';
+          return (
+            <div
+              key={t.technicianId}
+              className={`rounded-2xl shadow-md border p-4 bg-white flex flex-col gap-2 ${
+                i % 2 === 0 ? 'border-l-4 border-red-600' : 'border-l-4 border-gray-300'
+              }`}
+            >
+              <div className="flex items-center gap-2 mb-2">
+                <span className="font-bold text-lg text-gray-900">{t.technicianName}</span>
+                <span className="text-xs px-2 py-1 rounded bg-gray-100 text-gray-500">
+                  {t.daysWorked} dagen
+                </span>
+              </div>
+              <div className="flex flex-wrap gap-3">
+                <div className="flex flex-col items-start">
+                  <span className="text-xs text-gray-400">Totaal uren</span>
+                  <span className="font-semibold">{t.totalHours.toFixed(1)}h</span>
+                </div>
+                <div className="flex flex-col items-start">
+                  <span className="text-xs text-gray-400">Omzet</span>
+                  <span className="font-semibold">{formatCurrency(t.revenue)}</span>
+                </div>
+                <div className="flex flex-col items-start">
+                  <span className="text-xs text-gray-400">Kosten</span>
+                  <span className="font-semibold">{formatCurrency(t.costs)}</span>
+                </div>
+                <div className="flex flex-col items-start">
+                  <span className="text-xs text-gray-400">Winst</span>
+                  <span className={`font-bold ${t.profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                    {formatCurrency(t.profit)}
+                  </span>
+                </div>
+                <div className="flex flex-col items-start">
+                  <span className="text-xs text-gray-400">Margin %</span>
+                  <span className={`font-bold ${parseFloat(margin) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                    {margin}%
+                  </span>
+                </div>
+                <div className="flex flex-col items-start">
+                  <span className="text-xs text-gray-400">Laatste Werkdag</span>
+                  <span className="font-semibold">{new Date(t.lastWorked).toLocaleDateString('nl-NL')}</span>
+                </div>
+              </div>
             </div>
-          </CardContent></Card>
-        )}
+          );
+        })}
+      </div>
+    </CardContent>
+  </Card>
+)}
+
       </div>
     </div>
   );
