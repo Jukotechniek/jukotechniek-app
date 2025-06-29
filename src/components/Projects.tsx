@@ -101,12 +101,24 @@ const Projects = () => {
     fetchData();
   }, []);
 
+  // *** AUTOSELECT KLIENT ALS MAAR 1 KLANT ***
+  useEffect(() => {
+    if (
+      customers.length === 1 &&
+      (!newProject.customerId || !customers.some(c => c.id === newProject.customerId)) &&
+      showAddForm
+    ) {
+      setNewProject(prev => ({ ...prev, customerId: customers[0].id }));
+    }
+    // eslint-disable-next-line
+  }, [customers, showAddForm]);
+
   const isAdmin = user?.role === 'admin' || user?.role === 'opdrachtgever';
 
   const technicians = Array.from(
     new Map(projects.map(p => [p.technicianId, p.technicianName])).entries()
   ).filter(([id]) => !!id && !!id.trim())
-   .map(([id, name]) => ({ id, name }));
+    .map(([id, name]) => ({ id, name }));
 
   const filteredProjects = projects.filter(p => {
     if (!isAdmin && p.technicianId !== user?.id) return false;
@@ -184,7 +196,7 @@ const Projects = () => {
           title: newProject.title,
           description: newProject.description,
           date: newProject.date,
-          hours_spent: newProject.status === 'completed' ? parseFloat(newProject.hoursSpent) : null,
+          hours_spent: newProject.hoursSpent !== '' ? parseFloat(newProject.hoursSpent) : 0,
           status: newProject.status,
           customer_id: newProject.customerId,
           technician_id: technicianIdToSave
@@ -197,13 +209,13 @@ const Projects = () => {
       projectId = editingProject.id;
       toast({ title: 'Succes', description: 'Project succesvol bijgewerkt' });
     } else {
-      const { data, error } = await supabase.from('projects').insert([{ 
+      const { data, error } = await supabase.from('projects').insert([{
         technician_id: technicianIdToSave,
         customer_id: newProject.customerId,
         title: newProject.title,
         description: newProject.description,
         date: newProject.date,
-        hours_spent: newProject.status === 'completed' ? parseFloat(newProject.hoursSpent) : null,
+        hours_spent: newProject.hoursSpent !== '' ? parseFloat(newProject.hoursSpent) : 0,
         status: newProject.status,
         images: []
       }]).select().single();
