@@ -8,6 +8,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { Project } from '@/types/projects';
 import { supabase } from '@/integrations/supabase/client';
+import { uploadProjectImages } from '@/utils/uploadProjectImages';
 import {
   Camera,
   X,
@@ -174,6 +175,8 @@ const Projects = () => {
       ? newProject.technicianId
       : user?.id;
 
+    let projectId: string | null = null;
+
     if (editingProject) {
       const { error } = await supabase
         .from('projects')
@@ -191,9 +194,10 @@ const Projects = () => {
         toast({ title: 'Fout', description: error.message, variant: 'destructive' });
         return;
       }
+      projectId = editingProject.id;
       toast({ title: 'Succes', description: 'Project succesvol bijgewerkt' });
     } else {
-      const { error } = await supabase.from('projects').insert([{
+      const { data, error } = await supabase.from('projects').insert([{ 
         technician_id: technicianIdToSave,
         customer_id: newProject.customerId,
         title: newProject.title,
@@ -202,12 +206,26 @@ const Projects = () => {
         hours_spent: newProject.status === 'completed' ? parseFloat(newProject.hoursSpent) : null,
         status: newProject.status,
         images: []
-      }]);
+      }]).select().single();
       if (error) {
         toast({ title: 'Fout', description: error.message, variant: 'destructive' });
         return;
       }
+      projectId = data?.id || null;
       toast({ title: 'Succes', description: 'Project succesvol toegevoegd' });
+    }
+
+    if (projectId && selectedImages.length > 0) {
+      const urls = await uploadProjectImages(selectedImages, projectId);
+      if (urls.length > 0) {
+        const { error } = await supabase
+          .from('projects')
+          .update({ images: urls })
+          .eq('id', projectId);
+        if (error) {
+          toast({ title: 'Fout', description: error.message, variant: 'destructive' });
+        }
+      }
     }
 
     fetchData();
@@ -360,6 +378,18 @@ const Projects = () => {
                 >
                   <CheckCircle className="h-3 w-3 mr-1" /> Voltooid
                 </Button>
+              </div>
+            )}
+            {project.images?.length > 0 && (
+              <div className="mt-2 grid grid-cols-2 gap-2">
+                {project.images.map((url, idx) => (
+                  <img
+                    key={idx}
+                    src={url}
+                    alt={`Projectafbeelding ${idx + 1}`}
+                    className="h-24 w-full object-cover rounded"
+                  />
+                ))}
               </div>
             )}
           </CardContent>
