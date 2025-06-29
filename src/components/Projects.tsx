@@ -9,7 +9,8 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { Project } from '@/types/projects';
 import { supabase } from '@/integrations/supabase/client';
-import { Camera, X, Plus, Trash2, Edit2, Save, CheckCircle, AlertCircle, Clock } from 'lucide-react';
+import { Camera, X, Plus, Trash2, Edit2, Save, CheckCircle, AlertCircle, Clock, ChevronDown } from 'lucide-react';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 
 interface Customer { id: string; name: string; }
 
@@ -29,6 +30,13 @@ const Projects = () => {
     customerId: '',
     date: new Date().toISOString().split('T')[0],
     status: 'in-progress' as Project['status']
+  });
+  const [selectedTech, setSelectedTech] = useState<string>('all');
+  const [selectedMonth, setSelectedMonth] = useState<string>('');
+  const [collapsed, setCollapsed] = useState<Record<Project['status'], boolean>>({
+    'in-progress': false,
+    'needs-review': false,
+    'completed': false
   });
 
   const fetchData = async () => {
@@ -71,9 +79,31 @@ const Projects = () => {
   }, []);
 
   const isAdmin = user?.role === 'admin' || user?.role === 'opdrachtgever';
-  const filteredProjects = isAdmin
-    ? projects
-    : projects.filter(project => project.technicianId === user?.id);
+
+  const technicians = Array.from(
+    new Map(projects.map(p => [p.technicianId, p.technicianName])).entries()
+  ).map(([id, name]) => ({ id, name }));
+
+  const filteredProjects = projects.filter(p => {
+    if (!isAdmin && p.technicianId !== user?.id) return false;
+    if (isAdmin && selectedTech !== 'all' && p.technicianId !== selectedTech)
+      return false;
+    if (selectedMonth) {
+      const [y, m] = selectedMonth.split('-').map(n => parseInt(n, 10));
+      const d = new Date(p.date);
+      if (d.getFullYear() !== y || d.getMonth() + 1 !== m) return false;
+    }
+    return true;
+  });
+
+  const projectsByStatus: Record<Project['status'], Project[]> = {
+    'in-progress': [],
+    'needs-review': [],
+    'completed': []
+  };
+  filteredProjects.forEach(p => {
+    projectsByStatus[p.status].push(p);
+  });
 
   if (loading) {
     return (
@@ -81,6 +111,8 @@ const Projects = () => {
         <div className="flex items-center justify-center h-64">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-red-600"></div>
         </div>
+
+
       </div>
     );
   }
@@ -255,6 +287,126 @@ const Projects = () => {
     }
   };
 
+  const renderProjectCard = (project: Project) => {
+    const card = (
+      <Card key={project.id} className="bg-white">
+        <CardHeader>
+          <div className="flex justify-between items-start">
+            <div className="flex-1">
+              <CardTitle className="text-lg font-semibold text-gray-900">
+                {project.title}
+              </CardTitle>
+              {isAdmin && (
+                <p className="text-sm text-gray-600">{project.technicianName}</p>
+              )}
+              <p className="text-sm text-gray-600">{project.customerName}</p>
+              <div className="flex items-center mt-2">
+                {getStatusIcon(project.status)}
+                <span className="ml-1 text-sm font-medium">
+                  {getStatusText(project.status)}
+                </span>
+              </div>
+            </div>
+            <div className="text-right">
+              <p className="text-sm text-gray-600">
+                {new Date(project.date).toLocaleDateString('nl-NL')}
+              </p>
+              <p className="text-lg font-semibold text-red-600">
+                {project.hoursSpent}u
+              </p>
+              <div className="flex space-x-1 mt-2">
+                {(isAdmin || project.technicianId === user?.id) && (
+                  <>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => handleEdit(project)}
+                      className="h-8 w-8 p-0"
+                    >
+                      <Edit2 className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => handleDelete(project.id, project)}
+                      className="h-8 w-8 p-0 border-red-300 text-red-600 hover:bg-red-50"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {project.status !== 'completed' && (
+            <p className="text-gray-700 mb-4">{project.description}</p>
+          )}
+
+          {project.technicianId === user?.id && (
+            <div className="flex flex-wrap gap-2 mb-4">
+              <Button
+                size="sm"
+                onClick={() => handleStatusChange(project.id, 'in-progress')}
+                variant={project.status === 'in-progress' ? 'default' : 'outline'}
+                className="text-xs"
+              >
+                <Clock className="h-3 w-3 mr-1" />
+                In Behandeling
+              </Button>
+              <Button
+                size="sm"
+                onClick={() => handleStatusChange(project.id, 'needs-review')}
+                variant={project.status === 'needs-review' ? 'default' : 'outline'}
+                className="text-xs"
+              >
+                <AlertCircle className="h-3 w-3 mr-1" />
+                Controle Nodig
+              </Button>
+              <Button
+                size="sm"
+                onClick={() => handleStatusChange(project.id, 'completed')}
+                variant={project.status === 'completed' ? 'default' : 'outline'}
+                className="text-xs"
+              >
+                <CheckCircle className="h-3 w-3 mr-1" />
+                Voltooid
+              </Button>
+            </div>
+          )}
+
+          {project.images.length > 0 && (
+            <div className="grid grid-cols-3 gap-2">
+              {project.images.map((image, index) => (
+                <img
+                  key={index}
+                  src={image}
+                  alt={`Project afbeelding ${index + 1}`}
+                  className="w-full h-20 object-cover rounded"
+                />
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    );
+
+    if (project.status === 'completed') {
+      return (
+        <Tooltip key={project.id}>
+          <TooltipTrigger asChild>{card}</TooltipTrigger>
+          <TooltipContent side="top" className="max-w-xs text-wrap">
+            <p className="font-semibold mb-1">{project.title}</p>
+            <p className="text-sm text-gray-700">{project.description || 'Geen omschrijving'}</p>
+          </TooltipContent>
+        </Tooltip>
+      );
+    }
+
+    return card;
+  };
+
   return (
     <div className="p-6 bg-gray-50 min-h-screen">
       <div className="max-w-7xl mx-auto">
@@ -286,6 +438,32 @@ const Projects = () => {
             {showAddForm ? 'Annuleren' : 'Project Toevoegen'}
           </Button>
         </div>
+
+        {isAdmin && (
+          <div className="mb-6 flex items-center space-x-4">
+            <select
+              value={selectedTech}
+              onChange={e => setSelectedTech(e.target.value)}
+              className="p-2 border rounded"
+            >
+              <option value="all">Alle monteurs</option>
+              {technicians.map(t => (
+                <option key={t.id} value={t.id}>
+                  {t.name}
+                </option>
+              ))}
+            </select>
+            <Input
+              type="month"
+              value={selectedMonth}
+              onChange={e => setSelectedMonth(e.target.value)}
+              className="p-2 border rounded"
+            />
+            <Button onClick={() => setSelectedMonth('')} className="bg-red-600 text-white">
+              Alles
+            </Button>
+          </div>
+        )}
 
         {/* Add/Edit Project Form */}
         {showAddForm && (
@@ -441,113 +619,31 @@ const Projects = () => {
         )}
 
         {/* Projects List */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {filteredProjects.length === 0 ? (
-            <div className="col-span-2 text-center py-8 text-gray-500">
-              Geen projecten gevonden
+        <div className="space-y-10">
+          {(['in-progress', 'needs-review', 'completed'] as Project['status'][]).map(status => (
+            <div key={status}>
+              <h2
+                className="text-xl font-semibold text-gray-900 mb-4 flex items-center cursor-pointer select-none"
+                onClick={() => setCollapsed(prev => ({ ...prev, [status]: !prev[status] }))}
+              >
+                {getStatusText(status)}
+                <ChevronDown
+                  className={`ml-2 h-4 w-4 transition-transform ${collapsed[status] ? '-rotate-90' : ''}`}
+                />
+              </h2>
+              {!collapsed[status] && (
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  {projectsByStatus[status].length === 0 ? (
+                    <div className="col-span-2 text-center py-8 text-gray-500">
+                      Geen projecten gevonden
+                    </div>
+                  ) : (
+                    projectsByStatus[status].map(project => renderProjectCard(project))
+                  )}
+                </div>
+              )}
             </div>
-          ) : (
-            filteredProjects.map((project) => (
-              <Card key={project.id} className="bg-white">
-                <CardHeader>
-                  <div className="flex justify-between items-start">
-                    <div className="flex-1">
-                      <CardTitle className="text-lg font-semibold text-gray-900">
-                        {project.title}
-                      </CardTitle>
-                      {isAdmin && (
-                        <p className="text-sm text-gray-600">{project.technicianName}</p>
-                      )}
-                      <p className="text-sm text-gray-600">{project.customerName}</p>
-                      <div className="flex items-center mt-2">
-                        {getStatusIcon(project.status)}
-                        <span className="ml-1 text-sm font-medium">{getStatusText(project.status)}</span>
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-sm text-gray-600">
-                        {new Date(project.date).toLocaleDateString('nl-NL')}
-                      </p>
-                      <p className="text-lg font-semibold text-red-600">
-                        {project.hoursSpent}u
-                      </p>
-                      <div className="flex space-x-1 mt-2">
-                        {(isAdmin || project.technicianId === user?.id) && (
-                          <>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => handleEdit(project)}
-                              className="h-8 w-8 p-0"
-                            >
-                              <Edit2 className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => handleDelete(project.id, project)}
-                              className="h-8 w-8 p-0 border-red-300 text-red-600 hover:bg-red-50"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-gray-700 mb-4">{project.description}</p>
-                  
-                  {/* Status change buttons for technicians */}
-                  {project.technicianId === user?.id && (
-                    <div className="flex flex-wrap gap-2 mb-4">
-                      <Button
-                        size="sm"
-                        onClick={() => handleStatusChange(project.id, 'in-progress')}
-                        variant={project.status === 'in-progress' ? 'default' : 'outline'}
-                        className="text-xs"
-                      >
-                        <Clock className="h-3 w-3 mr-1" />
-                        In Behandeling
-                      </Button>
-                      <Button
-                        size="sm"
-                        onClick={() => handleStatusChange(project.id, 'needs-review')}
-                        variant={project.status === 'needs-review' ? 'default' : 'outline'}
-                        className="text-xs"
-                      >
-                        <AlertCircle className="h-3 w-3 mr-1" />
-                        Controle Nodig
-                      </Button>
-                      <Button
-                        size="sm"
-                        onClick={() => handleStatusChange(project.id, 'completed')}
-                        variant={project.status === 'completed' ? 'default' : 'outline'}
-                        className="text-xs"
-                      >
-                        <CheckCircle className="h-3 w-3 mr-1" />
-                        Voltooid
-                      </Button>
-                    </div>
-                  )}
-                  
-                  {project.images.length > 0 && (
-                    <div className="grid grid-cols-3 gap-2">
-                      {project.images.map((image, index) => (
-                        <img
-                          key={index}
-                          src={image}
-                          alt={`Project afbeelding ${index + 1}`}
-                          className="w-full h-20 object-cover rounded"
-                        />
-                      ))}
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            ))
-          )}
+          ))}
         </div>
       </div>
     </div>
