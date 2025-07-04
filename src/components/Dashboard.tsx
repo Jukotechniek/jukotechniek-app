@@ -149,126 +149,127 @@ const Dashboard: React.FC = () => {
     }
   };
 
-  const processTechnicianData = (workHours: any[], rates: any[], travelRates: any[]): TechnicianSummary[] => {
-    const techMap = new Map<string, any>();
-    const rateMap = new Map<string, { hourly: number; billable: number; saturday: number; sunday: number }>();
-    rates.forEach(r => {
-      const hourly = Number(r.hourly_rate || 0);
-      rateMap.set(r.technician_id, {
-        hourly,
-        billable: Number(r.billable_rate || 0),
-        saturday: Number(r.saturday_rate ?? hourly * 1.5),
-        sunday: Number(r.sunday_rate ?? hourly * 2),
+  const processTechnicianData = (workHours, rates, travelRates) => {
+  const techMap = new Map();
+  const rateMap = new Map();
+  rates.forEach(r => {
+    const hourly = Number(r.hourly_rate || 0);
+    rateMap.set(r.technician_id, {
+      hourly,
+      billable: Number(r.billable_rate || 0),
+      saturday: Number(r.saturday_rate ?? hourly * 1.5),
+      sunday: Number(r.sunday_rate ?? hourly * 2),
+    });
+  });
+
+  // Map van klant+monteur naar reiskosten
+  const travelMap = new Map();
+  travelRates.forEach(tr => {
+    travelMap.set(
+      `${tr.customer_id}_${tr.technician_id}`,
+      {
+        toTech: Number(tr.travel_expense_to_technician || 0),
+        fromClient: Number(tr.travel_expense_from_client || 0),
+      }
+    );
+  });
+
+  workHours.forEach(entry => {
+    const id = entry.technician_id;
+    const name = entry.profiles?.full_name || 'Unknown';
+    if (!techMap.has(id)) {
+      techMap.set(id, {
+        technicianId: id,
+        technicianName: name,
+        totalHours: 0,
+        regularHours: 0,
+        overtimeHours: 0,
+        weekendHours: 0,
+        sundayHours: 0,
+        daysWorked: 0,
+        lastWorked: entry.date,
+        entries: [],
+        profit: 0,
+        revenue: 0,
+        costs: 0,
       });
-    });
+    }
+    const s = techMap.get(id);
 
-    // Map van klant+monteur naar reiskosten
-    const travelMap = new Map<string, { toTech: number, fromClient: number }>();
-    travelRates.forEach(tr => {
-      travelMap.set(
-        `${tr.customer_id}_${tr.technician_id}`,
-        {
-          toTech: Number(tr.travel_expense_to_technician || 0),
-          fromClient: Number(tr.travel_expense_from_client || 0),
-        }
-      );
-    });
+    // ---- HIER BEGINNEN DE NIEUWE VARIABELEN VOOR REISKOSTEN EN BILLED HOURS ----
+    const reg = Number(entry.regular_hours || 0);
+    const ot = Number(entry.overtime_hours || 0);
+    const wk = Number(entry.weekend_hours || 0);
+    const su = Number(entry.sunday_hours || 0);
 
-    workHours.forEach(entry => {
-      const id = entry.technician_id;
-      const name = entry.profiles?.full_name || 'Unknown';
-      if (!techMap.has(id)) {
-        techMap.set(id, {
-          technicianId: id,
-          technicianName: name,
-          totalHours: 0,
-          regularHours: 0,
-          overtimeHours: 0,
-          weekendHours: 0,
-          sundayHours: 0,
-          daysWorked: 0,
-          lastWorked: entry.date,
-          entries: [] as any[],
-          profit: 0,
-          revenue: 0,
-          costs: 0,
-        });
-      }
-      const s = techMap.get(id);
+    // Uren zoals klant gefactureerd krijgt (mag afwijken van som hierboven)
+    const billedHours = Number(entry.billed_hours ?? reg + ot + wk + su);
+    const actualHours = Number(entry.hours_worked ?? reg + ot + wk + su);
 
-      // ---- HIER BEGINNEN DE NIEUWE VARIABELEN VOOR REISKOSTEN EN BILLED HOURS ----
-      const reg = Number(entry.regular_hours || 0);
-      const ot = Number(entry.overtime_hours || 0);
-      const wk = Number(entry.weekend_hours || 0);
-      const su = Number(entry.sunday_hours || 0);
+    // Tarieven
+    const rate = rateMap.get(id) || { hourly: 0, billable: 0, saturday: 0, sunday: 0 };
 
-      // Uren zoals klant gefactureerd krijgt (mag afwijken van som hierboven)
-      const billedHours = Number(entry.billed_hours ?? reg + ot + wk + su); // fallback: alles optellen
-      const actualHours = Number(entry.hours_worked ?? reg + ot + wk + su);
+    // Normale urenberekening voor omzet en kosten
+    let rev = 0,
+      cost = 0;
 
-      // Tarieven
-      const rate = rateMap.get(id) || { hourly: 0, billable: 0, saturday: 0, sunday: 0 };
+    if (su > 0) {
+      rev += su * rate.billable * 2;
+      cost += su * rate.sunday;
+    }
+    if (wk > 0) {
+      rev += wk * rate.billable * 1.5;
+      cost += wk * rate.saturday;
+    }
+    if (ot > 0) {
+      rev += ot * rate.billable * 1.25;
+      cost += ot * rate.hourly * 1.25;
+    }
+    if (reg > 0) {
+      rev += reg * rate.billable;
+      cost += reg * rate.hourly;
+    }
 
-      // Normale urenberekening voor omzet en kosten
-      let rev = 0,
-        cost = 0;
+    // WINST OP HET VERSCHIL TUSSEN GEFACTUREERDE EN GEWERKTE UREN
+    if (billedHours > actualHours) {
+      rev += (billedHours - actualHours) * rate.billable;
+    }
 
-      if (su > 0) {
-        rev += su * rate.billable * 2;
-        cost += su * rate.sunday;
-      }
-      if (wk > 0) {
-        rev += wk * rate.billable * 1.5;
-        cost += wk * rate.saturday;
-      }
-      if (ot > 0) {
-        rev += ot * rate.billable * 1.25;
-        cost += ot * rate.hourly * 1.25;
-      }
-      if (reg > 0) {
-        rev += reg * rate.billable;
-        cost += reg * rate.hourly;
-      }
+    // REISKOSTEN MEEREKENEN - ALLEEN ALS MONTEUR DECLAREERT (toTech > 0)
+    const customerId = entry.customer_id;
+    const travelKey = `${customerId}_${id}`;
+    const travel = travelMap.get(travelKey) || { toTech: 0, fromClient: 0 };
 
-      // ---- WINST OP HET VERSCHIL TUSSEN GEFACTUREERDE EN GEWERKTE UREN ----
-      if (billedHours > actualHours) {
-        rev += (billedHours - actualHours) * rate.billable;
-        // Kosten blijven gelijk want monteur krijgt niet meer betaald
-      }
+    // Alleen meenemen als monteur het declareert (toTech > 0)
+    if (travel.fromClient > 0) {
+      rev += travel.fromClient; // altijd naar klant factureren
+    }
+    if (travel.toTech > 0) {
+      cost += travel.toTech; // alleen als monteur declareert
+    }
 
-      // ---- REISKOSTEN MEEREKENEN ----
-      const customerId = entry.customer_id;
-      const travelKey = `${customerId}_${id}`;
-      const travelKms = Number(entry.travel_kms || entry.travel_kilometers || 0);
+    const profit = rev - cost;
+    const hrs = actualHours;
+    s.totalHours += hrs;
+    s.regularHours += reg;
+    s.overtimeHours += ot;
+    s.weekendHours += wk;
+    s.sundayHours += su;
+    s.profit += profit;
+    s.revenue += rev;
+    s.costs += cost;
+    s.entries.push(entry);
+    if (entry.date > s.lastWorked) s.lastWorked = entry.date;
+  });
 
-      const travel = travelMap.get(travelKey) || { toTech: 0, fromClient: 0 };
-      if (travelKms > 0) {
-        rev += travelKms * travel.fromClient;
-        cost += travelKms * travel.toTech;
-      }
+  techMap.forEach(s => {
+    s.daysWorked = new Set(s.entries.map((e) => e.date)).size;
+    delete s.entries;
+  });
 
-      const profit = rev - cost;
+  return Array.from(techMap.values()).sort((a, b) => b.totalHours - a.totalHours);
+};
 
-      const hrs = actualHours;
-      s.totalHours += hrs;
-      s.regularHours += reg;
-      s.overtimeHours += ot;
-      s.weekendHours += wk;
-      s.sundayHours += su;
-      s.profit += profit;
-      s.revenue += rev;
-      s.costs += cost;
-      s.entries.push(entry);
-      if (entry.date > s.lastWorked) s.lastWorked = entry.date;
-    });
-
-    techMap.forEach(s => {
-      s.daysWorked = new Set(s.entries.map((e: any) => e.date)).size;
-      delete s.entries;
-    });
-
-    return Array.from(techMap.values()).sort((a, b) => b.totalHours - a.totalHours);
-  };
 
   // Groepeer per week, en voeg ook de dagen+uren per week toe voor de tooltip
   const processWeeklyData = (workHours: any[], filterUserId: string | null = null) => {
