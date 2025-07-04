@@ -290,6 +290,8 @@ export type Database = {
           id: string
           technician_id: string | null
           updated_at: string | null
+          saturday_rate: number | null
+          sunday_rate: number | null
         }
         Insert: {
           billable_rate?: number | null
@@ -298,6 +300,8 @@ export type Database = {
           id?: string
           technician_id?: string | null
           updated_at?: string | null
+          saturday_rate?: number | null
+          sunday_rate?: number | null
         }
         Update: {
           billable_rate?: number | null
@@ -306,6 +310,8 @@ export type Database = {
           id?: string
           technician_id?: string | null
           updated_at?: string | null
+          saturday_rate?: number | null
+          sunday_rate?: number | null
         }
         Relationships: [
           {

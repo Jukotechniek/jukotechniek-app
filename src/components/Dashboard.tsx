@@ -151,11 +151,14 @@ const Dashboard: React.FC = () => {
 
   const processTechnicianData = (workHours: any[], rates: any[], travelRates: any[]): TechnicianSummary[] => {
     const techMap = new Map<string, any>();
-    const rateMap = new Map<string, { hourly: number; billable: number }>();
+    const rateMap = new Map<string, { hourly: number; billable: number; saturday: number; sunday: number }>();
     rates.forEach(r => {
+      const hourly = Number(r.hourly_rate || 0);
       rateMap.set(r.technician_id, {
-        hourly: Number(r.hourly_rate || 0),
+        hourly,
         billable: Number(r.billable_rate || 0),
+        saturday: Number(r.saturday_rate ?? hourly * 1.5),
+        sunday: Number(r.sunday_rate ?? hourly * 2),
       });
     });
 
@@ -204,7 +207,7 @@ const Dashboard: React.FC = () => {
       const actualHours = Number(entry.hours_worked ?? reg + ot + wk + su);
 
       // Tarieven
-      const rate = rateMap.get(id) || { hourly: 0, billable: 0 };
+      const rate = rateMap.get(id) || { hourly: 0, billable: 0, saturday: 0, sunday: 0 };
 
       // Normale urenberekening voor omzet en kosten
       let rev = 0,
@@ -212,11 +215,11 @@ const Dashboard: React.FC = () => {
 
       if (su > 0) {
         rev += su * rate.billable * 2;
-        cost += su * rate.hourly * 2;
+        cost += su * rate.sunday;
       }
       if (wk > 0) {
         rev += wk * rate.billable * 1.5;
-        cost += wk * rate.hourly * 1.5;
+        cost += wk * rate.saturday;
       }
       if (ot > 0) {
         rev += ot * rate.billable * 1.25;

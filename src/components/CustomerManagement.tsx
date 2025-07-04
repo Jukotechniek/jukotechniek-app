@@ -10,7 +10,6 @@ import { useToast } from '@/hooks/use-toast';
 import { Customer } from '@/types/customers';
 import { Trash2, Edit2, Plus, X, CheckCircle } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
-import TravelExpenseManagement from './Billing';
 
 const CustomerManagement = () => {
   const { user } = useAuth();
@@ -289,7 +288,6 @@ const CustomerManagement = () => {
           </CardContent>
         </Card>
 
-        <TravelExpenseManagement />
       </div>
     </div>
   );
