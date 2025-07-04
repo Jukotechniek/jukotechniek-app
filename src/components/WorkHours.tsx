@@ -433,8 +433,8 @@ const WorkHours = () => {
                   <Input
                     id="hours"
                     type="number"
-                    step="0.5"
-                    min="0.5"
+                    step="0.25"
+                    min="0.25"
                     max="24"
                     value={newEntry.hoursWorked}
                     onChange={e => setNewEntry({ ...newEntry, hoursWorked: e.target.value })}

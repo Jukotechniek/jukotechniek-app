@@ -35,7 +35,6 @@ const ProgressBar = ({ value, max, color = '#dc2626' }) => (
   </div>
 );
 
-// Custom tooltip voor BarChart met dagen details
 const WeekTooltip = ({ active, payload, label }) => {
   if (!active || !payload?.length) return null;
   const { dagen } = payload[0].payload;
@@ -51,11 +50,11 @@ const WeekTooltip = ({ active, payload, label }) => {
                 {dag.date.toLocaleDateString('nl-NL', { weekday: 'short', day: '2-digit', month: '2-digit' })}
               </span>
               {': '}
-              <span className="font-mono">{dag.hours}u</span>
+              <span className="font-mono">{dag.hours.toFixed(2)}u</span>
             </li>
           ))}
       </ul>
-      <div className="mt-2 text-xs text-gray-500">Totaal: {payload[0].value}u</div>
+      <div className="mt-2 text-xs text-gray-500">Totaal: {payload[0].value.toFixed(2)}u</div>
     </div>
   );
 };
@@ -66,6 +65,7 @@ const Dashboard: React.FC = () => {
 
   const [rawWorkHours, setRawWorkHours] = useState<any[]>([]);
   const [rawRates, setRawRates] = useState<any[]>([]);
+  const [travelRates, setTravelRates] = useState<any[]>([]);
   const [technicianData, setTechnicianData] = useState<TechnicianSummary[]>([]);
   const [weeklyData, setWeeklyData] = useState<any[]>([]);
   const [weeklyAdminData, setWeeklyAdminData] = useState<any[]>([]);
@@ -111,10 +111,10 @@ const Dashboard: React.FC = () => {
         return d.getFullYear() === year && d.getMonth() + 1 === month;
       });
     }
-    setTechnicianData(processTechnicianData(filtered, rawRates));
+    setTechnicianData(processTechnicianData(filtered, rawRates, travelRates));
     setWeeklyData(processWeeklyData(filtered, isAdmin ? null : user?.id));
     if (isAdmin) setWeeklyAdminData(processWeeklyData(rawWorkHours));
-  }, [rawWorkHours, rawRates, selectedTechnician, selectedMonth, isAdmin, user?.id]);
+  }, [rawWorkHours, rawRates, travelRates, selectedTechnician, selectedMonth, isAdmin, user?.id]);
 
   const fetchDashboardData = async () => {
     setLoading(true);
@@ -133,8 +133,15 @@ const Dashboard: React.FC = () => {
         .select('*');
       if (ratesError) console.error(ratesError);
 
+      // travel rates per monteur/klant
+      const { data: travelRatesData, error: travelRatesError } = await supabase
+        .from('customer_technician_rates')
+        .select('*');
+      if (travelRatesError) console.error(travelRatesError);
+
       setRawWorkHours(workHours || []);
       setRawRates(rates || []);
+      setTravelRates(travelRatesData || []);
     } catch (err) {
       console.error('Fetch error:', err);
     } finally {
@@ -142,7 +149,7 @@ const Dashboard: React.FC = () => {
     }
   };
 
-  const processTechnicianData = (workHours: any[], rates: any[]): TechnicianSummary[] => {
+  const processTechnicianData = (workHours: any[], rates: any[], travelRates: any[]): TechnicianSummary[] => {
     const techMap = new Map<string, any>();
     const rateMap = new Map<string, { hourly: number; billable: number }>();
     rates.forEach(r => {
@@ -150,6 +157,18 @@ const Dashboard: React.FC = () => {
         hourly: Number(r.hourly_rate || 0),
         billable: Number(r.billable_rate || 0),
       });
+    });
+
+    // Map van klant+monteur naar reiskosten
+    const travelMap = new Map<string, { toTech: number, fromClient: number }>();
+    travelRates.forEach(tr => {
+      travelMap.set(
+        `${tr.customer_id}_${tr.technician_id}`,
+        {
+          toTech: Number(tr.travel_expense_to_technician || 0),
+          fromClient: Number(tr.travel_expense_from_client || 0),
+        }
+      );
     });
 
     workHours.forEach(entry => {
@@ -173,15 +192,24 @@ const Dashboard: React.FC = () => {
         });
       }
       const s = techMap.get(id);
-      const hrs = Number(entry.hours_worked || 0);
+
+      // ---- HIER BEGINNEN DE NIEUWE VARIABELEN VOOR REISKOSTEN EN BILLED HOURS ----
       const reg = Number(entry.regular_hours || 0);
       const ot = Number(entry.overtime_hours || 0);
       const wk = Number(entry.weekend_hours || 0);
       const su = Number(entry.sunday_hours || 0);
+
+      // Uren zoals klant gefactureerd krijgt (mag afwijken van som hierboven)
+      const billedHours = Number(entry.billed_hours ?? reg + ot + wk + su); // fallback: alles optellen
+      const actualHours = Number(entry.hours_worked ?? reg + ot + wk + su);
+
+      // Tarieven
       const rate = rateMap.get(id) || { hourly: 0, billable: 0 };
 
+      // Normale urenberekening voor omzet en kosten
       let rev = 0,
         cost = 0;
+
       if (su > 0) {
         rev += su * rate.billable * 2;
         cost += su * rate.hourly * 2;
@@ -198,8 +226,27 @@ const Dashboard: React.FC = () => {
         rev += reg * rate.billable;
         cost += reg * rate.hourly;
       }
+
+      // ---- WINST OP HET VERSCHIL TUSSEN GEFACTUREERDE EN GEWERKTE UREN ----
+      if (billedHours > actualHours) {
+        rev += (billedHours - actualHours) * rate.billable;
+        // Kosten blijven gelijk want monteur krijgt niet meer betaald
+      }
+
+      // ---- REISKOSTEN MEEREKENEN ----
+      const customerId = entry.customer_id;
+      const travelKey = `${customerId}_${id}`;
+      const travelKms = Number(entry.travel_kms || entry.travel_kilometers || 0);
+
+      const travel = travelMap.get(travelKey) || { toTech: 0, fromClient: 0 };
+      if (travelKms > 0) {
+        rev += travelKms * travel.fromClient;
+        cost += travelKms * travel.toTech;
+      }
+
       const profit = rev - cost;
 
+      const hrs = actualHours;
       s.totalHours += hrs;
       s.regularHours += reg;
       s.overtimeHours += ot;
@@ -252,7 +299,7 @@ const Dashboard: React.FC = () => {
 
   const totalHours = technicianData.reduce((s, t) => s + t.totalHours, 0);
   const totalDays = technicianData.reduce((s, t) => s + t.daysWorked, 0);
-  const avgHoursPerDay = totalDays > 0 ? (totalHours / totalDays).toFixed(1) : '0';
+  const avgHoursPerDay = totalDays > 0 ? (totalHours / totalDays).toFixed(2) : '0.00';
   const displayData = isAdmin
     ? technicianData
     : technicianData.filter(t => t.technicianId === user?.id);
@@ -321,7 +368,7 @@ const Dashboard: React.FC = () => {
           <Card>
             <CardContent>
               <p className="text-sm text-gray-600">Totale uren</p>
-              <p className="text-2xl font-bold">{totalHours.toFixed(1)}h</p>
+              <p className="text-2xl font-bold">{totalHours.toFixed(2)}h</p>
             </CardContent>
           </Card>
           {isAdmin && (
@@ -352,7 +399,7 @@ const Dashboard: React.FC = () => {
                 <p className="text-sm text-gray-600">
                   {selectedMonth ? `Hours in ${selectedMonth}` : 'Hours totaal'}
                 </p>
-                <p className="text-2xl font-bold">{monthlyHours.toFixed(1)}h</p>
+                <p className="text-2xl font-bold">{monthlyHours.toFixed(2)}h</p>
               </CardContent>
             </Card>
           )}
@@ -446,7 +493,7 @@ const Dashboard: React.FC = () => {
                       <CartesianGrid strokeDasharray="3 3" />
                       <XAxis dataKey="technicianName" />
                       <YAxis />
-                      <RechartTooltip formatter={v => `${v}h`} />
+                      <RechartTooltip formatter={v => `${Number(v).toFixed(2)}h`} />
                       <Legend />
                       <Bar dataKey="overtimeHours" fill={COLORS[1]} name="Overtime 125%" />
                       <Bar dataKey="weekendHours" fill={COLORS[2]} name="Weekend 150%" />
@@ -498,7 +545,7 @@ const Dashboard: React.FC = () => {
                         <div className="grid grid-cols-2 gap-3 mt-1 mb-3">
                           <div>
                             <div className="text-xs text-gray-400 mb-1">Totaal uren</div>
-                            <div className="font-bold">{t.totalHours.toFixed(1)}h</div>
+                            <div className="font-bold">{Number(t.totalHours).toFixed(2)}h</div>
                           </div>
                           <div>
                             <div className="text-xs text-gray-400 mb-1">Laatste Werkdag</div>
@@ -550,7 +597,7 @@ const Dashboard: React.FC = () => {
                       <div className="flex flex-wrap gap-3">
                         <div className="flex flex-col items-start">
                           <span className="text-xs text-gray-400">Totaal uren</span>
-                          <span className="font-semibold">{t.totalHours.toFixed(1)}h</span>
+                          <span className="font-semibold">{Number(t.totalHours).toFixed(2)}h</span>
                         </div>
                         <div className="flex flex-col items-start">
                           <span className="text-xs text-gray-400">Omzet</span>
