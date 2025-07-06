@@ -21,11 +21,12 @@ import { TechnicianSummary } from '@/types/workHours';
 import { formatDutchDate } from '@/utils/overtimeCalculations';
 import TechnicianFilter from './TechnicianFilter';
 
-const COLORS = ['#dc2626', '#991b1b', '#7f1d1d', '#450a0a', '#f59e42', '#8b5cf6'];
+const COLORS = ['#dc2626', '#991b1b', '#7f1d1d', '#f59e42', '#8b5cf6', '#059669', '#2563eb', '#fbbf24'];
 
 function getInitials(name = '') {
   return name.split(' ').map(part => part[0]).join('').toUpperCase();
 }
+
 const ProgressBar = ({ value, max, color = '#dc2626' }) => (
   <div className="w-full bg-gray-200 rounded-full h-2 mt-1 mb-2">
     <div
@@ -39,8 +40,8 @@ const WeekTooltip = ({ active, payload, label }) => {
   if (!active || !payload?.length) return null;
   const { dagen } = payload[0].payload;
   return (
-    <div className="rounded-lg bg-white/95 p-3 shadow-lg border border-gray-100">
-      <div className="font-bold text-base mb-2">{label}</div>
+    <div className="rounded-xl bg-white/95 p-4 shadow-2xl border border-gray-100 min-w-[180px]">
+      <div className="font-bold text-base mb-2 text-red-700">{label}</div>
       <ul className="text-sm space-y-1">
         {dagen
           .sort((a, b) => a.date - b.date)
@@ -58,6 +59,12 @@ const WeekTooltip = ({ active, payload, label }) => {
     </div>
   );
 };
+
+const Badge = ({ children, color = "bg-gray-200", text = "text-gray-600" }) => (
+  <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${color} ${text} ml-1`}>
+    {children}
+  </span>
+);
 
 const Dashboard: React.FC = () => {
   const { user } = useAuth();
@@ -321,10 +328,10 @@ const Dashboard: React.FC = () => {
   }
 
   return (
-    <div className="p-2 md:p-6 bg-gray-50 min-h-screen">
+    <div className="p-2 md:p-6 bg-gradient-to-br from-white via-gray-100 to-red-50 min-h-screen">
       <div className="max-w-7xl mx-auto">
         {/* Filters */}
-        <div className="mb-3 flex flex-col md:flex-row md:items-center md:space-x-6 space-y-2 md:space-y-0">
+        <div className="mb-4 flex flex-col md:flex-row md:items-center md:space-x-6 space-y-2 md:space-y-0">
           {isAdmin && (
             <div>
               <TechnicianFilter
@@ -336,71 +343,71 @@ const Dashboard: React.FC = () => {
           )}
           <div className="flex items-center space-x-2">
             <label htmlFor="monthPicker" className="text-gray-600 whitespace-nowrap text-xs md:text-base">
-              Select month:
+              Selecteer maand:
             </label>
             <input
               id="monthPicker"
               type="month"
               value={selectedMonth}
               onChange={e => setSelectedMonth(e.target.value)}
-              className="border rounded px-1 py-1 text-xs md:text-base"
+              className="border rounded px-1 py-1 text-xs md:text-base focus:ring-2 focus:ring-red-500"
             />
             <button
               onClick={() => setSelectedMonth('')}
-              className="px-2 py-1 text-xs md:px-3 md:py-1 bg-red-600 text-white rounded hover:bg-red-700"
+              className="px-2 py-1 text-xs md:px-3 md:py-1 bg-red-600 text-white rounded hover:bg-red-700 transition"
             >
               Alles weergeven
             </button>
           </div>
         </div>
         <header className="mb-4 md:mb-8">
-          <h1 className="text-2xl md:text-3xl font-bold text-gray-900 mb-1 md:mb-2">
-            Dashboard — {isAdmin ? 'Admin View' : 'Personal View'}
+          <h1 className="text-2xl md:text-3xl font-bold text-red-700 mb-1 md:mb-2 tracking-tight">
+            Dashboard <span className="font-normal text-gray-700 text-base">{isAdmin ? '• Admin' : '• Persoonlijk'}</span>
           </h1>
           <p className="text-gray-600 text-sm md:text-base">
             {isAdmin
-              ? 'Complete overzicht van alle technici en performance metrics'
-              : 'Jouw persoonlijke werkstatistieken en performance'}
+              ? 'Volledig overzicht van alle monteurs, uren, winst en omzet.'
+              : 'Jouw persoonlijke werkstatistieken, grafieken en uren.'}
           </p>
         </header>
 
         {/* Key Metrics */}
         <div className={`grid grid-cols-2 gap-2 md:grid-cols-2 lg:grid-cols-${isAdmin ? '4' : '3'} md:gap-6 mb-4 md:mb-8`}>
-          <Card>
+          <Card className="shadow-lg border-2 border-red-100 bg-white/80 hover:bg-red-50 transition-all">
             <CardContent className="px-2 py-3 md:px-4 md:py-6">
               <p className="text-xs md:text-sm text-gray-600">Totale uren</p>
-              <p className="text-xl md:text-2xl font-bold">{totalHours.toFixed(2)}h</p>
+              <p className="text-2xl md:text-3xl font-bold text-red-700">{totalHours.toFixed(2)}h</p>
             </CardContent>
           </Card>
           {isAdmin && (
-            <Card>
+            <Card className="shadow-lg border-2 border-yellow-100 bg-white/80 hover:bg-yellow-50 transition-all">
               <CardContent className="px-2 py-3 md:px-4 md:py-6">
                 <p className="text-xs md:text-sm text-gray-600">Totale omzet</p>
-                <p className="text-xl md:text-2xl font-bold">{formatCurrency(technicianData.reduce((s, t) => s + t.revenue, 0))}</p>
+                <p className="text-2xl md:text-3xl font-bold text-yellow-600">{formatCurrency(technicianData.reduce((s, t) => s + t.revenue, 0))}</p>
               </CardContent>
             </Card>
           )}
           {isAdmin && (
-            <Card>
+            <Card className="shadow-lg border-2 border-green-100 bg-white/80 hover:bg-green-50 transition-all">
               <CardContent className="px-2 py-3 md:px-4 md:py-6">
                 <p className="text-xs md:text-sm text-gray-600">Totale winst</p>
-                <p className="text-xl md:text-2xl font-bold">{formatCurrency(technicianData.reduce((s, t) => s + t.profit, 0))}</p>
+                <p className="text-2xl md:text-3xl font-bold text-green-700">{formatCurrency(technicianData.reduce((s, t) => s + t.profit, 0))}</p>
               </CardContent>
             </Card>
           )}
-          <Card>
+          <Card className="shadow-lg border-2 border-blue-100 bg-white/80 hover:bg-blue-50 transition-all">
             <CardContent className="px-2 py-3 md:px-4 md:py-6">
               <p className="text-xs md:text-sm text-gray-600">Gem. uren/dag</p>
-              <p className="text-xl md:text-2xl font-bold">{avgHoursPerDay}h</p>
+              <p className="text-2xl md:text-3xl font-bold text-blue-700">{avgHoursPerDay}h</p>
             </CardContent>
           </Card>
           {!isAdmin && (
-            <Card>
+            <Card className="shadow-lg border-2 border-purple-100 bg-white/80 hover:bg-purple-50 transition-all">
               <CardContent className="px-2 py-3 md:px-4 md:py-6">
                 <p className="text-xs md:text-sm text-gray-600">
-                  {selectedMonth ? `Hours in ${selectedMonth}` : 'Hours totaal'}
+                  {selectedMonth ? `Uren in ${selectedMonth}` : 'Uren totaal'}
                 </p>
-                <p className="text-xl md:text-2xl font-bold">{monthlyHours.toFixed(2)}h</p>
+                <p className="text-2xl md:text-3xl font-bold text-purple-700">{monthlyHours.toFixed(2)}h</p>
               </CardContent>
             </Card>
           )}
@@ -408,15 +415,15 @@ const Dashboard: React.FC = () => {
 
         {/* Grafieken */}
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-2 md:gap-8 mb-4 md:mb-8">
-          <Card>
+          <Card className="shadow-lg bg-white/80 border border-red-200">
             <CardHeader className="px-2 py-3 md:px-4 md:py-4">
-              <CardTitle className="text-sm md:text-base">
+              <CardTitle className="text-sm md:text-base text-red-700">
                 {isAdmin ? 'Wekelijkse uren per monteur(s)' : 'Jouw gewerkte uren per week'}
               </CardTitle>
             </CardHeader>
             <CardContent className="p-1 md:p-4">
               <ResponsiveContainer width="100%" height={220}>
-                <BarChart data={isAdmin ? weeklyData : weeklyData}>
+                <BarChart data={weeklyData}>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="week" fontSize={11} />
                   <YAxis fontSize={11} />
@@ -432,9 +439,9 @@ const Dashboard: React.FC = () => {
           </Card>
           {isAdmin && (
             <>
-              <Card>
+              <Card className="shadow-lg bg-white/80 border border-red-200">
                 <CardHeader className="px-2 py-3 md:px-4 md:py-4">
-                  <CardTitle className="text-sm md:text-base">Wekelijkse uren (trend)</CardTitle>
+                  <CardTitle className="text-sm md:text-base text-blue-700">Wekelijkse uren (trend)</CardTitle>
                 </CardHeader>
                 <CardContent className="p-1 md:p-4">
                   <ResponsiveContainer width="100%" height={220}>
@@ -454,9 +461,9 @@ const Dashboard: React.FC = () => {
                   </ResponsiveContainer>
                 </CardContent>
               </Card>
-              <Card>
+              <Card className="shadow-lg bg-white/80 border border-yellow-200">
                 <CardHeader className="px-2 py-3 md:px-4 md:py-4">
-                  <CardTitle className="text-sm md:text-base">Winstverdeling</CardTitle>
+                  <CardTitle className="text-sm md:text-base text-yellow-600">Winstverdeling</CardTitle>
                 </CardHeader>
                 <CardContent className="p-1 md:p-4">
                   <ResponsiveContainer width="100%" height={220}>
@@ -483,9 +490,9 @@ const Dashboard: React.FC = () => {
                   </ResponsiveContainer>
                 </CardContent>
               </Card>
-              <Card>
+              <Card className="shadow-lg bg-white/80 border border-green-200">
                 <CardHeader className="px-2 py-3 md:px-4 md:py-4">
-                  <CardTitle className="text-sm md:text-base">Overtime per monteur (125%, 150%, 200%)</CardTitle>
+                  <CardTitle className="text-sm md:text-base text-green-700">Overtime per monteur (125%, 150%, 200%)</CardTitle>
                 </CardHeader>
                 <CardContent className="p-1 md:p-4">
                   <ResponsiveContainer width="100%" height={220}>
@@ -508,9 +515,9 @@ const Dashboard: React.FC = () => {
 
         {/* Admin: Performance cards/table */}
         {isAdmin && (
-          <Card className="mb-6 md:mb-10">
+          <Card className="mb-6 md:mb-10 shadow-xl border-2 border-red-100 bg-white/90">
             <CardHeader>
-              <CardTitle className="text-sm md:text-base">Monteur Prestatie Overzicht</CardTitle>
+              <CardTitle className="text-sm md:text-base text-red-700">Monteur Prestatie Overzicht</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="hidden md:grid grid-cols-1 gap-6">
@@ -520,7 +527,12 @@ const Dashboard: React.FC = () => {
                     return (
                       <div
                         key={t.technicianId}
-                        className={`flex flex-col bg-white rounded-2xl shadow-xl border border-gray-200 hover:shadow-2xl transition-shadow p-5 relative`}
+                        className={`
+                          flex flex-col bg-gradient-to-br from-white via-red-50 to-gray-100
+                          rounded-2xl shadow-2xl border-2 border-red-200
+                          hover:scale-[1.01] hover:shadow-red-300
+                          transition p-5 relative
+                        `}
                       >
                         <div className="flex items-center mb-2">
                           <div className="flex items-center justify-center w-12 h-12 bg-red-100 rounded-full text-red-700 text-xl font-bold mr-3 shadow">
@@ -528,17 +540,13 @@ const Dashboard: React.FC = () => {
                           </div>
                           <div className="flex-1">
                             <span className="block font-semibold text-lg text-gray-900">{t.technicianName}</span>
-                            <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-lg ml-1">{t.daysWorked} dagen</span>
+                            <Badge color="bg-gray-200" text="text-gray-700">{t.daysWorked} dagen</Badge>
                           </div>
                           {t.totalHours === maxHours && (
-                            <span className="ml-2 text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-lg font-semibold shadow">
-                              Top uren
-                            </span>
+                            <Badge color="bg-green-200" text="text-green-700">Top uren</Badge>
                           )}
                           {t.profit === maxProfit && (
-                            <span className="ml-2 text-xs bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded-lg font-semibold shadow">
-                              Top winst
-                            </span>
+                            <Badge color="bg-yellow-200" text="text-yellow-700">Top winst</Badge>
                           )}
                         </div>
                         <ProgressBar value={t.totalHours} max={maxHours} color="#dc2626" />
@@ -553,11 +561,11 @@ const Dashboard: React.FC = () => {
                           </div>
                           <div>
                             <div className="text-xs text-gray-400 mb-1">Omzet</div>
-                            <div className="font-semibold">{formatCurrency(t.revenue)}</div>
+                            <div className="font-semibold text-yellow-600">{formatCurrency(t.revenue)}</div>
                           </div>
                           <div>
                             <div className="text-xs text-gray-400 mb-1">Kosten</div>
-                            <div className="font-semibold">{formatCurrency(t.costs)}</div>
+                            <div className="font-semibold text-blue-700">{formatCurrency(t.costs)}</div>
                           </div>
                           <div>
                             <div className="text-xs text-gray-400 mb-1">Winst</div>
@@ -584,15 +592,15 @@ const Dashboard: React.FC = () => {
                   return (
                     <div
                       key={t.technicianId}
-                      className={`rounded-2xl shadow-md border p-3 bg-white flex flex-col gap-1 ${
-                        i % 2 === 0 ? 'border-l-4 border-red-600' : 'border-l-4 border-gray-300'
-                      }`}
+                      className={`
+                        rounded-2xl shadow-md border p-3 bg-gradient-to-r
+                        from-red-50 via-white to-gray-50 flex flex-col gap-1
+                        ${i % 2 === 0 ? 'border-l-4 border-red-600' : 'border-l-4 border-yellow-300'}
+                      `}
                     >
                       <div className="flex items-center gap-2 mb-1">
                         <span className="font-bold text-base text-gray-900">{t.technicianName}</span>
-                        <span className="text-xs px-2 py-0.5 rounded bg-gray-100 text-gray-500">
-                          {t.daysWorked} dagen
-                        </span>
+                        <Badge color="bg-gray-200" text="text-gray-700">{t.daysWorked} dagen</Badge>
                       </div>
                       <div className="flex flex-wrap gap-x-4 gap-y-1">
                         <div className="flex flex-col items-start">
@@ -601,11 +609,11 @@ const Dashboard: React.FC = () => {
                         </div>
                         <div className="flex flex-col items-start">
                           <span className="text-xs text-gray-400">Omzet</span>
-                          <span className="font-semibold">{formatCurrency(t.revenue)}</span>
+                          <span className="font-semibold text-yellow-700">{formatCurrency(t.revenue)}</span>
                         </div>
                         <div className="flex flex-col items-start">
                           <span className="text-xs text-gray-400">Kosten</span>
-                          <span className="font-semibold">{formatCurrency(t.costs)}</span>
+                          <span className="font-semibold text-blue-700">{formatCurrency(t.costs)}</span>
                         </div>
                         <div className="flex flex-col items-start">
                           <span className="text-xs text-gray-400">Winst</span>
