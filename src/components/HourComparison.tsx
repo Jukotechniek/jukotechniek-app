@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -7,6 +6,13 @@ import { supabase } from '@/integrations/supabase/client';
 import { HourComparison } from '@/types/webhook';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
+
+function getTimeRange(starts: string[], ends: string[]) {
+  if (!starts.length || !ends.length) return '-';
+  const minStart = starts.filter(Boolean).sort()[0]?.slice(0,5);
+  const maxEnd   = ends.filter(Boolean).sort().reverse()[0]?.slice(0,5);
+  return minStart && maxEnd ? `${minStart} - ${maxEnd}` : '-';
+}
 
 const HourComparisonComponent: React.FC = () => {
   const [comparisons, setComparisons] = useState<HourComparison[]>([]);
@@ -30,16 +36,13 @@ const HourComparisonComponent: React.FC = () => {
   const fetchComparisons = async () => {
     setLoading(true);
     try {
-      console.log('Fetching hour comparisons...');
-      
-      // 1. Haal alle handmatige uren
+      // 1. Haal handmatige uren
       const { data: manualRaw, error: manualError } = await supabase
         .from('work_hours')
-        .select('id, technician_id, date, hours_worked')
+        .select('id, technician_id, date, hours_worked, start_time, end_time')
         .eq('is_manual_entry', true);
 
       if (manualError) {
-        console.error('Error fetching manual hours:', manualError);
         toast({
           title: "Error",
           description: "Failed to fetch manual hours",
@@ -48,13 +51,12 @@ const HourComparisonComponent: React.FC = () => {
         return;
       }
 
-      // 2. Haal alle webhook-uren
+      // 2. Haal webhook uren
       const { data: webhookRaw, error: webhookError } = await supabase
         .from('webhook_hours')
-        .select('id, technician_id, date, hours_worked, verified');
+        .select('id, technician_id, date, hours_worked, webhook_start, webhook_end, verified');
 
       if (webhookError) {
-        console.error('Error fetching webhook hours:', webhookError);
         toast({
           title: "Error",
           description: "Failed to fetch webhook hours",
@@ -69,19 +71,35 @@ const HourComparisonComponent: React.FC = () => {
         .select('id, full_name');
 
       if (profilesError) {
-        console.error('Error fetching profiles:', profilesError);
+        toast({
+          title: "Error",
+          description: "Failed to fetch profiles",
+          variant: "destructive"
+        });
       }
 
       const profilesMap = new Map<string, string>(
         (profilesRaw || []).map(p => [p.id, p.full_name || p.id])
       );
 
-      // 4. Zet data in één array met bronlabel
-      const manualData = (manualRaw || []).map(e => ({ ...e, source: 'manual' as const }));
-      const webhookData = (webhookRaw || []).map(e => ({ ...e, source: 'webhook' as const }));
+      // 4. Mapping voor grouping
+      const manualData = (manualRaw || []).map(e => ({
+        ...e,
+        source: 'manual' as const,
+        startTimes: e.start_time ? [e.start_time] : [],
+        endTimes: e.end_time ? [e.end_time] : [],
+      }));
+
+      const webhookData = (webhookRaw || []).map(e => ({
+        ...e,
+        source: 'webhook' as const,
+        startTimes: e.webhook_start ? [e.webhook_start] : [],
+        endTimes: e.webhook_end ? [e.webhook_end] : [],
+        verified: e.verified,
+      }));
+
       const all = [...manualData, ...webhookData];
 
-      // 5. Groepeer per monteur+datum
       type Slot = {
         technicianId: string;
         technicianName: string;
@@ -90,6 +108,10 @@ const HourComparisonComponent: React.FC = () => {
         webhookHours: number;
         manualIds: string[];
         webhookIds: string[];
+        manualStartTimes: string[];
+        manualEndTimes: string[];
+        webhookStartTimes: string[];
+        webhookEndTimes: string[];
         verified: boolean;
       };
       const map = new Map<string, Slot>();
@@ -105,21 +127,28 @@ const HourComparisonComponent: React.FC = () => {
             webhookHours: 0,
             manualIds: [],
             webhookIds: [],
-            verified: true, // start als true, en 'AND' met elke webhook-entry
+            manualStartTimes: [],
+            manualEndTimes: [],
+            webhookStartTimes: [],
+            webhookEndTimes: [],
+            verified: true,
           });
         }
         const slot = map.get(key)!;
         if (e.source === 'manual') {
           slot.manualHours += e.hours_worked;
           slot.manualIds.push(e.id);
+          slot.manualStartTimes.push(...e.startTimes);
+          slot.manualEndTimes.push(...e.endTimes);
         } else {
           slot.webhookHours += e.hours_worked;
           slot.webhookIds.push(e.id);
+          slot.webhookStartTimes.push(...e.startTimes);
+          slot.webhookEndTimes.push(...e.endTimes);
           slot.verified = slot.verified && Boolean(e.verified);
         }
       });
 
-      // 6. Bouw de HourComparison-array
       const comps: HourComparison[] = Array.from(map.values()).map(it => ({
         technicianId: it.technicianId,
         technicianName: it.technicianName,
@@ -128,6 +157,10 @@ const HourComparisonComponent: React.FC = () => {
         webhookHours: it.webhookHours,
         manualIds: it.manualIds,
         webhookIds: it.webhookIds,
+        manualStartTimes: it.manualStartTimes,
+        manualEndTimes: it.manualEndTimes,
+        webhookStartTimes: it.webhookStartTimes,
+        webhookEndTimes: it.webhookEndTimes,
         verified: it.webhookIds.length > 0 && it.verified,
         difference: it.webhookHours - it.manualHours,
         status:
@@ -137,28 +170,8 @@ const HourComparisonComponent: React.FC = () => {
           : 'discrepancy'
       }));
 
-      // Auto-verify exact matches ONLY
-      for (const c of comps) {
-        if (c.status === 'match' && c.webhookIds && c.webhookIds.length > 0 && !c.verified) {
-          const { error: updateError } = await supabase
-            .from('webhook_hours')
-            .update({ 
-              verified: true,
-              verified_by: user?.id,
-              verified_at: new Date().toISOString()
-            })
-            .in('id', c.webhookIds);
-          
-          if (!updateError) {
-            c.verified = true;
-          }
-        }
-      }
-
-      console.log('Processed', comps.length, 'hour comparisons');
       setComparisons(comps.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
     } catch (error) {
-      console.error('Error in fetchComparisons:', error);
       toast({
         title: "Error",
         description: "Failed to fetch comparison data",
@@ -171,12 +184,10 @@ const HourComparisonComponent: React.FC = () => {
 
   useEffect(() => {
     fetchComparisons();
+    // eslint-disable-next-line
   }, []);
 
-  const handleRefresh = () => {
-    console.log('Refreshing hour comparisons...');
-    fetchComparisons();
-  };
+  const handleRefresh = () => fetchComparisons();
 
   const handleVerify = async (comp: HourComparison) => {
     if (!comp.webhookIds || comp.webhookIds.length === 0) {
@@ -187,21 +198,17 @@ const HourComparisonComponent: React.FC = () => {
       });
       return;
     }
-
     try {
-      console.log('Manually verifying webhook hours for', comp.technicianName, 'on', comp.date);
-      
       const { error } = await supabase
         .from('webhook_hours')
-        .update({ 
+        .update({
           verified: true,
-          verified_by: user?.id,
+          verified_by: user?.id ?? null,
           verified_at: new Date().toISOString()
-        })
+        } as any)
         .in('id', comp.webhookIds);
 
       if (error) {
-        console.error('Error verifying webhook hours:', error);
         toast({
           title: "Error",
           description: "Failed to verify hours",
@@ -215,10 +222,8 @@ const HourComparisonComponent: React.FC = () => {
         description: `Hours verified for ${comp.technicianName}`,
       });
 
-      // Refresh the data
       fetchComparisons();
     } catch (error) {
-      console.error('Error in handleVerify:', error);
       toast({
         title: "Error",
         description: "Failed to verify hours",
@@ -236,21 +241,17 @@ const HourComparisonComponent: React.FC = () => {
       });
       return;
     }
-
     try {
-      console.log('Unverifying webhook hours for', comp.technicianName, 'on', comp.date);
-      
       const { error } = await supabase
         .from('webhook_hours')
-        .update({ 
+        .update({
           verified: false,
           verified_by: null,
           verified_at: null
-        })
+        } as any)
         .in('id', comp.webhookIds);
 
       if (error) {
-        console.error('Error unverifying webhook hours:', error);
         toast({
           title: "Error",
           description: "Failed to unverify hours",
@@ -264,10 +265,8 @@ const HourComparisonComponent: React.FC = () => {
         description: `Hours unverified for ${comp.technicianName}`,
       });
 
-      // Refresh the data
       fetchComparisons();
     } catch (error) {
-      console.error('Error in handleUnverify:', error);
       toast({
         title: "Error",
         description: "Failed to unverify hours",
@@ -330,7 +329,6 @@ const HourComparisonComponent: React.FC = () => {
               </div>
             </CardContent>
           </Card>
-          
           <Card className="bg-white shadow-sm">
             <CardContent className="p-6 flex items-center">
               <AlertTriangle className="h-8 w-8 text-yellow-600 mr-4" />
@@ -342,7 +340,6 @@ const HourComparisonComponent: React.FC = () => {
               </div>
             </CardContent>
           </Card>
-          
           <Card className="bg-white shadow-sm">
             <CardContent className="p-6 flex items-center">
               <XCircle className="h-8 w-8 text-red-600 mr-4" />
@@ -354,7 +351,6 @@ const HourComparisonComponent: React.FC = () => {
               </div>
             </CardContent>
           </Card>
-
           <Card className="bg-white shadow-sm">
             <CardContent className="p-6 flex items-center">
               <CheckCircle className="h-8 w-8 text-blue-600 mr-4" />
@@ -383,14 +379,14 @@ const HourComparisonComponent: React.FC = () => {
                     <th className="py-3 text-sm font-medium text-gray-600">Status</th>
                     <th className="py-3 text-sm font-medium text-gray-600">Monteur</th>
                     <th className="py-3 text-sm font-medium text-gray-600">Datum</th>
-                    <th className="py-3 text-sm font-medium text-gray-600">Handmatige Uren</th>
-                    <th className="py-3 text-sm font-medium text-gray-600">Webhook Uren</th>
+                    <th className="py-3 text-sm font-medium text-gray-600">Handmatig</th>
+                    <th className="py-3 text-sm font-medium text-gray-600">Webhook</th>
                     <th className="py-3 text-sm font-medium text-gray-600">Verschil</th>
                     <th className="py-3 text-sm font-medium text-gray-600">Acties</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {comparisons.map((c, i) => (
+                  {comparisons.map((c) => (
                     <tr
                       key={`${c.technicianId}-${c.date}`}
                       className={`border-b border-gray-100 hover:bg-gray-50 ${c.verified ? 'bg-green-50' : ''}`}
@@ -405,8 +401,16 @@ const HourComparisonComponent: React.FC = () => {
                       </td>
                       <td className="py-3 font-medium text-gray-900">{c.technicianName}</td>
                       <td className="py-3 text-gray-700">{new Date(c.date).toLocaleDateString('nl-NL')}</td>
-                      <td className="py-3 text-gray-700">{c.manualHours.toFixed(1)}h</td>
-                      <td className="py-3 text-gray-700">{c.webhookHours.toFixed(1)}h</td>
+                      <td className="py-3 text-gray-700">
+                        <span className="font-mono">{c.manualHours.toFixed(1)}h</span>
+                        <br />
+                        <span className="text-xs">{getTimeRange(c.manualStartTimes, c.manualEndTimes)}</span>
+                      </td>
+                      <td className="py-3 text-gray-700">
+                        <span className="font-mono">{c.webhookHours.toFixed(1)}h</span>
+                        <br />
+                        <span className="text-xs">{getTimeRange(c.webhookStartTimes, c.webhookEndTimes)}</span>
+                      </td>
                       <td className={`py-3 font-medium ${
                         c.difference > 0 ? 'text-green-600' : 
                         c.difference < 0 ? 'text-red-600' : 'text-gray-700'

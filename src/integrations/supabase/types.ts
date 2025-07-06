@@ -334,6 +334,8 @@ export type Database = {
           verified: boolean
           verified_at: string | null
           verified_by: string | null
+          webhook_start: string | null
+          webhook_end: string | null
         }
         Insert: {
           created_at?: string
@@ -345,6 +347,8 @@ export type Database = {
           verified?: boolean
           verified_at?: string | null
           verified_by?: string | null
+          webhook_start: string | null
+          webhook_end: string | null
         }
         Update: {
           created_at?: string
@@ -356,6 +360,8 @@ export type Database = {
           verified?: boolean
           verified_at?: string | null
           verified_by?: string | null
+          webhook_start: string | null
+          webhook_end: string | null
         }
         Relationships: [
           {
