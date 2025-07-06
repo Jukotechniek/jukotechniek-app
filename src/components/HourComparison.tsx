@@ -6,21 +6,39 @@ import { supabase } from '@/integrations/supabase/client';
 import { HourComparison } from '@/types/webhook';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
+import { Input } from '@/components/ui/input';
 
-function getTimeRange(starts: string[], ends: string[]) {
-  if (!starts.length || !ends.length) return '-';
-  const minStart = starts.filter(Boolean).sort()[0]?.slice(0,5);
-  const maxEnd   = ends.filter(Boolean).sort().reverse()[0]?.slice(0,5);
-  return minStart && maxEnd ? `${minStart} - ${maxEnd}` : '-';
+interface TechnicianProfile {
+  id: string;
+  full_name: string;
 }
 
 const HourComparisonComponent: React.FC = () => {
   const [comparisons, setComparisons] = useState<HourComparison[]>([]);
+  const [allComparisons, setAllComparisons] = useState<HourComparison[]>([]);
+  const [technicians, setTechnicians] = useState<TechnicianProfile[]>([]);
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
   const { user } = useAuth();
 
   const isAdmin = user?.role === 'admin';
+  const [selectedTech, setSelectedTech] = useState<string>('all');
+  const [selectedMonth, setSelectedMonth] = useState<string>(new Date().toISOString().slice(0, 7));
+
+  useEffect(() => {
+    if (!allComparisons) return;
+    setComparisons(
+      allComparisons.filter(c => {
+        if (selectedTech !== 'all' && c.technicianId !== selectedTech) return false;
+        if (selectedMonth !== 'all') {
+          const [year, month] = selectedMonth.split('-').map(Number);
+          const d = new Date(c.date);
+          if (d.getFullYear() !== year || d.getMonth() + 1 !== month) return false;
+        }
+        return true;
+      })
+    );
+  }, [selectedTech, selectedMonth, allComparisons]);
 
   if (!isAdmin) {
     return (
@@ -36,58 +54,40 @@ const HourComparisonComponent: React.FC = () => {
   const fetchComparisons = async () => {
     setLoading(true);
     try {
-      // 1. Haal handmatige uren
-      const { data: manualRaw, error: manualError } = await supabase
+      // Haal monteurs
+      const { data: techs } = await supabase
+        .from('profiles')
+        .select('id, full_name')
+        .eq('role', 'technician');
+      setTechnicians(techs || []);
+
+      // Haal handmatige uren inclusief manual_verified
+      const { data: manualRaw } = await supabase
         .from('work_hours')
-        .select('id, technician_id, date, hours_worked, start_time, end_time')
+        .select('id, technician_id, date, hours_worked, start_time, end_time, is_manual_entry, manual_verified')
         .eq('is_manual_entry', true);
 
-      if (manualError) {
-        toast({
-          title: "Error",
-          description: "Failed to fetch manual hours",
-          variant: "destructive"
-        });
-        return;
-      }
-
-      // 2. Haal webhook uren
-      const { data: webhookRaw, error: webhookError } = await supabase
+      // Haal webhook uren inclusief webhook_verified
+      const { data: webhookRaw } = await supabase
         .from('webhook_hours')
-        .select('id, technician_id, date, hours_worked, webhook_start, webhook_end, verified');
+        .select('id, technician_id, date, hours_worked, webhook_start, webhook_end, webhook_verified');
 
-      if (webhookError) {
-        toast({
-          title: "Error",
-          description: "Failed to fetch webhook hours",
-          variant: "destructive"
-        });
-        return;
-      }
-
-      // 3. Haal namen van monteurs
-      const { data: profilesRaw, error: profilesError } = await supabase
+      // Haal profielen
+      const { data: profilesRaw } = await supabase
         .from('profiles')
         .select('id, full_name');
-
-      if (profilesError) {
-        toast({
-          title: "Error",
-          description: "Failed to fetch profiles",
-          variant: "destructive"
-        });
-      }
 
       const profilesMap = new Map<string, string>(
         (profilesRaw || []).map(p => [p.id, p.full_name || p.id])
       );
 
-      // 4. Mapping voor grouping
+      // Mapping voor grouping
       const manualData = (manualRaw || []).map(e => ({
         ...e,
         source: 'manual' as const,
         startTimes: e.start_time ? [e.start_time] : [],
         endTimes: e.end_time ? [e.end_time] : [],
+        manual_verified: e.manual_verified || false,
       }));
 
       const webhookData = (webhookRaw || []).map(e => ({
@@ -95,7 +95,7 @@ const HourComparisonComponent: React.FC = () => {
         source: 'webhook' as const,
         startTimes: e.webhook_start ? [e.webhook_start] : [],
         endTimes: e.webhook_end ? [e.webhook_end] : [],
-        verified: e.verified,
+        webhook_verified: e.webhook_verified || false,
       }));
 
       const all = [...manualData, ...webhookData];
@@ -112,7 +112,8 @@ const HourComparisonComponent: React.FC = () => {
         manualEndTimes: string[];
         webhookStartTimes: string[];
         webhookEndTimes: string[];
-        verified: boolean;
+        manualVerified: boolean;
+        webhookVerified: boolean;
       };
       const map = new Map<string, Slot>();
 
@@ -131,7 +132,8 @@ const HourComparisonComponent: React.FC = () => {
             manualEndTimes: [],
             webhookStartTimes: [],
             webhookEndTimes: [],
-            verified: true,
+            manualVerified: false,
+            webhookVerified: false,
           });
         }
         const slot = map.get(key)!;
@@ -140,12 +142,13 @@ const HourComparisonComponent: React.FC = () => {
           slot.manualIds.push(e.id);
           slot.manualStartTimes.push(...e.startTimes);
           slot.manualEndTimes.push(...e.endTimes);
+          slot.manualVerified = slot.manualVerified || Boolean(e.manual_verified);
         } else {
           slot.webhookHours += e.hours_worked;
           slot.webhookIds.push(e.id);
           slot.webhookStartTimes.push(...e.startTimes);
           slot.webhookEndTimes.push(...e.endTimes);
-          slot.verified = slot.verified && Boolean(e.verified);
+          slot.webhookVerified = slot.webhookVerified || Boolean(e.webhook_verified);
         }
       });
 
@@ -161,16 +164,21 @@ const HourComparisonComponent: React.FC = () => {
         manualEndTimes: it.manualEndTimes,
         webhookStartTimes: it.webhookStartTimes,
         webhookEndTimes: it.webhookEndTimes,
-        verified: it.webhookIds.length > 0 && it.verified,
+        // verified op basis van het type!
+        verified: it.webhookIds.length > 0
+          ? it.webhookVerified
+          : it.manualIds.length > 0
+            ? it.manualVerified
+            : false,
         difference: it.webhookHours - it.manualHours,
         status:
           it.manualHours === it.webhookHours ? 'match'
-          : it.manualHours === 0         ? 'missing_manual'
-          : it.webhookHours === 0        ? 'missing_webhook'
-          : 'discrepancy'
+            : it.manualHours === 0 ? 'missing_manual'
+              : it.webhookHours === 0 ? 'missing_webhook'
+                : 'discrepancy'
       }));
 
-      setComparisons(comps.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
+      setAllComparisons(comps.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
     } catch (error) {
       toast({
         title: "Error",
@@ -190,100 +198,98 @@ const HourComparisonComponent: React.FC = () => {
   const handleRefresh = () => fetchComparisons();
 
   const handleVerify = async (comp: HourComparison) => {
-    if (!comp.webhookIds || comp.webhookIds.length === 0) {
-      toast({
-        title: "Error",
-        description: "No webhook hours to verify",
-        variant: "destructive"
-      });
-      return;
-    }
-    try {
-      const { error } = await supabase
-        .from('webhook_hours')
-        .update({
-          verified: true,
-          verified_by: user?.id ?? null,
-          verified_at: new Date().toISOString()
-        } as any)
-        .in('id', comp.webhookIds);
-
-      if (error) {
+    if (comp.webhookIds?.length > 0) {
+      try {
+        const { error } = await supabase
+          .from('webhook_hours')
+          .update({
+            webhook_verified: true,
+            verified_by: user?.id ?? null,
+            verified_at: new Date().toISOString()
+          } as any)
+          .in('id', comp.webhookIds);
+        if (error) throw error;
         toast({
-          title: "Error",
-          description: "Failed to verify hours",
-          variant: "destructive"
+          title: "Success",
+          description: `Webhook uren geverifieerd voor ${comp.technicianName}`,
         });
-        return;
+        fetchComparisons();
+      } catch {
+        toast({ title: "Error", description: "Failed to verify webhook hours", variant: "destructive" });
       }
-
-      toast({
-        title: "Success",
-        description: `Hours verified for ${comp.technicianName}`,
-      });
-
-      fetchComparisons();
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: "Failed to verify hours",
-        variant: "destructive"
-      });
+    } else if (comp.manualIds?.length > 0) {
+      try {
+        const { error } = await supabase
+          .from('work_hours')
+          .update({
+            manual_verified: true,
+            verified_by: user?.id ?? null,
+            verified_at: new Date().toISOString()
+          } as any)
+          .in('id', comp.manualIds);
+        if (error) throw error;
+        toast({
+          title: "Success",
+          description: `Handmatige uren geverifieerd voor ${comp.technicianName}`,
+        });
+        fetchComparisons();
+      } catch {
+        toast({ title: "Error", description: "Failed to verify manual hours", variant: "destructive" });
+      }
     }
   };
 
   const handleUnverify = async (comp: HourComparison) => {
-    if (!comp.webhookIds || comp.webhookIds.length === 0) {
-      toast({
-        title: "Error",
-        description: "No webhook hours to unverify",
-        variant: "destructive"
-      });
-      return;
-    }
-    try {
-      const { error } = await supabase
-        .from('webhook_hours')
-        .update({
-          verified: false,
-          verified_by: null,
-          verified_at: null
-        } as any)
-        .in('id', comp.webhookIds);
-
-      if (error) {
+    if (comp.webhookIds?.length > 0) {
+      try {
+        const { error } = await supabase
+          .from('webhook_hours')
+          .update({
+            webhook_verified: false,
+            verified_by: null,
+            verified_at: null
+          } as any)
+          .in('id', comp.webhookIds);
+        if (error) throw error;
         toast({
-          title: "Error",
-          description: "Failed to unverify hours",
-          variant: "destructive"
+          title: "Success",
+          description: `Webhook uren onverifieerd voor ${comp.technicianName}`,
         });
-        return;
+        fetchComparisons();
+      } catch {
+        toast({ title: "Error", description: "Failed to unverify webhook hours", variant: "destructive" });
       }
-
-      toast({
-        title: "Success",
-        description: `Hours unverified for ${comp.technicianName}`,
-      });
-
-      fetchComparisons();
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: "Failed to unverify hours",
-        variant: "destructive"
-      });
+    } else if (comp.manualIds?.length > 0) {
+      try {
+        const { error } = await supabase
+          .from('work_hours')
+          .update({
+            manual_verified: false,
+            verified_by: null,
+            verified_at: null
+          } as any)
+          .in('id', comp.manualIds);
+        if (error) throw error;
+        toast({
+          title: "Success",
+          description: `Handmatige uren onverifieerd voor ${comp.technicianName}`,
+        });
+        fetchComparisons();
+      } catch {
+        toast({ title: "Error", description: "Failed to unverify manual hours", variant: "destructive" });
+      }
     }
   };
 
   const getStatusIcon = (s: string) =>
-    s === 'match'       ? <CheckCircle className="h-5 w-5 text-green-600" />
-  : s === 'discrepancy' ? <AlertTriangle className="h-5 w-5 text-yellow-600" />
-  :                      <XCircle className="h-5 w-5 text-red-600" />;
+    s === 'match' ? <CheckCircle className="h-5 w-5 text-green-600" />
+      : s === 'discrepancy' ? <AlertTriangle className="h-5 w-5 text-yellow-600" />
+        : <XCircle className="h-5 w-5 text-red-600" />;
 
   const getStatusColor = (s: string) =>
-    s === 'match'       ? 'bg-green-100 text-green-800'
-  : s === 'discrepancy' ? 'bg-yellow-100 text-yellow-800'
-  :                      'bg-red-100 text-red-800';
+    s === 'match' ? 'bg-green-100 text-green-800'
+      : s === 'discrepancy' ? 'bg-yellow-100 text-yellow-800'
+        : 'bg-red-100 text-red-800';
 
   const getStatusText = (s: string) => {
     switch (s) {
@@ -294,6 +300,15 @@ const HourComparisonComponent: React.FC = () => {
       default: return s.toUpperCase();
     }
   };
+
+  function renderTimes(starts: string[], ends: string[]) {
+    if (!starts.length) return '-';
+    return starts.map((start, idx) => {
+      const end = ends[idx] || '';
+      if (!start && !end) return '';
+      return `${start?.slice(0, 5) || '-'}${end ? ' - ' + end.slice(0, 5) : ''}`;
+    }).filter(Boolean).join(' / ');
+  }
 
   if (loading) {
     return (
@@ -316,52 +331,32 @@ const HourComparisonComponent: React.FC = () => {
           </Button>
         </div>
 
-        {/* Summary Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-          <Card className="bg-white shadow-sm">
-            <CardContent className="p-6 flex items-center">
-              <CheckCircle className="h-8 w-8 text-green-600 mr-4" />
-              <div>
-                <p className="text-sm text-gray-600">Matches</p>
-                <p className="text-2xl font-bold text-gray-900">
-                  {comparisons.filter(c => c.status === 'match').length}
-                </p>
-              </div>
-            </CardContent>
-          </Card>
-          <Card className="bg-white shadow-sm">
-            <CardContent className="p-6 flex items-center">
-              <AlertTriangle className="h-8 w-8 text-yellow-600 mr-4" />
-              <div>
-                <p className="text-sm text-gray-600">Discrepancies</p>
-                <p className="text-2xl font-bold text-gray-900">
-                  {comparisons.filter(c => c.status === 'discrepancy').length}
-                </p>
-              </div>
-            </CardContent>
-          </Card>
-          <Card className="bg-white shadow-sm">
-            <CardContent className="p-6 flex items-center">
-              <XCircle className="h-8 w-8 text-red-600 mr-4" />
-              <div>
-                <p className="text-sm text-gray-600">Missende</p>
-                <p className="text-2xl font-bold text-gray-900">
-                  {comparisons.filter(c => c.status.includes('missing')).length}
-                </p>
-              </div>
-            </CardContent>
-          </Card>
-          <Card className="bg-white shadow-sm">
-            <CardContent className="p-6 flex items-center">
-              <CheckCircle className="h-8 w-8 text-blue-600 mr-4" />
-              <div>
-                <p className="text-sm text-gray-600">Verified</p>
-                <p className="text-2xl font-bold text-gray-900">
-                  {comparisons.filter(c => c.verified).length}
-                </p>
-              </div>
-            </CardContent>
-          </Card>
+        {/* FILTERS */}
+        <div className="mb-4 flex flex-col gap-y-2 sm:flex-row sm:items-center sm:space-x-4 sm:gap-y-0">
+          <select
+            value={selectedTech}
+            onChange={e => setSelectedTech(e.target.value)}
+            className="p-2 border rounded w-full sm:w-auto"
+          >
+            <option value="all">Alle monteurs</option>
+            {technicians.map(t => (
+              <option key={t.id} value={t.id}>
+                {t.full_name}
+              </option>
+            ))}
+          </select>
+          <Input
+            type="month"
+            value={selectedMonth === 'all' ? '' : selectedMonth}
+            onChange={e => setSelectedMonth(e.target.value || 'all')}
+            className="p-2 border rounded w-full sm:w-auto"
+          />
+          <Button
+            onClick={() => setSelectedMonth('all')}
+            className="bg-red-600 text-white w-full sm:w-auto"
+          >
+            Alles
+          </Button>
         </div>
 
         {/* Results Table */}
@@ -402,14 +397,14 @@ const HourComparisonComponent: React.FC = () => {
                       <td className="py-3 font-medium text-gray-900">{c.technicianName}</td>
                       <td className="py-3 text-gray-700">{new Date(c.date).toLocaleDateString('nl-NL')}</td>
                       <td className="py-3 text-gray-700">
-                        <span className="font-mono">{c.manualHours.toFixed(1)}h</span>
+                        {c.manualHours.toFixed(1)}h
                         <br />
-                        <span className="text-xs">{getTimeRange(c.manualStartTimes, c.manualEndTimes)}</span>
+                        <span className="text-xs text-gray-500">{renderTimes(c.manualStartTimes, c.manualEndTimes)}</span>
                       </td>
                       <td className="py-3 text-gray-700">
-                        <span className="font-mono">{c.webhookHours.toFixed(1)}h</span>
+                        {c.webhookHours.toFixed(1)}h
                         <br />
-                        <span className="text-xs">{getTimeRange(c.webhookStartTimes, c.webhookEndTimes)}</span>
+                        <span className="text-xs text-gray-500">{renderTimes(c.webhookStartTimes, c.webhookEndTimes)}</span>
                       </td>
                       <td className={`py-3 font-medium ${
                         c.difference > 0 ? 'text-green-600' : 
@@ -418,41 +413,71 @@ const HourComparisonComponent: React.FC = () => {
                         {c.difference > 0 ? `+${c.difference.toFixed(1)}h` : `${c.difference.toFixed(1)}h`}
                       </td>
                       <td className="py-3">
-                        {c.verified ? (
-                          <div className="flex items-center space-x-2">
-                            <span className="text-green-700 font-medium flex items-center">
-                              <CheckCircle className="h-4 w-4 mr-1" />
-                              Verified
-                            </span>
+                        {c.webhookIds && c.webhookIds.length > 0 ? (
+                          c.verified ? (
+                            <div className="flex items-center space-x-2">
+                              <span className="text-green-700 font-medium flex items-center">
+                                <CheckCircle className="h-4 w-4 mr-1" />
+                                Verified
+                              </span>
+                              <Button 
+                                variant="outline" 
+                                size="sm"
+                                onClick={() => handleUnverify(c)}
+                                className="border-red-600 text-red-600 hover:bg-red-50"
+                              >
+                                <X className="h-4 w-4 mr-1" />
+                                Unverify
+                              </Button>
+                            </div>
+                          ) : (
                             <Button 
                               variant="outline" 
                               size="sm"
-                              onClick={() => handleUnverify(c)}
-                              className="border-red-600 text-red-600 hover:bg-red-50"
+                              onClick={() => handleVerify(c)}
+                              className="border-blue-600 text-blue-600 hover:bg-blue-50"
                             >
-                              <X className="h-4 w-4 mr-1" />
-                              Unverify
+                              <Check className="h-4 w-4 mr-1" />
+                              Verify
                             </Button>
-                          </div>
-                        ) : c.webhookIds && c.webhookIds.length > 0 ? (
-                          <Button 
-                            variant="outline" 
-                            size="sm"
-                            onClick={() => handleVerify(c)}
-                            className="border-blue-600 text-blue-600 hover:bg-blue-50"
-                          >
-                            <Check className="h-4 w-4 mr-1" />
-                            Verify
-                          </Button>
+                          )
+                        ) : c.manualIds && c.manualIds.length > 0 ? (
+                          c.verified ? (
+                            <div className="flex items-center space-x-2">
+                              <span className="text-green-700 font-medium flex items-center">
+                                <CheckCircle className="h-4 w-4 mr-1" />
+                                Verified
+                              </span>
+                              <Button 
+                                variant="outline" 
+                                size="sm"
+                                onClick={() => handleUnverify(c)}
+                                className="border-red-600 text-red-600 hover:bg-red-50"
+                              >
+                                <X className="h-4 w-4 mr-1" />
+                                Unverify
+                              </Button>
+                            </div>
+                          ) : (
+                            <Button 
+                              variant="outline" 
+                              size="sm"
+                              onClick={() => handleVerify(c)}
+                              className="border-blue-600 text-blue-600 hover:bg-blue-50"
+                            >
+                              <Check className="h-4 w-4 mr-1" />
+                              Verify
+                            </Button>
+                          )
                         ) : (
-                          <span className="text-gray-500">Geen webhook gegevens</span>
+                          <span className="text-gray-500">Geen uren gevonden</span>
                         )}
                       </td>
                     </tr>
                   ))}
                   {comparisons.length === 0 && (
                     <tr>
-                      <td colSpan={7} className="py-8 text-center text-gray-500">
+                      <td colSpan={8} className="py-8 text-center text-gray-500">
                         Geen vergelijkingsgegevens beschikbaar
                       </td>
                     </tr>

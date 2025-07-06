@@ -331,7 +331,7 @@ export type Database = {
           id: string
           received_at: string
           technician_id: string
-          verified: boolean
+          webhook_verified: boolean
           verified_at: string | null
           verified_by: string | null
           webhook_start: string | null
@@ -344,7 +344,7 @@ export type Database = {
           id?: string
           received_at?: string
           technician_id: string
-          verified?: boolean
+          webhook_verified?: boolean
           verified_at?: string | null
           verified_by?: string | null
           webhook_start: string | null
@@ -357,7 +357,7 @@ export type Database = {
           id?: string
           received_at?: string
           technician_id?: string
-          verified?: boolean
+          webhook_verified?: boolean
           verified_at?: string | null
           verified_by?: string | null
           webhook_start: string | null
@@ -394,6 +394,7 @@ export type Database = {
           weekend_hours: number | null
           start_time: string | null
           end_time: string | null
+          manual_verified?: boolean
         }
         Insert: {
           created_at?: string | null
@@ -415,6 +416,7 @@ export type Database = {
           weekend_hours?: number | null
           start_time: string | null
           end_time: string | null
+          manual_verified?: boolean
         }
         Update: {
           created_at?: string | null
@@ -436,6 +438,7 @@ export type Database = {
           weekend_hours?: number | null
           start_time: string | null
           end_time: string | null
+          manual_verified?: boolean
         }
         Relationships: [
           {

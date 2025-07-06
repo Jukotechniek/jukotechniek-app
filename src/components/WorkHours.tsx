@@ -194,7 +194,8 @@ const WorkHours = () => {
           is_sunday: overtimeData.isSunday,
           travel_expense_to_technician: travelExpenses.travel_expense_to_technician,
           travel_expense_from_client: travelExpenses.travel_expense_from_client,
-          created_by: user?.id || ''
+          created_by: user?.id || '',
+          manual_verified: false
         }
       ])
       .select(`
@@ -288,7 +289,8 @@ const WorkHours = () => {
         weekend_hours: overtimeData.weekendHours,
         sunday_hours: overtimeData.sundayHours,
         is_weekend: overtimeData.isWeekend,
-        is_sunday: overtimeData.isSunday
+        is_sunday: overtimeData.isSunday,
+        manual_verified: false // or set to the appropriate value if needed
       })
       .eq('id', editingEntry.id);
 
