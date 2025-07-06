@@ -87,7 +87,7 @@ const HourComparisonComponent: React.FC = () => {
         source: 'manual' as const,
         startTimes: e.start_time ? [e.start_time] : [],
         endTimes: e.end_time ? [e.end_time] : [],
-        manual_verified: e.manual_verified || false,
+        manual_verified: Boolean(e.manual_verified), // <-- Belangrijk!
       }));
 
       const webhookData = (webhookRaw || []).map(e => ({
@@ -95,7 +95,7 @@ const HourComparisonComponent: React.FC = () => {
         source: 'webhook' as const,
         startTimes: e.webhook_start ? [e.webhook_start] : [],
         endTimes: e.webhook_end ? [e.webhook_end] : [],
-        webhook_verified: e.webhook_verified || false,
+        webhook_verified: Boolean(e.webhook_verified),
       }));
 
       const all = [...manualData, ...webhookData];
@@ -198,7 +198,9 @@ const HourComparisonComponent: React.FC = () => {
   const handleRefresh = () => fetchComparisons();
 
   const handleVerify = async (comp: HourComparison) => {
-    if (comp.webhookIds?.length > 0) {
+    console.log('Verifying:', comp);
+
+    if (comp.webhookIds && comp.webhookIds.length > 0) {
       try {
         const { error } = await supabase
           .from('webhook_hours')
@@ -208,34 +210,40 @@ const HourComparisonComponent: React.FC = () => {
             verified_at: new Date().toISOString()
           } as any)
           .in('id', comp.webhookIds);
+
         if (error) throw error;
         toast({
           title: "Success",
           description: `Webhook uren geverifieerd voor ${comp.technicianName}`,
         });
         fetchComparisons();
-      } catch {
-        toast({ title: "Error", description: "Failed to verify webhook hours", variant: "destructive" });
+      } catch (err) {
+        console.error('Failed to verify webhook hours:', err);
+        toast({ title: "Error", description: `Failed to verify webhook hours: ${err?.message || err}`, variant: "destructive" });
       }
-    } else if (comp.manualIds?.length > 0) {
+    } else if (comp.manualIds && comp.manualIds.length > 0) {
       try {
+        console.log('Manual IDs:', comp.manualIds);
+
         const { error } = await supabase
           .from('work_hours')
           .update({
             manual_verified: true,
-            verified_by: user?.id ?? null,
-            verified_at: new Date().toISOString()
           } as any)
           .in('id', comp.manualIds);
+
         if (error) throw error;
         toast({
           title: "Success",
           description: `Handmatige uren geverifieerd voor ${comp.technicianName}`,
         });
         fetchComparisons();
-      } catch {
-        toast({ title: "Error", description: "Failed to verify manual hours", variant: "destructive" });
+      } catch (err) {
+        console.error('Failed to verify manual hours:', err);
+        toast({ title: "Error", description: `Failed to verify manual hours: ${err?.message || err}`, variant: "destructive" });
       }
+    } else {
+      toast({ title: "Error", description: "Geen te verifiëren handmatige uren gevonden.", variant: "destructive" });
     }
   };
 
@@ -246,8 +254,6 @@ const HourComparisonComponent: React.FC = () => {
           .from('webhook_hours')
           .update({
             webhook_verified: false,
-            verified_by: null,
-            verified_at: null
           } as any)
           .in('id', comp.webhookIds);
         if (error) throw error;
@@ -256,8 +262,9 @@ const HourComparisonComponent: React.FC = () => {
           description: `Webhook uren onverifieerd voor ${comp.technicianName}`,
         });
         fetchComparisons();
-      } catch {
-        toast({ title: "Error", description: "Failed to unverify webhook hours", variant: "destructive" });
+      } catch (err) {
+        console.error('Failed to unverify webhook hours:', err);
+        toast({ title: "Error", description: `Failed to unverify webhook hours: ${err?.message || err}`, variant: "destructive" });
       }
     } else if (comp.manualIds?.length > 0) {
       try {
@@ -265,8 +272,6 @@ const HourComparisonComponent: React.FC = () => {
           .from('work_hours')
           .update({
             manual_verified: false,
-            verified_by: null,
-            verified_at: null
           } as any)
           .in('id', comp.manualIds);
         if (error) throw error;
@@ -275,8 +280,9 @@ const HourComparisonComponent: React.FC = () => {
           description: `Handmatige uren onverifieerd voor ${comp.technicianName}`,
         });
         fetchComparisons();
-      } catch {
-        toast({ title: "Error", description: "Failed to unverify manual hours", variant: "destructive" });
+      } catch (err) {
+        console.error('Failed to unverify manual hours:', err);
+        toast({ title: "Error", description: `Failed to unverify manual hours: ${err?.message || err}`, variant: "destructive" });
       }
     }
   };
