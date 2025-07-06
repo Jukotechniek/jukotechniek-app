@@ -150,126 +150,123 @@ const Dashboard: React.FC = () => {
   };
 
   const processTechnicianData = (workHours, rates, travelRates) => {
-  const techMap = new Map();
-  const rateMap = new Map();
-  rates.forEach(r => {
-    const hourly = Number(r.hourly_rate || 0);
-    rateMap.set(r.technician_id, {
-      hourly,
-      billable: Number(r.billable_rate || 0),
-      saturday: Number(r.saturday_rate ?? hourly * 1.5),
-      sunday: Number(r.sunday_rate ?? hourly * 2),
-    });
-  });
-
-  // Map van klant+monteur naar reiskosten
-  const travelMap = new Map();
-  travelRates.forEach(tr => {
-    travelMap.set(
-      `${tr.customer_id}_${tr.technician_id}`,
-      {
-        toTech: Number(tr.travel_expense_to_technician || 0),
-        fromClient: Number(tr.travel_expense_from_client || 0),
-      }
-    );
-  });
-
-  workHours.forEach(entry => {
-    const id = entry.technician_id;
-    const name = entry.profiles?.full_name || 'Unknown';
-    if (!techMap.has(id)) {
-      techMap.set(id, {
-        technicianId: id,
-        technicianName: name,
-        totalHours: 0,
-        regularHours: 0,
-        overtimeHours: 0,
-        weekendHours: 0,
-        sundayHours: 0,
-        daysWorked: 0,
-        lastWorked: entry.date,
-        entries: [],
-        profit: 0,
-        revenue: 0,
-        costs: 0,
+    const techMap = new Map();
+    const rateMap = new Map();
+    rates.forEach(r => {
+      const hourly = Number(r.hourly_rate || 0);
+      rateMap.set(r.technician_id, {
+        hourly,
+        billable: Number(r.billable_rate || 0),
+        saturday: Number(r.saturday_rate ?? hourly * 1.5),
+        sunday: Number(r.sunday_rate ?? hourly * 2),
       });
-    }
-    const s = techMap.get(id);
+    });
 
-    // ---- HIER BEGINNEN DE NIEUWE VARIABELEN VOOR REISKOSTEN EN BILLED HOURS ----
-    const reg = Number(entry.regular_hours || 0);
-    const ot = Number(entry.overtime_hours || 0);
-    const wk = Number(entry.weekend_hours || 0);
-    const su = Number(entry.sunday_hours || 0);
+    // Map van klant+monteur naar reiskosten
+    const travelMap = new Map();
+    travelRates.forEach(tr => {
+      travelMap.set(
+        `${tr.customer_id}_${tr.technician_id}`,
+        {
+          toTech: Number(tr.travel_expense_to_technician || 0),
+          fromClient: Number(tr.travel_expense_from_client || 0),
+        }
+      );
+    });
 
-    // Uren zoals klant gefactureerd krijgt (mag afwijken van som hierboven)
-    const billedHours = Number(entry.billed_hours ?? reg + ot + wk + su);
-    const actualHours = Number(entry.hours_worked ?? reg + ot + wk + su);
+    workHours.forEach(entry => {
+      const id = entry.technician_id;
+      const name = entry.profiles?.full_name || 'Unknown';
+      if (!techMap.has(id)) {
+        techMap.set(id, {
+          technicianId: id,
+          technicianName: name,
+          totalHours: 0,
+          regularHours: 0,
+          overtimeHours: 0,
+          weekendHours: 0,
+          sundayHours: 0,
+          daysWorked: 0,
+          lastWorked: entry.date,
+          entries: [],
+          profit: 0,
+          revenue: 0,
+          costs: 0,
+        });
+      }
+      const s = techMap.get(id);
 
-    // Tarieven
-    const rate = rateMap.get(id) || { hourly: 0, billable: 0, saturday: 0, sunday: 0 };
+      const reg = Number(entry.regular_hours || 0);
+      const ot = Number(entry.overtime_hours || 0);
+      const wk = Number(entry.weekend_hours || 0);
+      const su = Number(entry.sunday_hours || 0);
 
-    // Normale urenberekening voor omzet en kosten
-    let rev = 0,
-      cost = 0;
+      // Uren zoals klant gefactureerd krijgt (mag afwijken van som hierboven)
+      const billedHours = Number(entry.billed_hours ?? reg + ot + wk + su);
+      const actualHours = Number(entry.hours_worked ?? reg + ot + wk + su);
 
-    if (su > 0) {
-      rev += su * rate.billable * 2;
-      cost += su * rate.sunday;
-    }
-    if (wk > 0) {
-      rev += wk * rate.billable * 1.5;
-      cost += wk * rate.saturday;
-    }
-    if (ot > 0) {
-      rev += ot * rate.billable * 1.25;
-      cost += ot * rate.hourly * 1.25;
-    }
-    if (reg > 0) {
-      rev += reg * rate.billable;
-      cost += reg * rate.hourly;
-    }
+      // Tarieven
+      const rate = rateMap.get(id) || { hourly: 0, billable: 0, saturday: 0, sunday: 0 };
 
-    // WINST OP HET VERSCHIL TUSSEN GEFACTUREERDE EN GEWERKTE UREN
-    if (billedHours > actualHours) {
-      rev += (billedHours - actualHours) * rate.billable;
-    }
+      // Normale urenberekening voor omzet en kosten
+      let rev = 0,
+        cost = 0;
 
-    // REISKOSTEN MEEREKENEN - ALLEEN ALS MONTEUR DECLAREERT (toTech > 0)
-    const customerId = entry.customer_id;
-    const travelKey = `${customerId}_${id}`;
-    const travel = travelMap.get(travelKey) || { toTech: 0, fromClient: 0 };
+      if (su > 0) {
+        rev += su * rate.billable * 2;
+        cost += su * rate.sunday;
+      }
+      if (wk > 0) {
+        rev += wk * rate.billable * 1.5;
+        cost += wk * rate.saturday;
+      }
+      if (ot > 0) {
+        rev += ot * rate.billable * 1.25;
+        cost += ot * rate.hourly * 1.25;
+      }
+      if (reg > 0) {
+        rev += reg * rate.billable;
+        cost += reg * rate.hourly;
+      }
 
-    // Alleen meenemen als monteur het declareert (toTech > 0)
-    if (travel.fromClient > 0) {
-      rev += travel.fromClient; // altijd naar klant factureren
-    }
-    if (travel.toTech > 0) {
-      cost += travel.toTech; // alleen als monteur declareert
-    }
+      // WINST OP HET VERSCHIL TUSSEN GEFACTUREERDE EN GEWERKTE UREN
+      if (billedHours > actualHours) {
+        rev += (billedHours - actualHours) * rate.billable;
+      }
 
-    const profit = rev - cost;
-    const hrs = actualHours;
-    s.totalHours += hrs;
-    s.regularHours += reg;
-    s.overtimeHours += ot;
-    s.weekendHours += wk;
-    s.sundayHours += su;
-    s.profit += profit;
-    s.revenue += rev;
-    s.costs += cost;
-    s.entries.push(entry);
-    if (entry.date > s.lastWorked) s.lastWorked = entry.date;
-  });
+      // REISKOSTEN MEEREKENEN - ALLEEN ALS MONTEUR DECLAREERT (toTech > 0)
+      const customerId = entry.customer_id;
+      const travelKey = `${customerId}_${id}`;
+      const travel = travelMap.get(travelKey) || { toTech: 0, fromClient: 0 };
 
-  techMap.forEach(s => {
-    s.daysWorked = new Set(s.entries.map((e) => e.date)).size;
-    delete s.entries;
-  });
+      if (travel.fromClient > 0) {
+        rev += travel.fromClient; // altijd naar klant factureren
+      }
+      if (travel.toTech > 0) {
+        cost += travel.toTech; // alleen als monteur declareert
+      }
 
-  return Array.from(techMap.values()).sort((a, b) => b.totalHours - a.totalHours);
-};
+      const profit = rev - cost;
+      const hrs = actualHours;
+      s.totalHours += hrs;
+      s.regularHours += reg;
+      s.overtimeHours += ot;
+      s.weekendHours += wk;
+      s.sundayHours += su;
+      s.profit += profit;
+      s.revenue += rev;
+      s.costs += cost;
+      s.entries.push(entry);
+      if (entry.date > s.lastWorked) s.lastWorked = entry.date;
+    });
 
+    techMap.forEach(s => {
+      s.daysWorked = new Set(s.entries.map((e) => e.date)).size;
+      delete s.entries;
+    });
+
+    return Array.from(techMap.values()).sort((a, b) => b.totalHours - a.totalHours);
+  };
 
   // Groepeer per week, en voeg ook de dagen+uren per week toe voor de tooltip
   const processWeeklyData = (workHours: any[], filterUserId: string | null = null) => {
@@ -324,10 +321,10 @@ const Dashboard: React.FC = () => {
   }
 
   return (
-    <div className="p-6 bg-gray-50 min-h-screen">
+    <div className="p-2 md:p-6 bg-gray-50 min-h-screen">
       <div className="max-w-7xl mx-auto">
         {/* Filters */}
-        <div className="mb-4 flex flex-col md:flex-row md:items-center md:space-x-6 space-y-3 md:space-y-0">
+        <div className="mb-3 flex flex-col md:flex-row md:items-center md:space-x-6 space-y-2 md:space-y-0">
           {isAdmin && (
             <div>
               <TechnicianFilter
@@ -338,7 +335,7 @@ const Dashboard: React.FC = () => {
             </div>
           )}
           <div className="flex items-center space-x-2">
-            <label htmlFor="monthPicker" className="text-gray-600 whitespace-nowrap">
+            <label htmlFor="monthPicker" className="text-gray-600 whitespace-nowrap text-xs md:text-base">
               Select month:
             </label>
             <input
@@ -346,21 +343,21 @@ const Dashboard: React.FC = () => {
               type="month"
               value={selectedMonth}
               onChange={e => setSelectedMonth(e.target.value)}
-              className="border rounded p-1"
+              className="border rounded px-1 py-1 text-xs md:text-base"
             />
             <button
               onClick={() => setSelectedMonth('')}
-              className="px-3 py-1 bg-red-600 text-white rounded hover:bg-red-700"
+              className="px-2 py-1 text-xs md:px-3 md:py-1 bg-red-600 text-white rounded hover:bg-red-700"
             >
               Alles weergeven
             </button>
           </div>
         </div>
-        <header className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">
+        <header className="mb-4 md:mb-8">
+          <h1 className="text-2xl md:text-3xl font-bold text-gray-900 mb-1 md:mb-2">
             Dashboard — {isAdmin ? 'Admin View' : 'Personal View'}
           </h1>
-          <p className="text-gray-600">
+          <p className="text-gray-600 text-sm md:text-base">
             {isAdmin
               ? 'Complete overzicht van alle technici en performance metrics'
               : 'Jouw persoonlijke werkstatistieken en performance'}
@@ -368,61 +365,61 @@ const Dashboard: React.FC = () => {
         </header>
 
         {/* Key Metrics */}
-        <div className={`grid grid-cols-1 md:grid-cols-2 lg:grid-cols-${isAdmin ? '4' : '3'} gap-6 mb-8`}>
+        <div className={`grid grid-cols-2 gap-2 md:grid-cols-2 lg:grid-cols-${isAdmin ? '4' : '3'} md:gap-6 mb-4 md:mb-8`}>
           <Card>
-            <CardContent>
-              <p className="text-sm text-gray-600">Totale uren</p>
-              <p className="text-2xl font-bold">{totalHours.toFixed(2)}h</p>
+            <CardContent className="px-2 py-3 md:px-4 md:py-6">
+              <p className="text-xs md:text-sm text-gray-600">Totale uren</p>
+              <p className="text-xl md:text-2xl font-bold">{totalHours.toFixed(2)}h</p>
             </CardContent>
           </Card>
           {isAdmin && (
             <Card>
-              <CardContent>
-                <p className="text-sm text-gray-600">Totale omzet</p>
-                <p className="text-2xl font-bold">{formatCurrency(technicianData.reduce((s, t) => s + t.revenue, 0))}</p>
+              <CardContent className="px-2 py-3 md:px-4 md:py-6">
+                <p className="text-xs md:text-sm text-gray-600">Totale omzet</p>
+                <p className="text-xl md:text-2xl font-bold">{formatCurrency(technicianData.reduce((s, t) => s + t.revenue, 0))}</p>
               </CardContent>
             </Card>
           )}
           {isAdmin && (
             <Card>
-              <CardContent>
-                <p className="text-sm text-gray-600">Totale winst</p>
-                <p className="text-2xl font-bold">{formatCurrency(technicianData.reduce((s, t) => s + t.profit, 0))}</p>
+              <CardContent className="px-2 py-3 md:px-4 md:py-6">
+                <p className="text-xs md:text-sm text-gray-600">Totale winst</p>
+                <p className="text-xl md:text-2xl font-bold">{formatCurrency(technicianData.reduce((s, t) => s + t.profit, 0))}</p>
               </CardContent>
             </Card>
           )}
           <Card>
-            <CardContent>
-              <p className="text-sm text-gray-600">Gemiddelde uren/dag</p>
-              <p className="text-2xl font-bold">{avgHoursPerDay}h</p>
+            <CardContent className="px-2 py-3 md:px-4 md:py-6">
+              <p className="text-xs md:text-sm text-gray-600">Gem. uren/dag</p>
+              <p className="text-xl md:text-2xl font-bold">{avgHoursPerDay}h</p>
             </CardContent>
           </Card>
           {!isAdmin && (
             <Card>
-              <CardContent>
-                <p className="text-sm text-gray-600">
+              <CardContent className="px-2 py-3 md:px-4 md:py-6">
+                <p className="text-xs md:text-sm text-gray-600">
                   {selectedMonth ? `Hours in ${selectedMonth}` : 'Hours totaal'}
                 </p>
-                <p className="text-2xl font-bold">{monthlyHours.toFixed(2)}h</p>
+                <p className="text-xl md:text-2xl font-bold">{monthlyHours.toFixed(2)}h</p>
               </CardContent>
             </Card>
           )}
         </div>
 
-        {/* ADMIN & MONTEUR: Gedeelde BarChart met week details */}
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-2 gap-8 mb-8">
+        {/* Grafieken */}
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-2 md:gap-8 mb-4 md:mb-8">
           <Card>
-            <CardHeader>
-              <CardTitle>
+            <CardHeader className="px-2 py-3 md:px-4 md:py-4">
+              <CardTitle className="text-sm md:text-base">
                 {isAdmin ? 'Wekelijkse uren per monteur(s)' : 'Jouw gewerkte uren per week'}
               </CardTitle>
             </CardHeader>
-            <CardContent>
-              <ResponsiveContainer width="100%" height={300}>
+            <CardContent className="p-1 md:p-4">
+              <ResponsiveContainer width="100%" height={220}>
                 <BarChart data={isAdmin ? weeklyData : weeklyData}>
                   <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="week" fontSize={13} />
-                  <YAxis fontSize={13} />
+                  <XAxis dataKey="week" fontSize={11} />
+                  <YAxis fontSize={11} />
                   <Bar
                     dataKey="uren"
                     fill="#dc2626"
@@ -433,15 +430,14 @@ const Dashboard: React.FC = () => {
               </ResponsiveContainer>
             </CardContent>
           </Card>
-          {/* Alleen admin ziet extra grafieken */}
           {isAdmin && (
             <>
               <Card>
-                <CardHeader>
-                  <CardTitle>Wekelijkse uren (trend)</CardTitle>
+                <CardHeader className="px-2 py-3 md:px-4 md:py-4">
+                  <CardTitle className="text-sm md:text-base">Wekelijkse uren (trend)</CardTitle>
                 </CardHeader>
-                <CardContent>
-                  <ResponsiveContainer width="100%" height={300}>
+                <CardContent className="p-1 md:p-4">
+                  <ResponsiveContainer width="100%" height={220}>
                     <AreaChart data={weeklyAdminData}>
                       <defs>
                         <linearGradient id="colorArea" x1="0" y1="0" x2="0" y2="1">
@@ -449,8 +445,8 @@ const Dashboard: React.FC = () => {
                           <stop offset="95%" stopColor="#dc2626" stopOpacity={0.15} />
                         </linearGradient>
                       </defs>
-                      <XAxis dataKey="week" fontSize={13} />
-                      <YAxis fontSize={13} />
+                      <XAxis dataKey="week" fontSize={11} />
+                      <YAxis fontSize={11} />
                       <CartesianGrid strokeDasharray="3 3" />
                       <RechartTooltip />
                       <Area type="monotone" dataKey="uren" stroke="#dc2626" fill="url(#colorArea)" />
@@ -459,18 +455,18 @@ const Dashboard: React.FC = () => {
                 </CardContent>
               </Card>
               <Card>
-                <CardHeader>
-                  <CardTitle>Winstverdeling</CardTitle>
+                <CardHeader className="px-2 py-3 md:px-4 md:py-4">
+                  <CardTitle className="text-sm md:text-base">Winstverdeling</CardTitle>
                 </CardHeader>
-                <CardContent>
-                  <ResponsiveContainer width="100%" height={300}>
+                <CardContent className="p-1 md:p-4">
+                  <ResponsiveContainer width="100%" height={220}>
                     <PieChart>
                       <Pie
                         data={displayData.filter(t => t.profit > 0).slice(0, 5)}
                         dataKey="profit"
                         cx="50%"
                         cy="50%"
-                        outerRadius={80}
+                        outerRadius={60}
                         label={({ technicianName, profit }) =>
                           `${technicianName}: ${formatCurrency(profit)}`
                         }
@@ -488,15 +484,15 @@ const Dashboard: React.FC = () => {
                 </CardContent>
               </Card>
               <Card>
-                <CardHeader>
-                  <CardTitle>Overtime per monteur (125%, 150%, 200%)</CardTitle>
+                <CardHeader className="px-2 py-3 md:px-4 md:py-4">
+                  <CardTitle className="text-sm md:text-base">Overtime per monteur (125%, 150%, 200%)</CardTitle>
                 </CardHeader>
-                <CardContent>
-                  <ResponsiveContainer width="100%" height={300}>
+                <CardContent className="p-1 md:p-4">
+                  <ResponsiveContainer width="100%" height={220}>
                     <BarChart data={technicianData}>
                       <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="technicianName" />
-                      <YAxis />
+                      <XAxis dataKey="technicianName" fontSize={11} />
+                      <YAxis fontSize={11} />
                       <RechartTooltip formatter={v => `${Number(v).toFixed(2)}h`} />
                       <Legend />
                       <Bar dataKey="overtimeHours" fill={COLORS[1]} name="Overtime 125%" />
@@ -512,9 +508,9 @@ const Dashboard: React.FC = () => {
 
         {/* Admin: Performance cards/table */}
         {isAdmin && (
-          <Card className="mb-10">
+          <Card className="mb-6 md:mb-10">
             <CardHeader>
-              <CardTitle>Monteur Prestatie Overzicht</CardTitle>
+              <CardTitle className="text-sm md:text-base">Monteur Prestatie Overzicht</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="hidden md:grid grid-cols-1 gap-6">
@@ -582,23 +578,23 @@ const Dashboard: React.FC = () => {
                 </div>
               </div>
               {/* Mobiel: cards */}
-              <div className="space-y-4 md:hidden">
+              <div className="space-y-2 md:hidden">
                 {displayData.map((t, i) => {
                   const margin = t.revenue > 0 ? ((t.profit / t.revenue) * 100).toFixed(1) : '0';
                   return (
                     <div
                       key={t.technicianId}
-                      className={`rounded-2xl shadow-md border p-4 bg-white flex flex-col gap-2 ${
+                      className={`rounded-2xl shadow-md border p-3 bg-white flex flex-col gap-1 ${
                         i % 2 === 0 ? 'border-l-4 border-red-600' : 'border-l-4 border-gray-300'
                       }`}
                     >
-                      <div className="flex items-center gap-2 mb-2">
-                        <span className="font-bold text-lg text-gray-900">{t.technicianName}</span>
-                        <span className="text-xs px-2 py-1 rounded bg-gray-100 text-gray-500">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="font-bold text-base text-gray-900">{t.technicianName}</span>
+                        <span className="text-xs px-2 py-0.5 rounded bg-gray-100 text-gray-500">
                           {t.daysWorked} dagen
                         </span>
                       </div>
-                      <div className="flex flex-wrap gap-3">
+                      <div className="flex flex-wrap gap-x-4 gap-y-1">
                         <div className="flex flex-col items-start">
                           <span className="text-xs text-gray-400">Totaal uren</span>
                           <span className="font-semibold">{Number(t.totalHours).toFixed(2)}h</span>
