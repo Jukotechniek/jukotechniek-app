@@ -386,6 +386,8 @@ export type Database = {
           travel_expense_from_client: number | null
           travel_expense_to_technician: number | null
           weekend_hours: number | null
+          start_time: string | null
+          end_time: string | null
         }
         Insert: {
           created_at?: string | null
@@ -405,6 +407,8 @@ export type Database = {
           travel_expense_from_client?: number | null
           travel_expense_to_technician?: number | null
           weekend_hours?: number | null
+          start_time: string | null
+          end_time: string | null
         }
         Update: {
           created_at?: string | null
@@ -424,6 +428,8 @@ export type Database = {
           travel_expense_from_client?: number | null
           travel_expense_to_technician?: number | null
           weekend_hours?: number | null
+          start_time: string | null
+          end_time: string | null
         }
         Relationships: [
           {

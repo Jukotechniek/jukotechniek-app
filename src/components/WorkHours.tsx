@@ -44,6 +44,8 @@ const WorkHours = () => {
     customerId: '',
     date: new Date().toISOString().split('T')[0],
     hoursWorked: '',
+    startTime: '',
+    endTime: '',
     description: ''
   });
 
@@ -95,6 +97,8 @@ const WorkHours = () => {
         customerName: e.customers?.name || '',
         date: e.date,
         hoursWorked: e.hours_worked,
+        startTime: e.start_time || '',
+        endTime: e.end_time || '',
         regularHours: e.regular_hours || 0,
         overtimeHours: e.overtime_hours || 0,
         weekendHours: e.weekend_hours || 0,
@@ -119,12 +123,14 @@ const WorkHours = () => {
 
   useEffect(() => {
     fetchData();
+    // eslint-disable-next-line
   }, []);
 
   useEffect(() => {
     if (customers.length > 0 && !newEntry.customerId) {
       setNewEntry(prev => ({ ...prev, customerId: customers[0].id }));
     }
+    // eslint-disable-next-line
   }, [customers]);
 
   const getTravelExpenses = (customerId: string, technicianId: string) => {
@@ -143,7 +149,9 @@ const WorkHours = () => {
       (!isAdmin && !newEntry.customerId) ||
       (isAdmin && (!newEntry.technicianId || !newEntry.customerId)) ||
       !newEntry.date ||
-      !newEntry.hoursWorked
+      !newEntry.hoursWorked ||
+      !newEntry.startTime ||
+      !newEntry.endTime
     ) {
       toast({
         title: 'Fout',
@@ -174,6 +182,8 @@ const WorkHours = () => {
           customer_id: newEntry.customerId,
           date: newEntry.date,
           hours_worked: hours,
+          start_time: newEntry.startTime,
+          end_time: newEntry.endTime,
           is_manual_entry: true,
           description: newEntry.description,
           regular_hours: overtimeData.regularHours,
@@ -208,6 +218,8 @@ const WorkHours = () => {
         customerName: data.customers?.name || '',
         date: data.date,
         hoursWorked: data.hours_worked,
+        startTime: data.start_time || '',
+        endTime: data.end_time || '',
         regularHours: data.regular_hours || 0,
         overtimeHours: data.overtime_hours || 0,
         weekendHours: data.weekend_hours || 0,
@@ -230,6 +242,8 @@ const WorkHours = () => {
       customerId: customers[0]?.id || '',
       date: new Date().toISOString().split('T')[0],
       hoursWorked: '',
+      startTime: '',
+      endTime: '',
       description: ''
     });
     setShowAddForm(false);
@@ -266,6 +280,8 @@ const WorkHours = () => {
       .update({
         date: editingEntry.date,
         hours_worked: hours,
+        start_time: editingEntry.startTime,
+        end_time: editingEntry.endTime,
         description: editingEntry.description,
         regular_hours: overtimeData.regularHours,
         overtime_hours: overtimeData.overtimeHours,
@@ -377,7 +393,6 @@ const WorkHours = () => {
   </Button>
 </div>
 
-
         {showAddForm && (
           <Card className="bg-white mb-6">
             <CardHeader>
@@ -432,6 +447,28 @@ const WorkHours = () => {
                     type="date"
                     value={newEntry.date}
                     onChange={e => setNewEntry({ ...newEntry, date: e.target.value })}
+                    required
+                    className="focus:ring-red-500 focus:border-red-500"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="startTime">Begintijd</Label>
+                  <Input
+                    id="startTime"
+                    type="time"
+                    value={newEntry.startTime}
+                    onChange={e => setNewEntry({ ...newEntry, startTime: e.target.value })}
+                    required
+                    className="focus:ring-red-500 focus:border-red-500"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="endTime">Eindtijd</Label>
+                  <Input
+                    id="endTime"
+                    type="time"
+                    value={newEntry.endTime}
+                    onChange={e => setNewEntry({ ...newEntry, endTime: e.target.value })}
                     required
                     className="focus:ring-red-500 focus:border-red-500"
                   />
@@ -498,6 +535,8 @@ const WorkHours = () => {
                     {isAdmin && <th className="pb-3 text-sm font-medium text-gray-600">Monteur</th>}
                     <th className="pb-3 text-sm font-medium text-gray-600">Klant</th>
                     <th className="pb-3 text-sm font-medium text-gray-600">Datum</th>
+                    <th className="pb-3 text-sm font-medium text-gray-600">Begintijd</th>
+                    <th className="pb-3 text-sm font-medium text-gray-600">Eindtijd</th>
                     <th className="pb-3 text-sm font-medium text-gray-600">Uren</th>
                     {isAdmin && (
                       <>
@@ -528,6 +567,30 @@ const WorkHours = () => {
                           />
                         ) : (
                           new Date(entry.date).toLocaleDateString('nl-NL')
+                        )}
+                      </td>
+                      <td className="py-3 text-gray-700">
+                        {editingEntry?.id === entry.id ? (
+                          <Input
+                            type="time"
+                            value={editingEntry.startTime || ''}
+                            onChange={e => setEditingEntry({ ...editingEntry, startTime: e.target.value })}
+                            className="h-8 w-24"
+                          />
+                        ) : (
+                          entry.startTime || '-'
+                        )}
+                      </td>
+                      <td className="py-3 text-gray-700">
+                        {editingEntry?.id === entry.id ? (
+                          <Input
+                            type="time"
+                            value={editingEntry.endTime || ''}
+                            onChange={e => setEditingEntry({ ...editingEntry, endTime: e.target.value })}
+                            className="h-8 w-24"
+                          />
+                        ) : (
+                          entry.endTime || '-'
                         )}
                       </td>
                       <td className="py-3 text-gray-700">
@@ -623,7 +686,7 @@ const WorkHours = () => {
                   ))}
                   {filteredEntries.length === 0 && (
                     <tr>
-                      <td colSpan={isAdmin ? 9 : 5} className="py-8 text-center text-gray-500">
+                      <td colSpan={isAdmin ? 11 : 7} className="py-8 text-center text-gray-500">
                         Geen werkuren gevonden
                       </td>
                     </tr>

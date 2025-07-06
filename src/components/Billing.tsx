@@ -255,27 +255,38 @@ const TravelExpenseManagement = () => {
           <CardContent>
             <div className="overflow-x-auto">
               <table className="w-full text-left">
-                <thead>
-                  <tr className="border-b"><th>Klant</th><th>Monteur</th><th>Aan (€)</th><th>Van (€)</th><th>Uurtarief</th><th>Factureerbaar</th><th>Zaterdag</th><th>Zondag</th><th>Acties</th></tr>
-                </thead>
-                <tbody>
-                  {travelRates.map(rate => (
-                    <tr key={rate.id} className="border-b hover:bg-gray-50">
-                      <td className="py-3">{rate.customer_name}</td>
-                      <td className="py-3">{rate.technician_name}</td>
-                      <td className="py-3">€{rate.travel_expense_to_technician.toFixed(2)}</td>
-                      <td className="py-3">€{rate.travel_expense_from_client.toFixed(2)}</td>
-                      <td className="py-3">€{rate.hourly_rate.toFixed(2)}</td>
-                      <td className="py-3">€{rate.billable_rate.toFixed(2)}</td>
-                      <td className="py-3">€{rate.saturday_rate?.toFixed(2)}</td>
-                      <td className="py-3">€{rate.sunday_rate?.toFixed(2)}</td>
-                      <td className="py-3 space-x-2">
-                        <Button size="sm" variant="outline" onClick={() => handleEditRate(rate)}>Bewerk</Button>
-                        <Button size="sm" variant="outline" onClick={() => handleDeleteRate(rate.id)}>Verwijder</Button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
+               <thead>
+  <tr className="border-b">
+    <th>Klant</th>
+    <th>Monteur</th>
+    <th>Aan (€)</th>
+    <th>Van (€)</th>
+    <th>Uurtarief</th>
+    <th>Zaterdag</th>
+    <th>Zondag</th>
+    <th>Factureerbaar</th>
+    <th>Acties</th>
+  </tr>
+</thead>
+<tbody>
+  {travelRates.map(rate => (
+    <tr key={rate.id} className="border-b hover:bg-gray-50">
+      <td className="py-3">{rate.customer_name}</td>
+      <td className="py-3">{rate.technician_name}</td>
+      <td className="py-3">€{rate.travel_expense_to_technician.toFixed(2)}</td>
+      <td className="py-3">€{rate.travel_expense_from_client.toFixed(2)}</td>
+      <td className="py-3">€{rate.hourly_rate.toFixed(2)}</td>
+      <td className="py-3">€{rate.saturday_rate?.toFixed(2)}</td>
+      <td className="py-3">€{rate.sunday_rate?.toFixed(2)}</td>
+      <td className="py-3">€{rate.billable_rate.toFixed(2)}</td>
+      <td className="py-3 space-x-2">
+        <Button size="sm" variant="outline" onClick={() => handleEditRate(rate)}>Bewerk</Button>
+        <Button size="sm" variant="outline" onClick={() => handleDeleteRate(rate.id)}>Verwijder</Button>
+      </td>
+    </tr>
+  ))}
+</tbody>
+
               </table>
             </div>
           </CardContent>

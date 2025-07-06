@@ -1,4 +1,3 @@
-
 export interface WorkEntry {
   id: string;
   technicianId: string;
@@ -19,6 +18,9 @@ export interface WorkEntry {
   isSunday: boolean;
   createdAt: string;
   createdBy: string;
+  /** Toegevoegd voor begin- en eindtijd: */
+  startTime?: string; // Formaat: 'HH:mm'
+  endTime?: string;   // Formaat: 'HH:mm'
 }
 
 export interface TechnicianSummary {
