@@ -185,7 +185,7 @@ const LoginForm = () => {
           </CardContent>
         </Card>
         <div className="text-center mt-8">
-          <span className="text-xs text-gray-200 drop-shadow">&copy; {new Date().getFullYear()} JukoTechniek - All rights reserved.</span>
+          <span className="text-xs text-white-200 drop-shadow">&copy; {new Date().getFullYear()} JukoTechniek - All rights reserved.</span>
         </div>
       </motion.div>
     </div>
