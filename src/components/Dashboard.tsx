@@ -27,6 +27,22 @@ function getInitials(name = '') {
   return name.split(' ').map(part => part[0]).join('').toUpperCase();
 }
 
+// --- Nieuwe zakelijke getal weergave componenten ---
+
+const ZakelijkUren = ({ value }: { value: number }) => (
+  <span className="font-mono tabular-nums">{value.toFixed(2)}u</span>
+);
+
+const ZakelijkEuro = ({ value }: { value: number }) => (
+  <span className="font-mono tabular-nums">
+    {new Intl.NumberFormat('nl-NL', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2 }).format(value)}
+  </span>
+);
+
+const ZakelijkDagen = ({ value }: { value: number }) => (
+  <span className="font-mono tabular-nums">{value}</span>
+);
+
 const ProgressBar = ({ value, max, color = '#dc2626' }) => (
   <div className="w-full bg-gray-200 rounded-full h-2 mt-1 mb-2">
     <div
@@ -51,17 +67,19 @@ const WeekTooltip = ({ active, payload, label }) => {
                 {dag.date.toLocaleDateString('nl-NL', { weekday: 'short', day: '2-digit', month: '2-digit' })}
               </span>
               {': '}
-              <span className="font-mono">{dag.hours.toFixed(2)}u</span>
+              <ZakelijkUren value={dag.hours} />
             </li>
           ))}
       </ul>
-      <div className="mt-2 text-xs text-gray-500">Totaal: {payload[0].value.toFixed(2)}u</div>
+      <div className="mt-2 text-xs text-gray-500">
+        Totaal: <ZakelijkUren value={payload[0].value} />
+      </div>
     </div>
   );
 };
 
-const Badge = ({ children, color = "bg-gray-200", text = "text-gray-600" }) => (
-  <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${color} ${text} ml-1`}>
+const Badge = ({ children, color = "bg-gray-100", text = "text-gray-800" }) => (
+  <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${color} ${text} ml-1`}>
     {children}
   </span>
 );
@@ -156,6 +174,8 @@ const Dashboard: React.FC = () => {
     }
   };
 
+  // ... (processTechnicianData en processWeeklyData blijven hetzelfde als jouw code)
+
   const processTechnicianData = (workHours, rates, travelRates) => {
     const techMap = new Map();
     const rateMap = new Map();
@@ -208,16 +228,13 @@ const Dashboard: React.FC = () => {
       const wk = Number(entry.weekend_hours || 0);
       const su = Number(entry.sunday_hours || 0);
 
-      // Uren zoals klant gefactureerd krijgt (mag afwijken van som hierboven)
       const billedHours = Number(entry.billed_hours ?? reg + ot + wk + su);
       const actualHours = Number(entry.hours_worked ?? reg + ot + wk + su);
 
       // Tarieven
       const rate = rateMap.get(id) || { hourly: 0, billable: 0, saturday: 0, sunday: 0 };
 
-      // Normale urenberekening voor omzet en kosten
-      let rev = 0,
-        cost = 0;
+      let rev = 0, cost = 0;
 
       if (su > 0) {
         rev += su * rate.billable * 2;
@@ -236,21 +253,19 @@ const Dashboard: React.FC = () => {
         cost += reg * rate.hourly;
       }
 
-      // WINST OP HET VERSCHIL TUSSEN GEFACTUREERDE EN GEWERKTE UREN
       if (billedHours > actualHours) {
         rev += (billedHours - actualHours) * rate.billable;
       }
 
-      // REISKOSTEN MEEREKENEN - ALLEEN ALS MONTEUR DECLAREERT (toTech > 0)
       const customerId = entry.customer_id;
       const travelKey = `${customerId}_${id}`;
       const travel = travelMap.get(travelKey) || { toTech: 0, fromClient: 0 };
 
       if (travel.fromClient > 0) {
-        rev += travel.fromClient; // altijd naar klant factureren
+        rev += travel.fromClient;
       }
       if (travel.toTech > 0) {
-        cost += travel.toTech; // alleen als monteur declareert
+        cost += travel.toTech;
       }
 
       const profit = rev - cost;
@@ -275,7 +290,6 @@ const Dashboard: React.FC = () => {
     return Array.from(techMap.values()).sort((a, b) => b.totalHours - a.totalHours);
   };
 
-  // Groepeer per week, en voeg ook de dagen+uren per week toe voor de tooltip
   const processWeeklyData = (workHours: any[], filterUserId: string | null = null) => {
     const weekMap = new Map<
       string,
@@ -302,12 +316,9 @@ const Dashboard: React.FC = () => {
       .slice(-8);
   };
 
-  const formatCurrency = (amt: number) =>
-    new Intl.NumberFormat('nl-NL', { style: 'currency', currency: 'EUR' }).format(amt);
-
   const totalHours = technicianData.reduce((s, t) => s + t.totalHours, 0);
   const totalDays = technicianData.reduce((s, t) => s + t.daysWorked, 0);
-  const avgHoursPerDay = totalDays > 0 ? (totalHours / totalDays).toFixed(2) : '0.00';
+  const avgHoursPerDay = totalDays > 0 ? (totalHours / totalDays) : 0;
   const displayData = isAdmin
     ? technicianData
     : technicianData.filter(t => t.technicianId === user?.id);
@@ -373,41 +384,41 @@ const Dashboard: React.FC = () => {
 
         {/* Key Metrics */}
         <div className={`grid grid-cols-2 gap-2 md:grid-cols-2 lg:grid-cols-${isAdmin ? '4' : '3'} md:gap-6 mb-4 md:mb-8`}>
-          <Card className="shadow-lg border-2 border-red-100 bg-white/80 hover:bg-red-50 transition-all">
+          <Card className="shadow-lg border-2 border-gray-200 bg-white/90 hover:bg-gray-50 transition-all">
             <CardContent className="px-2 py-3 md:px-4 md:py-6">
               <p className="text-xs md:text-sm text-gray-600">Totale uren</p>
-              <p className="text-2xl md:text-3xl font-bold text-red-700">{totalHours.toFixed(2)}h</p>
+              <p className="text-2xl md:text-3xl font-bold text-gray-800"><ZakelijkUren value={totalHours} /></p>
             </CardContent>
           </Card>
           {isAdmin && (
-            <Card className="shadow-lg border-2 border-yellow-100 bg-white/80 hover:bg-yellow-50 transition-all">
+            <Card className="shadow-lg border-2 border-gray-200 bg-white/90 hover:bg-gray-50 transition-all">
               <CardContent className="px-2 py-3 md:px-4 md:py-6">
                 <p className="text-xs md:text-sm text-gray-600">Totale omzet</p>
-                <p className="text-2xl md:text-3xl font-bold text-yellow-600">{formatCurrency(technicianData.reduce((s, t) => s + t.revenue, 0))}</p>
+                <p className="text-2xl md:text-3xl font-bold text-gray-800"><ZakelijkEuro value={technicianData.reduce((s, t) => s + t.revenue, 0)} /></p>
               </CardContent>
             </Card>
           )}
           {isAdmin && (
-            <Card className="shadow-lg border-2 border-green-100 bg-white/80 hover:bg-green-50 transition-all">
+            <Card className="shadow-lg border-2 border-gray-200 bg-white/90 hover:bg-gray-50 transition-all">
               <CardContent className="px-2 py-3 md:px-4 md:py-6">
                 <p className="text-xs md:text-sm text-gray-600">Totale winst</p>
-                <p className="text-2xl md:text-3xl font-bold text-green-700">{formatCurrency(technicianData.reduce((s, t) => s + t.profit, 0))}</p>
+                <p className="text-2xl md:text-3xl font-bold text-gray-800"><ZakelijkEuro value={technicianData.reduce((s, t) => s + t.profit, 0)} /></p>
               </CardContent>
             </Card>
           )}
-          <Card className="shadow-lg border-2 border-blue-100 bg-white/80 hover:bg-blue-50 transition-all">
+          <Card className="shadow-lg border-2 border-gray-200 bg-white/90 hover:bg-gray-50 transition-all">
             <CardContent className="px-2 py-3 md:px-4 md:py-6">
               <p className="text-xs md:text-sm text-gray-600">Gem. uren/dag</p>
-              <p className="text-2xl md:text-3xl font-bold text-blue-700">{avgHoursPerDay}h</p>
+              <p className="text-2xl md:text-3xl font-bold text-gray-800"><ZakelijkUren value={avgHoursPerDay} /></p>
             </CardContent>
           </Card>
           {!isAdmin && (
-            <Card className="shadow-lg border-2 border-purple-100 bg-white/80 hover:bg-purple-50 transition-all">
+            <Card className="shadow-lg border-2 border-gray-200 bg-white/90 hover:bg-gray-50 transition-all">
               <CardContent className="px-2 py-3 md:px-4 md:py-6">
                 <p className="text-xs md:text-sm text-gray-600">
                   {selectedMonth ? `Uren in ${selectedMonth}` : 'Uren totaal'}
                 </p>
-                <p className="text-2xl md:text-3xl font-bold text-purple-700">{monthlyHours.toFixed(2)}h</p>
+                <p className="text-2xl md:text-3xl font-bold text-gray-800"><ZakelijkUren value={monthlyHours} /></p>
               </CardContent>
             </Card>
           )}
@@ -475,7 +486,7 @@ const Dashboard: React.FC = () => {
                         cy="50%"
                         outerRadius={60}
                         label={({ technicianName, profit }) =>
-                          `${technicianName}: ${formatCurrency(profit)}`
+                          `${technicianName}: ${new Intl.NumberFormat('nl-NL', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2 }).format(profit)}`
                         }
                       >
                         {displayData
@@ -485,7 +496,7 @@ const Dashboard: React.FC = () => {
                             <Cell key={i} fill={COLORS[i % COLORS.length]} />
                           ))}
                       </Pie>
-                      <RechartTooltip formatter={v => formatCurrency(Number(v))} />
+                      <RechartTooltip formatter={v => new Intl.NumberFormat('nl-NL', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2 }).format(Number(v))} />
                     </PieChart>
                   </ResponsiveContainer>
                 </CardContent>
@@ -500,7 +511,7 @@ const Dashboard: React.FC = () => {
                       <CartesianGrid strokeDasharray="3 3" />
                       <XAxis dataKey="technicianName" fontSize={11} />
                       <YAxis fontSize={11} />
-                      <RechartTooltip formatter={v => `${Number(v).toFixed(2)}h`} />
+                      <RechartTooltip formatter={v => `${Number(v).toFixed(2)}u`} />
                       <Legend />
                       <Bar dataKey="overtimeHours" fill={COLORS[1]} name="Overtime 125%" />
                       <Bar dataKey="weekendHours" fill={COLORS[2]} name="Weekend 150%" />
@@ -515,7 +526,7 @@ const Dashboard: React.FC = () => {
 
         {/* Admin: Performance cards/table */}
         {isAdmin && (
-          <Card className="mb-6 md:mb-10 shadow-xl border-2 border-red-100 bg-white/90">
+          <Card className="mb-6 md:mb-10 shadow-xl border-2 border-gray-100 bg-white/95">
             <CardHeader>
               <CardTitle className="text-sm md:text-base text-red-700">Monteur Prestatie Overzicht</CardTitle>
             </CardHeader>
@@ -528,32 +539,32 @@ const Dashboard: React.FC = () => {
                       <div
                         key={t.technicianId}
                         className={`
-                          flex flex-col bg-gradient-to-br from-white via-red-50 to-gray-100
-                          rounded-2xl shadow-2xl border-2 border-red-200
-                          hover:scale-[1.01] hover:shadow-red-300
+                          flex flex-col bg-gradient-to-br from-white via-gray-50 to-gray-100
+                          rounded-2xl shadow-2xl border-2 border-gray-200
+                          hover:scale-[1.01] hover:shadow-gray-300
                           transition p-5 relative
                         `}
                       >
                         <div className="flex items-center mb-2">
-                          <div className="flex items-center justify-center w-12 h-12 bg-red-100 rounded-full text-red-700 text-xl font-bold mr-3 shadow">
+                          <div className="flex items-center justify-center w-12 h-12 bg-gray-100 rounded-full text-red-700 text-xl font-bold mr-3 shadow">
                             {getInitials(t.technicianName)}
                           </div>
                           <div className="flex-1">
                             <span className="block font-semibold text-lg text-gray-900">{t.technicianName}</span>
-                            <Badge color="bg-gray-200" text="text-gray-700">{t.daysWorked} dagen</Badge>
+                            <Badge color="bg-gray-100" text="text-gray-700"><ZakelijkDagen value={t.daysWorked} /> dagen</Badge>
                           </div>
                           {t.totalHours === maxHours && (
-                            <Badge color="bg-green-200" text="text-green-700">Top uren</Badge>
+                            <Badge color="bg-green-50" text="text-green-700">Top uren</Badge>
                           )}
                           {t.profit === maxProfit && (
-                            <Badge color="bg-yellow-200" text="text-yellow-700">Top winst</Badge>
+                            <Badge color="bg-yellow-50" text="text-yellow-700">Top winst</Badge>
                           )}
                         </div>
                         <ProgressBar value={t.totalHours} max={maxHours} color="#dc2626" />
                         <div className="grid grid-cols-2 gap-3 mt-1 mb-3">
                           <div>
                             <div className="text-xs text-gray-400 mb-1">Totaal uren</div>
-                            <div className="font-bold">{Number(t.totalHours).toFixed(2)}h</div>
+                            <div className="font-bold"><ZakelijkUren value={t.totalHours} /></div>
                           </div>
                           <div>
                             <div className="text-xs text-gray-400 mb-1">Laatste Werkdag</div>
@@ -561,21 +572,21 @@ const Dashboard: React.FC = () => {
                           </div>
                           <div>
                             <div className="text-xs text-gray-400 mb-1">Omzet</div>
-                            <div className="font-semibold text-yellow-600">{formatCurrency(t.revenue)}</div>
+                            <div className="font-semibold text-gray-800"><ZakelijkEuro value={t.revenue} /></div>
                           </div>
                           <div>
                             <div className="text-xs text-gray-400 mb-1">Kosten</div>
-                            <div className="font-semibold text-blue-700">{formatCurrency(t.costs)}</div>
+                            <div className="font-semibold text-gray-800"><ZakelijkEuro value={t.costs} /></div>
                           </div>
                           <div>
                             <div className="text-xs text-gray-400 mb-1">Winst</div>
-                            <div className={`font-bold ${t.profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                              {formatCurrency(t.profit)}
+                            <div className={`font-bold ${t.profit >= 0 ? 'text-green-700' : 'text-red-700'}`}>
+                              <ZakelijkEuro value={t.profit} />
                             </div>
                           </div>
                           <div>
                             <div className="text-xs text-gray-400 mb-1">Margin %</div>
-                            <div className={`font-bold ${parseFloat(margin) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                            <div className={`font-bold ${parseFloat(margin) >= 0 ? 'text-green-700' : 'text-red-700'}`}>
                               {margin}%
                             </div>
                           </div>
@@ -594,36 +605,36 @@ const Dashboard: React.FC = () => {
                       key={t.technicianId}
                       className={`
                         rounded-2xl shadow-md border p-3 bg-gradient-to-r
-                        from-red-50 via-white to-gray-50 flex flex-col gap-1
+                        from-gray-50 via-white to-gray-50 flex flex-col gap-1
                         ${i % 2 === 0 ? 'border-l-4 border-red-600' : 'border-l-4 border-yellow-300'}
                       `}
                     >
                       <div className="flex items-center gap-2 mb-1">
                         <span className="font-bold text-base text-gray-900">{t.technicianName}</span>
-                        <Badge color="bg-gray-200" text="text-gray-700">{t.daysWorked} dagen</Badge>
+                        <Badge color="bg-gray-100" text="text-gray-700"><ZakelijkDagen value={t.daysWorked} /> dagen</Badge>
                       </div>
                       <div className="flex flex-wrap gap-x-4 gap-y-1">
                         <div className="flex flex-col items-start">
                           <span className="text-xs text-gray-400">Totaal uren</span>
-                          <span className="font-semibold">{Number(t.totalHours).toFixed(2)}h</span>
+                          <span className="font-semibold"><ZakelijkUren value={t.totalHours} /></span>
                         </div>
                         <div className="flex flex-col items-start">
                           <span className="text-xs text-gray-400">Omzet</span>
-                          <span className="font-semibold text-yellow-700">{formatCurrency(t.revenue)}</span>
+                          <span className="font-semibold text-gray-800"><ZakelijkEuro value={t.revenue} /></span>
                         </div>
                         <div className="flex flex-col items-start">
                           <span className="text-xs text-gray-400">Kosten</span>
-                          <span className="font-semibold text-blue-700">{formatCurrency(t.costs)}</span>
+                          <span className="font-semibold text-gray-800"><ZakelijkEuro value={t.costs} /></span>
                         </div>
                         <div className="flex flex-col items-start">
                           <span className="text-xs text-gray-400">Winst</span>
-                          <span className={`font-bold ${t.profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                            {formatCurrency(t.profit)}
+                          <span className={`font-bold ${t.profit >= 0 ? 'text-green-700' : 'text-red-700'}`}>
+                            <ZakelijkEuro value={t.profit} />
                           </span>
                         </div>
                         <div className="flex flex-col items-start">
                           <span className="text-xs text-gray-400">Margin %</span>
-                          <span className={`font-bold ${parseFloat(margin) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                          <span className={`font-bold ${parseFloat(margin) >= 0 ? 'text-green-700' : 'text-red-700'}`}>
                             {margin}%
                           </span>
                         </div>
