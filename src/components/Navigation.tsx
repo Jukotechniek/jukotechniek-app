@@ -72,11 +72,12 @@ const Navigation: React.FC<NavigationProps> = ({ activeTab, onTabChange }) => {
   const mobileQuickButtons = [
     { id: 'hours', label: 'Mijn Uren', icon: Clock },
     { id: 'projects', label: 'Mijn Projecten', icon: Briefcase },
+    { id: 'magazine', label: 'Magazijn', icon: BookOpen },
     { id: 'chatbot', label: 'AI Assistent', icon: Bot }
   ];
 
   return (
-    <nav className="bg-black text-white shadow-lg">
+    <nav className="bg-white text-gray-900 shadow-lg border-b">
       <div className="max-w-7xl mx-auto px-4">
         <div className="flex items-center justify-between h-12">
           <div className="flex items-center">
@@ -88,8 +89,12 @@ const Navigation: React.FC<NavigationProps> = ({ activeTab, onTabChange }) => {
                 className="h-8 w-auto"
                 onError={(e) => {
                   // Fallback to text if logo doesn't load
-                  e.currentTarget.style.display = 'none';
-                  e.currentTarget.nextElementSibling.style.display = 'block';
+                  const target = e.currentTarget as HTMLImageElement;
+                  target.style.display = 'none';
+                  const nextElement = target.nextElementSibling as HTMLElement;
+                  if (nextElement) {
+                    nextElement.style.display = 'block';
+                  }
                 }}
               />
               <h1 className="text-xl font-bold hidden">JukoTechniek</h1>
@@ -108,7 +113,7 @@ const Navigation: React.FC<NavigationProps> = ({ activeTab, onTabChange }) => {
                     className={
                       activeTab === tab.id
                         ? 'bg-red-600 text-white hover:bg-red-700'
-                        : 'text-gray-300 hover:text-white hover:bg-gray-800'
+                        : 'text-gray-700 hover:text-gray-900 hover:bg-gray-100'
                     }
                   >
                     <Icon size={16} />
@@ -121,7 +126,7 @@ const Navigation: React.FC<NavigationProps> = ({ activeTab, onTabChange }) => {
             {/* Desktop dropdown for secondary tabs */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" className="text-gray-300 hover:text-white hidden md:block ml-2">
+                <Button variant="ghost" className="text-gray-700 hover:text-gray-900 hover:bg-gray-100 hidden md:block ml-2">
                   <Menu size={16} />
                   <span className="sr-only">Menu</span>
                 </Button>
@@ -146,7 +151,7 @@ const Navigation: React.FC<NavigationProps> = ({ activeTab, onTabChange }) => {
 
           {/* Desktop user info and logout */}
           <div className="items-center space-x-4 hidden md:flex">
-            <span className="text-sm text-gray-300">Welkom, {user?.fullName || user?.username}</span>
+            <span className="text-sm text-gray-600">Welkom, {user?.fullName || user?.username}</span>
             <Button
               variant="outline"
               onClick={logout}
@@ -163,7 +168,7 @@ const Navigation: React.FC<NavigationProps> = ({ activeTab, onTabChange }) => {
           <div className="md:hidden flex items-center justify-end flex-1">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" className="text-gray-300 hover:text-white">
+                <Button variant="ghost" className="text-gray-700 hover:text-gray-900 hover:bg-gray-100">
                   <Menu size={22} />
                   <span className="sr-only">Menu</span>
                 </Button>
@@ -207,7 +212,7 @@ const Navigation: React.FC<NavigationProps> = ({ activeTab, onTabChange }) => {
                   className={
                     activeTab === button.id
                       ? 'bg-red-600 text-white hover:bg-red-700 text-xs'
-                      : 'text-gray-300 hover:text-white hover:bg-gray-800 text-xs'
+                      : 'text-gray-700 hover:text-gray-900 hover:bg-gray-100 text-xs'
                   }
                 >
                   <Icon size={14} />

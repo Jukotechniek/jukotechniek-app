@@ -8,18 +8,9 @@ import { Badge } from '@/components/ui/badge';
 import { Search, Package, ChevronLeft, ChevronRight } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import type { Tables } from '@/integrations/supabase/types';
 
-interface MagazineArticle {
-  id: string;
-  part_number: string;
-  part_name: string;
-  description: string;
-  category: string;
-  stock_quantity: number;
-  price: number;
-  supplier: string;
-  image_url: string;
-}
+type MagazineArticle = Tables<'magazine_articles'>;
 
 const Magazine: React.FC = () => {
   const { user } = useAuth();
@@ -50,7 +41,7 @@ const Magazine: React.FC = () => {
       
       if (error) throw error;
       
-      const uniqueCategories = [...new Set(data?.map(item => item.category) || [])];
+      const uniqueCategories = [...new Set(data?.map(item => item.category).filter(Boolean) || [])];
       setCategories(uniqueCategories);
     } catch (error) {
       console.error('Error fetching categories:', error);
