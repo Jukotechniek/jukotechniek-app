@@ -7,6 +7,11 @@ export type Json =
   | Json[]
 
 export type Database = {
+  // Allows to automatically instanciate createClient with right options
+  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
+  __InternalSupabase: {
+    PostgrestVersion: "12.2.3 (519615d)"
+  }
   public: {
     Tables: {
       ai_assistant_config: {
@@ -38,6 +43,90 @@ export type Database = {
           {
             foreignKeyName: "ai_assistant_config_created_by_fkey"
             columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      client_permissions: {
+        Row: {
+          can_assign_technicians: boolean | null
+          can_create_projects: boolean | null
+          client_id: string
+          created_at: string
+          granted_by: string | null
+          id: string
+          updated_at: string
+        }
+        Insert: {
+          can_assign_technicians?: boolean | null
+          can_create_projects?: boolean | null
+          client_id: string
+          created_at?: string
+          granted_by?: string | null
+          id?: string
+          updated_at?: string
+        }
+        Update: {
+          can_assign_technicians?: boolean | null
+          can_create_projects?: boolean | null
+          client_id?: string
+          created_at?: string
+          granted_by?: string | null
+          id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_permissions_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: true
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_permissions_granted_by_fkey"
+            columns: ["granted_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      customer_permissions: {
+        Row: {
+          can_book_hours: boolean | null
+          created_at: string
+          customer_id: string
+          id: string
+          technician_id: string
+        }
+        Insert: {
+          can_book_hours?: boolean | null
+          created_at?: string
+          customer_id: string
+          id?: string
+          technician_id: string
+        }
+        Update: {
+          can_book_hours?: boolean | null
+          created_at?: string
+          customer_id?: string
+          id?: string
+          technician_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "customer_permissions_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "customer_permissions_technician_id_fkey"
+            columns: ["technician_id"]
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
@@ -198,6 +287,21 @@ export type Database = {
         }
         Relationships: []
       }
+      KeepAWAKE: {
+        Row: {
+          created_at: string
+          id: number
+        }
+        Insert: {
+          created_at: string
+          id?: number
+        }
+        Update: {
+          created_at?: string
+          id?: number
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           created_at: string | null
@@ -224,6 +328,45 @@ export type Database = {
           username?: string | null
         }
         Relationships: []
+      }
+      project_permissions: {
+        Row: {
+          can_view: boolean | null
+          created_at: string
+          id: string
+          project_id: string
+          technician_id: string
+        }
+        Insert: {
+          can_view?: boolean | null
+          created_at?: string
+          id?: string
+          project_id: string
+          technician_id: string
+        }
+        Update: {
+          can_view?: boolean | null
+          created_at?: string
+          id?: string
+          project_id?: string
+          technician_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_permissions_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "project_permissions_technician_id_fkey"
+            columns: ["technician_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       projects: {
         Row: {
@@ -288,36 +431,90 @@ export type Database = {
           created_at: string | null
           hourly_rate: number | null
           id: string
-          technician_id: string | null
-          updated_at: string | null
           saturday_rate: number | null
           sunday_rate: number | null
+          technician_id: string | null
+          updated_at: string | null
         }
         Insert: {
           billable_rate?: number | null
           created_at?: string | null
           hourly_rate?: number | null
           id?: string
-          technician_id?: string | null
-          updated_at?: string | null
           saturday_rate?: number | null
           sunday_rate?: number | null
+          technician_id?: string | null
+          updated_at?: string | null
         }
         Update: {
           billable_rate?: number | null
           created_at?: string | null
           hourly_rate?: number | null
           id?: string
-          technician_id?: string | null
-          updated_at?: string | null
           saturday_rate?: number | null
           sunday_rate?: number | null
+          technician_id?: string | null
+          updated_at?: string | null
         }
         Relationships: [
           {
             foreignKeyName: "technician_rates_technician_id_fkey"
             columns: ["technician_id"]
             isOneToOne: true
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      vacation_requests: {
+        Row: {
+          approved_by: string | null
+          created_at: string
+          end_date: string
+          id: string
+          reason: string | null
+          reviewed_at: string | null
+          start_date: string
+          status: string
+          technician_id: string
+          updated_at: string
+        }
+        Insert: {
+          approved_by?: string | null
+          created_at?: string
+          end_date: string
+          id?: string
+          reason?: string | null
+          reviewed_at?: string | null
+          start_date: string
+          status?: string
+          technician_id: string
+          updated_at?: string
+        }
+        Update: {
+          approved_by?: string | null
+          created_at?: string
+          end_date?: string
+          id?: string
+          reason?: string | null
+          reviewed_at?: string | null
+          start_date?: string
+          status?: string
+          technician_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vacation_requests_approved_by_fkey"
+            columns: ["approved_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vacation_requests_technician_id_fkey"
+            columns: ["technician_id"]
+            isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
@@ -331,11 +528,11 @@ export type Database = {
           id: string
           received_at: string
           technician_id: string
-          webhook_verified: boolean
           verified_at: string | null
           verified_by: string | null
-          webhook_start: string | null
           webhook_end: string | null
+          webhook_start: string | null
+          webhook_verified: boolean
         }
         Insert: {
           created_at?: string
@@ -344,11 +541,11 @@ export type Database = {
           id?: string
           received_at?: string
           technician_id: string
-          webhook_verified?: boolean
           verified_at?: string | null
           verified_by?: string | null
-          webhook_start: string | null
-          webhook_end: string | null
+          webhook_end?: string | null
+          webhook_start?: string | null
+          webhook_verified?: boolean
         }
         Update: {
           created_at?: string
@@ -357,11 +554,11 @@ export type Database = {
           id?: string
           received_at?: string
           technician_id?: string
-          webhook_verified?: boolean
           verified_at?: string | null
           verified_by?: string | null
-          webhook_start: string | null
-          webhook_end: string | null
+          webhook_end?: string | null
+          webhook_start?: string | null
+          webhook_verified?: boolean
         }
         Relationships: [
           {
@@ -380,21 +577,21 @@ export type Database = {
           customer_id: string | null
           date: string
           description: string | null
+          end_time: string | null
           hours_worked: number
           id: string
           is_manual_entry: boolean | null
           is_sunday: boolean | null
           is_weekend: boolean | null
+          manual_verified: boolean | null
           overtime_hours: number | null
           regular_hours: number | null
+          start_time: string | null
           sunday_hours: number | null
           technician_id: string | null
           travel_expense_from_client: number | null
           travel_expense_to_technician: number | null
           weekend_hours: number | null
-          start_time: string | null
-          end_time: string | null
-          manual_verified?: boolean
         }
         Insert: {
           created_at?: string | null
@@ -402,21 +599,21 @@ export type Database = {
           customer_id?: string | null
           date: string
           description?: string | null
+          end_time?: string | null
           hours_worked: number
           id?: string
           is_manual_entry?: boolean | null
           is_sunday?: boolean | null
           is_weekend?: boolean | null
+          manual_verified?: boolean | null
           overtime_hours?: number | null
           regular_hours?: number | null
+          start_time?: string | null
           sunday_hours?: number | null
           technician_id?: string | null
           travel_expense_from_client?: number | null
           travel_expense_to_technician?: number | null
           weekend_hours?: number | null
-          start_time: string | null
-          end_time: string | null
-          manual_verified?: boolean
         }
         Update: {
           created_at?: string | null
@@ -424,21 +621,21 @@ export type Database = {
           customer_id?: string | null
           date?: string
           description?: string | null
+          end_time?: string | null
           hours_worked?: number
           id?: string
           is_manual_entry?: boolean | null
           is_sunday?: boolean | null
           is_weekend?: boolean | null
+          manual_verified?: boolean | null
           overtime_hours?: number | null
           regular_hours?: number | null
+          start_time?: string | null
           sunday_hours?: number | null
           technician_id?: string | null
           travel_expense_from_client?: number | null
           travel_expense_to_technician?: number | null
           weekend_hours?: number | null
-          start_time: string | null
-          end_time: string | null
-          manual_verified?: boolean
         }
         Relationships: [
           {
@@ -463,152 +660,38 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
-      },
-      vacation_requests: {
-        Row: {
-          id: string
-          technician_id: string
-          start_date: string
-          end_date: string
-          status: string | null
-          created_at: string | null
-          approved_by: string | null
-        }
-        Insert: {
-          id?: string
-          technician_id: string
-          start_date: string
-          end_date: string
-          status?: string | null
-          created_at?: string | null
-          approved_by?: string | null
-        }
-        Update: {
-          id?: string
-          technician_id?: string
-          start_date?: string
-          end_date?: string
-          status?: string | null
-          created_at?: string | null
-          approved_by?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "vacation_requests_technician_id_fkey",
-            columns: ["technician_id"],
-            isOneToOne: false,
-            referencedRelation: "profiles",
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "vacation_requests_approved_by_fkey",
-            columns: ["approved_by"],
-            isOneToOne: false,
-            referencedRelation: "profiles",
-            referencedColumns: ["id"]
-          },
-        ]
-      },
+      }
       work_schedules: {
         Row: {
+          created_at: string
+          date: string | null
           id: string
-          technician_id: string
-          date: string
           is_working: boolean | null
-          created_at: string | null
-        }
-        Insert: {
-          id?: string
           technician_id: string
-          date: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          date?: string | null
+          id?: string
           is_working?: boolean | null
-          created_at?: string | null
+          technician_id: string
+          updated_at?: string
         }
         Update: {
+          created_at?: string
+          date?: string | null
           id?: string
+          is_working?: boolean | null
           technician_id?: string
-          date?: string
-          is_working?: boolean | null
-          created_at?: string | null
+          updated_at?: string
         }
         Relationships: [
           {
-            foreignKeyName: "work_schedules_technician_id_fkey",
-            columns: ["technician_id"],
-            isOneToOne: false,
-            referencedRelation: "profiles",
-            referencedColumns: ["id"]
-          },
-        ]
-      },
-      project_permissions: {
-        Row: {
-          id: string
-          user_id: string
-          project_id: string
-          can_edit: boolean | null
-        }
-        Insert: {
-          id?: string
-          user_id: string
-          project_id: string
-          can_edit?: boolean | null
-        }
-        Update: {
-          id?: string
-          user_id?: string
-          project_id?: string
-          can_edit?: boolean | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "project_permissions_user_id_fkey",
-            columns: ["user_id"],
-            isOneToOne: false,
-            referencedRelation: "profiles",
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "project_permissions_project_id_fkey",
-            columns: ["project_id"],
-            isOneToOne: false,
-            referencedRelation: "projects",
-            referencedColumns: ["id"]
-          },
-        ]
-      },
-      client_permissions: {
-        Row: {
-          id: string
-          user_id: string
-          customer_id: string
-          can_view: boolean | null
-        }
-        Insert: {
-          id?: string
-          user_id: string
-          customer_id: string
-          can_view?: boolean | null
-        }
-        Update: {
-          id?: string
-          user_id?: string
-          customer_id?: string
-          can_view?: boolean | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "client_permissions_user_id_fkey",
-            columns: ["user_id"],
-            isOneToOne: false,
-            referencedRelation: "profiles",
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "client_permissions_customer_id_fkey",
-            columns: ["customer_id"],
-            isOneToOne: false,
-            referencedRelation: "customers",
+            foreignKeyName: "work_schedules_technician_id_fkey"
+            columns: ["technician_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
         ]
@@ -632,21 +715,25 @@ export type Database = {
   }
 }
 
-type DefaultSchema = Database[Extract<keyof Database, "public">]
+type DatabaseWithoutInternals = Omit<Database, "__InternalSupabase">
+
+type DefaultSchema = DatabaseWithoutInternals[Extract<keyof Database, "public">]
 
 export type Tables<
   DefaultSchemaTableNameOrOptions extends
     | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
-    | { schema: keyof Database },
+    | { schema: keyof DatabaseWithoutInternals },
   TableName extends DefaultSchemaTableNameOrOptions extends {
-    schema: keyof Database
+    schema: keyof DatabaseWithoutInternals
   }
-    ? keyof (Database[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
-        Database[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
+    ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
+        DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
     : never = never,
-> = DefaultSchemaTableNameOrOptions extends { schema: keyof Database }
-  ? (Database[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
-      Database[DefaultSchemaTableNameOrOptions["schema"]]["Views"])[TableName] extends {
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
+      DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])[TableName] extends {
       Row: infer R
     }
     ? R
@@ -664,14 +751,16 @@ export type Tables<
 export type TablesInsert<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
-    | { schema: keyof Database },
+    | { schema: keyof DatabaseWithoutInternals },
   TableName extends DefaultSchemaTableNameOrOptions extends {
-    schema: keyof Database
+    schema: keyof DatabaseWithoutInternals
   }
-    ? keyof Database[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
+    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
     : never = never,
-> = DefaultSchemaTableNameOrOptions extends { schema: keyof Database }
-  ? Database[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
       Insert: infer I
     }
     ? I
@@ -687,14 +776,16 @@ export type TablesInsert<
 export type TablesUpdate<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
-    | { schema: keyof Database },
+    | { schema: keyof DatabaseWithoutInternals },
   TableName extends DefaultSchemaTableNameOrOptions extends {
-    schema: keyof Database
+    schema: keyof DatabaseWithoutInternals
   }
-    ? keyof Database[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
+    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
     : never = never,
-> = DefaultSchemaTableNameOrOptions extends { schema: keyof Database }
-  ? Database[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
       Update: infer U
     }
     ? U
@@ -710,14 +801,16 @@ export type TablesUpdate<
 export type Enums<
   DefaultSchemaEnumNameOrOptions extends
     | keyof DefaultSchema["Enums"]
-    | { schema: keyof Database },
+    | { schema: keyof DatabaseWithoutInternals },
   EnumName extends DefaultSchemaEnumNameOrOptions extends {
-    schema: keyof Database
+    schema: keyof DatabaseWithoutInternals
   }
-    ? keyof Database[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
+    ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
     : never = never,
-> = DefaultSchemaEnumNameOrOptions extends { schema: keyof Database }
-  ? Database[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"][EnumName]
+> = DefaultSchemaEnumNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"][EnumName]
   : DefaultSchemaEnumNameOrOptions extends keyof DefaultSchema["Enums"]
     ? DefaultSchema["Enums"][DefaultSchemaEnumNameOrOptions]
     : never
@@ -725,14 +818,16 @@ export type Enums<
 export type CompositeTypes<
   PublicCompositeTypeNameOrOptions extends
     | keyof DefaultSchema["CompositeTypes"]
-    | { schema: keyof Database },
+    | { schema: keyof DatabaseWithoutInternals },
   CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
-    schema: keyof Database
+    schema: keyof DatabaseWithoutInternals
   }
-    ? keyof Database[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
+    ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
     : never = never,
-> = PublicCompositeTypeNameOrOptions extends { schema: keyof Database }
-  ? Database[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"][CompositeTypeName]
+> = PublicCompositeTypeNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"][CompositeTypeName]
   : PublicCompositeTypeNameOrOptions extends keyof DefaultSchema["CompositeTypes"]
     ? DefaultSchema["CompositeTypes"][PublicCompositeTypeNameOrOptions]
     : never

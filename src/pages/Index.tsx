@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { AuthProvider, useAuth } from '@/contexts/AuthContext';
 import LoginForm from '@/components/LoginForm';
@@ -12,6 +13,7 @@ import UserManagement from '@/components/UserManagement';
 import Reports from '@/components/Reports';
 import AIChatbot from '@/components/AIChatbot';
 import WorkSchedulePage from '@/components/WorkSchedule';
+import Magazine from '@/components/Magazine';
 
 const AppContent: React.FC = () => {
   const { isAuthenticated, loading } = useAuth();
@@ -52,6 +54,8 @@ const AppContent: React.FC = () => {
         return <UserManagement />;
       case 'reports':
         return <Reports />;
+      case 'magazine':
+        return <Magazine />;
       case 'chatbot':
         return <AIChatbot />;
       default:

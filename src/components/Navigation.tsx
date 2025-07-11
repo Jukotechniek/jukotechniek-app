@@ -1,3 +1,4 @@
+
 import { useAuth } from '@/contexts/AuthContext';
 import {
   BarChart3,
@@ -7,11 +8,11 @@ import {
   DollarSign,
   CheckCircle,
   CalendarDays,
-  Sun,
   Users,
   FileText,
   Bot,
-  Menu
+  Menu,
+  BookOpen
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -41,6 +42,7 @@ const Navigation: React.FC<NavigationProps> = ({ activeTab, onTabChange }) => {
     { id: 'verification', label: 'Uren Verificatie', icon: CheckCircle },
     { id: 'users', label: 'Gebruikersbeheer', icon: Users },
     { id: 'reports', label: 'Rapporten', icon: FileText },
+    { id: 'magazine', label: 'Magazijn', icon: BookOpen },
     { id: 'chatbot', label: 'AI Assistent', icon: Bot }
   ];
 
@@ -50,6 +52,7 @@ const Navigation: React.FC<NavigationProps> = ({ activeTab, onTabChange }) => {
     { id: 'projects', label: 'Mijn Projecten', icon: Briefcase },
     { id: 'schedule', label: 'Agenda', icon: CalendarDays },
     { id: 'users', label: 'Mijn Account', icon: Users },
+    { id: 'magazine', label: 'Magazijn', icon: BookOpen },
     { id: 'chatbot', label: 'AI Assistent', icon: Bot }
   ];
 
@@ -65,16 +68,35 @@ const Navigation: React.FC<NavigationProps> = ({ activeTab, onTabChange }) => {
   const visibleTabs = tabs.filter(t => primaryTabIds.includes(t.id));
   const dropdownTabs = tabs.filter(t => !primaryTabIds.includes(t.id));
 
+  // Mobile quick access buttons for technicians and admins
+  const mobileQuickButtons = [
+    { id: 'hours', label: 'Mijn Uren', icon: Clock },
+    { id: 'projects', label: 'Mijn Projecten', icon: Briefcase },
+    { id: 'chatbot', label: 'AI Assistent', icon: Bot }
+  ];
+
   return (
     <nav className="bg-black text-white shadow-lg">
       <div className="max-w-7xl mx-auto px-4">
         <div className="flex items-center justify-between h-12">
           <div className="flex items-center">
+            {/* Logo instead of text */}
             <div className="flex items-center">
-              <h1 className="text-xl font-bold">JukoTechniek</h1>
+              <img 
+                src="/logo_WEB.png" 
+                alt="JukoTechniek" 
+                className="h-8 w-auto"
+                onError={(e) => {
+                  // Fallback to text if logo doesn't load
+                  e.currentTarget.style.display = 'none';
+                  e.currentTarget.nextElementSibling.style.display = 'block';
+                }}
+              />
+              <h1 className="text-xl font-bold hidden">JukoTechniek</h1>
               <div className="w-1 h-6 bg-red-600 ml-2"></div>
             </div>
-            {/* Tabs desktop */}
+            
+            {/* Desktop tabs */}
             <div className="hidden md:flex space-x-1 ml-8">
               {visibleTabs.map(tab => {
                 const Icon = tab.icon;
@@ -95,6 +117,7 @@ const Navigation: React.FC<NavigationProps> = ({ activeTab, onTabChange }) => {
                 );
               })}
             </div>
+            
             {/* Desktop dropdown for secondary tabs */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -121,7 +144,7 @@ const Navigation: React.FC<NavigationProps> = ({ activeTab, onTabChange }) => {
             </DropdownMenu>
           </div>
 
-          {/* Desktop user (welkom + uitloggen) */}
+          {/* Desktop user info and logout */}
           <div className="items-center space-x-4 hidden md:flex">
             <span className="text-sm text-gray-300">Welkom, {user?.fullName || user?.username}</span>
             <Button
@@ -169,6 +192,31 @@ const Navigation: React.FC<NavigationProps> = ({ activeTab, onTabChange }) => {
             </DropdownMenu>
           </div>
         </div>
+        
+        {/* Mobile quick access buttons - only show for technicians and admins */}
+        {!isOpdrachtgever && (
+          <div className="md:hidden flex justify-center space-x-2 pb-2">
+            {mobileQuickButtons.map(button => {
+              const Icon = button.icon;
+              return (
+                <Button
+                  key={button.id}
+                  variant={activeTab === button.id ? 'secondary' : 'ghost'}
+                  size="sm"
+                  onClick={() => onTabChange(button.id)}
+                  className={
+                    activeTab === button.id
+                      ? 'bg-red-600 text-white hover:bg-red-700 text-xs'
+                      : 'text-gray-300 hover:text-white hover:bg-gray-800 text-xs'
+                  }
+                >
+                  <Icon size={14} />
+                  <span className="ml-1">{button.label}</span>
+                </Button>
+              );
+            })}
+          </div>
+        )}
       </div>
     </nav>
   );
