@@ -302,6 +302,48 @@ export type Database = {
         }
         Relationships: []
       }
+      magazine_articles: {
+        Row: {
+          category: string | null
+          created_at: string
+          description: string | null
+          id: string
+          image_url: string | null
+          part_name: string
+          part_number: string
+          price: number | null
+          stock_quantity: number
+          supplier: string | null
+          updated_at: string
+        }
+        Insert: {
+          category?: string | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          image_url?: string | null
+          part_name: string
+          part_number: string
+          price?: number | null
+          stock_quantity?: number
+          supplier?: string | null
+          updated_at?: string
+        }
+        Update: {
+          category?: string | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          image_url?: string | null
+          part_name?: string
+          part_number?: string
+          price?: number | null
+          stock_quantity?: number
+          supplier?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           created_at: string | null

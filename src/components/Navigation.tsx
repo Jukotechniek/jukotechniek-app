@@ -1,4 +1,3 @@
-
 import { useAuth } from '@/contexts/AuthContext';
 import {
   BarChart3,
@@ -68,12 +67,11 @@ const Navigation: React.FC<NavigationProps> = ({ activeTab, onTabChange }) => {
   const visibleTabs = tabs.filter(t => primaryTabIds.includes(t.id));
   const dropdownTabs = tabs.filter(t => !primaryTabIds.includes(t.id));
 
-  // Mobile quick access buttons for technicians and admins
   const mobileQuickButtons = [
-    { id: 'hours', label: 'Mijn Uren', icon: Clock },
-    { id: 'projects', label: 'Mijn Projecten', icon: Briefcase },
+    { id: 'hours', label: 'Uren', icon: Clock },
+    { id: 'projects', label: 'Project', icon: Briefcase },
     { id: 'magazine', label: 'Magazijn', icon: BookOpen },
-    { id: 'chatbot', label: 'AI Assistent', icon: Bot }
+    { id: 'chatbot', label: 'AI', icon: Bot }
   ];
 
   return (
@@ -81,14 +79,12 @@ const Navigation: React.FC<NavigationProps> = ({ activeTab, onTabChange }) => {
       <div className="max-w-7xl mx-auto px-4">
         <div className="flex items-center justify-between h-12">
           <div className="flex items-center">
-            {/* Logo instead of text */}
             <div className="flex items-center">
               <img 
                 src="/logo_WEB.png" 
                 alt="JukoTechniek" 
                 className="h-8 w-auto"
                 onError={(e) => {
-                  // Fallback to text if logo doesn't load
                   const target = e.currentTarget as HTMLImageElement;
                   target.style.display = 'none';
                   const nextElement = target.nextElementSibling as HTMLElement;
@@ -101,7 +97,6 @@ const Navigation: React.FC<NavigationProps> = ({ activeTab, onTabChange }) => {
               <div className="w-1 h-6 bg-red-600 ml-2"></div>
             </div>
             
-            {/* Desktop tabs */}
             <div className="hidden md:flex space-x-1 ml-8">
               {visibleTabs.map(tab => {
                 const Icon = tab.icon;
@@ -123,7 +118,6 @@ const Navigation: React.FC<NavigationProps> = ({ activeTab, onTabChange }) => {
               })}
             </div>
             
-            {/* Desktop dropdown for secondary tabs */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" className="text-gray-700 hover:text-gray-900 hover:bg-gray-100 hidden md:block ml-2">
@@ -149,7 +143,6 @@ const Navigation: React.FC<NavigationProps> = ({ activeTab, onTabChange }) => {
             </DropdownMenu>
           </div>
 
-          {/* Desktop user info and logout */}
           <div className="items-center space-x-4 hidden md:flex">
             <span className="text-sm text-gray-600">Welkom, {user?.fullName || user?.username}</span>
             <Button
@@ -164,7 +157,6 @@ const Navigation: React.FC<NavigationProps> = ({ activeTab, onTabChange }) => {
             </Button>
           </div>
 
-          {/* Mobile: menu button helemaal rechts */}
           <div className="md:hidden flex items-center justify-end flex-1">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -198,9 +190,8 @@ const Navigation: React.FC<NavigationProps> = ({ activeTab, onTabChange }) => {
           </div>
         </div>
         
-        {/* Mobile quick access buttons - only show for technicians and admins */}
         {!isOpdrachtgever && (
-          <div className="md:hidden flex justify-center space-x-2 pb-2">
+          <div className="md:hidden flex justify-center space-x-1 pb-2 px-1">
             {mobileQuickButtons.map(button => {
               const Icon = button.icon;
               return (
@@ -211,8 +202,8 @@ const Navigation: React.FC<NavigationProps> = ({ activeTab, onTabChange }) => {
                   onClick={() => onTabChange(button.id)}
                   className={
                     activeTab === button.id
-                      ? 'bg-red-600 text-white hover:bg-red-700 text-xs'
-                      : 'text-gray-700 hover:text-gray-900 hover:bg-gray-100 text-xs'
+                      ? 'bg-red-600 text-white hover:bg-red-700 text-xs px-2'
+                      : 'text-gray-700 hover:text-gray-900 hover:bg-gray-100 text-xs px-2'
                   }
                 >
                   <Icon size={14} />

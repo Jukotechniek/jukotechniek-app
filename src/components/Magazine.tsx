@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -8,9 +7,20 @@ import { Badge } from '@/components/ui/badge';
 import { Search, Package, ChevronLeft, ChevronRight } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
-import type { Tables } from '@/integrations/supabase/types';
 
-type MagazineArticle = Tables<'magazine_articles'>;
+interface MagazineArticle {
+  id: string;
+  part_number: string;
+  part_name: string;
+  description: string | null;
+  category: string | null;
+  stock_quantity: number;
+  price: number | null;
+  supplier: string | null;
+  image_url: string | null;
+  created_at: string;
+  updated_at: string;
+}
 
 const Magazine: React.FC = () => {
   const { user } = useAuth();
