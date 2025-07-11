@@ -1,3 +1,4 @@
+
 import { useAuth } from '@/contexts/AuthContext';
 import {
   BarChart3,
@@ -35,13 +36,13 @@ const Navigation: React.FC<NavigationProps> = ({ activeTab, onTabChange }) => {
     { id: 'dashboard', label: 'Dashboard', icon: BarChart3 },
     { id: 'hours', label: 'Werk Uren', icon: Clock },
     { id: 'projects', label: 'Projecten', icon: Briefcase },
+    { id: 'magazine', label: 'Magazijn', icon: BookOpen },
     { id: 'schedule', label: 'Agenda', icon: CalendarDays },
     { id: 'customers', label: 'Klanten', icon: Building2 },
     { id: 'billing', label: 'Tarieven', icon: DollarSign },
     { id: 'verification', label: 'Uren Verificatie', icon: CheckCircle },
     { id: 'users', label: 'Gebruikersbeheer', icon: Users },
     { id: 'reports', label: 'Rapporten', icon: FileText },
-    { id: 'magazine', label: 'Magazijn', icon: BookOpen },
     { id: 'chatbot', label: 'AI Assistent', icon: Bot }
   ];
 
@@ -49,9 +50,9 @@ const Navigation: React.FC<NavigationProps> = ({ activeTab, onTabChange }) => {
     { id: 'dashboard', label: 'Dashboard', icon: BarChart3 },
     { id: 'hours', label: 'Mijn Uren', icon: Clock },
     { id: 'projects', label: 'Mijn Projecten', icon: Briefcase },
+    { id: 'magazine', label: 'Magazijn', icon: BookOpen },
     { id: 'schedule', label: 'Agenda', icon: CalendarDays },
     { id: 'users', label: 'Mijn Account', icon: Users },
-    { id: 'magazine', label: 'Magazijn', icon: BookOpen },
     { id: 'chatbot', label: 'AI Assistent', icon: Bot }
   ];
 
@@ -63,7 +64,7 @@ const Navigation: React.FC<NavigationProps> = ({ activeTab, onTabChange }) => {
   ];
 
   const tabs = isAdmin ? adminTabs : isOpdrachtgever ? opdrachtgeverTabs : technicianTabs;
-  const primaryTabIds = ['dashboard', 'chatbot', 'hours', 'billing', 'verification', 'schedule'];
+  const primaryTabIds = ['dashboard', 'chatbot', 'hours', 'projects', 'magazine', 'billing', 'verification', 'schedule'];
   const visibleTabs = tabs.filter(t => primaryTabIds.includes(t.id));
   const dropdownTabs = tabs.filter(t => !primaryTabIds.includes(t.id));
 
