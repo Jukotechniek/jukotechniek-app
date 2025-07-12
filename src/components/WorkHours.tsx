@@ -15,35 +15,24 @@ import { PageLayout } from '@/components/ui/page-layout';
 
 interface WorkHourEntry {
   id: string;
-  user_id: string;
-  project_id: string;
+  technician_id: string | null;
+  customer_id: string | null;
   date: string;
   hours_worked: number;
-  description: string;
-  created_at: string;
-  updated_at: string;
+  description: string | null;
+  created_at: string | null;
+  updated_at: string | null;
 }
 
-interface Project {
+interface Customer {
   id: string;
   name: string;
-  customer_id: string;
-  description: string;
-  start_date: string;
-  end_date: string;
-  status: string;
-  created_at: string;
-  updated_at: string;
 }
 
 interface UserProfile {
   id: string;
-  username: string;
-  email: string;
-  fullName: string;
-  role: string;
-  created_at: string;
-  updated_at: string;
+  username: string | null;
+  full_name: string | null;
 }
 
 const WorkHours: React.FC = () => {
@@ -51,7 +40,7 @@ const WorkHours: React.FC = () => {
   const isAdmin = user?.role === 'admin';
 
   const [workHours, setWorkHours] = useState<WorkHourEntry[]>([]);
-  const [projects, setProjects] = useState<Project[]>([]);
+  const [customers, setCustomers] = useState<Customer[]>([]);
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [loading, setLoading] = useState(true);
@@ -60,15 +49,15 @@ const WorkHours: React.FC = () => {
   const [selectedWorkHour, setSelectedWorkHour] = useState<WorkHourEntry | null>(null);
 
   // Form state
-  const [projectId, setProjectId] = useState('');
+  const [customerId, setCustomerId] = useState('');
   const [date, setDate] = useState(format(selectedDate, 'yyyy-MM-dd'));
   const [hoursWorked, setHoursWorked] = useState<number | ''>('');
   const [description, setDescription] = useState('');
-  const [userId, setUserId] = useState(user?.id || '');
+  const [technicianId, setTechnicianId] = useState(user?.id || '');
 
   useEffect(() => {
     if (user) {
-      setUserId(user.id);
+      setTechnicianId(user.id);
       fetchData();
     }
   }, [user, selectedDate]);
@@ -76,14 +65,14 @@ const WorkHours: React.FC = () => {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [workHoursData, projectsData, usersData] = await Promise.all([
+      const [workHoursData, customersData, usersData] = await Promise.all([
         fetchWorkHours(),
-        fetchProjects(),
+        fetchCustomers(),
         fetchUsers()
       ]);
 
       setWorkHours(workHoursData);
-      setProjects(projectsData);
+      setCustomers(customersData);
       setUsers(usersData);
     } catch (error) {
       console.error('Error fetching data:', error);
@@ -94,12 +83,12 @@ const WorkHours: React.FC = () => {
 
   const fetchWorkHours = async () => {
     let query = supabase
-      .from<WorkHourEntry>('work_hours')
+      .from('work_hours')
       .select('*')
       .order('date', { ascending: false });
 
     if (!isAdmin) {
-      query = query.eq('user_id', user?.id);
+      query = query.eq('technician_id', user?.id);
     }
 
     const startDate = startOfWeek(selectedDate, { weekStartsOn: 1 });
@@ -114,9 +103,9 @@ const WorkHours: React.FC = () => {
     return data || [];
   };
 
-  const fetchProjects = async () => {
+  const fetchCustomers = async () => {
     const { data, error } = await supabase
-      .from<Project>('projects')
+      .from('customers')
       .select('*')
       .order('name');
 
@@ -126,9 +115,9 @@ const WorkHours: React.FC = () => {
 
   const fetchUsers = async () => {
     const { data, error } = await supabase
-      .from<UserProfile>('profiles')
+      .from('profiles')
       .select('*')
-      .order('fullName');
+      .order('full_name');
 
     if (error) throw error;
     return data || [];
@@ -137,14 +126,14 @@ const WorkHours: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!projectId || !date || !hoursWorked || !description || !userId) {
+    if (!customerId || !date || !hoursWorked || !description || !technicianId) {
       alert('Please fill in all fields.');
       return;
     }
 
     const newWorkHour = {
-      user_id: userId,
-      project_id: projectId,
+      technician_id: technicianId,
+      customer_id: customerId,
       date: date,
       hours_worked: parseFloat(hoursWorked.toString()),
       description: description,
@@ -177,13 +166,13 @@ const WorkHours: React.FC = () => {
       return;
     }
 
-    if (!projectId || !date || !hoursWorked || !description) {
+    if (!customerId || !date || !hoursWorked || !description) {
       alert('Please fill in all fields.');
       return;
     }
 
     const updatedWorkHour = {
-      project_id: projectId,
+      customer_id: customerId,
       date: date,
       hours_worked: parseFloat(hoursWorked.toString()),
       description: description,
@@ -231,7 +220,7 @@ const WorkHours: React.FC = () => {
   };
 
   const clearForm = () => {
-    setProjectId('');
+    setCustomerId('');
     setDate(format(selectedDate, 'yyyy-MM-dd'));
     setHoursWorked('');
     setDescription('');
@@ -240,10 +229,10 @@ const WorkHours: React.FC = () => {
 
   const handleEditClick = (workHour: WorkHourEntry) => {
     setSelectedWorkHour(workHour);
-    setProjectId(workHour.project_id);
+    setCustomerId(workHour.customer_id || '');
     setDate(workHour.date);
     setHoursWorked(workHour.hours_worked);
-    setDescription(workHour.description);
+    setDescription(workHour.description || '');
     setIsEditDialogOpen(true);
   };
 
@@ -304,7 +293,7 @@ const WorkHours: React.FC = () => {
       </Card>
 
       <div className="mb-4 flex justify-end">
-        <Dialog>
+        <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
           <DialogTrigger asChild>
             <Button><Plus className="h-4 w-4 mr-2" /> Nieuwe Uren Registratie</Button>
           </DialogTrigger>
@@ -314,14 +303,14 @@ const WorkHours: React.FC = () => {
             </DialogHeader>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
-                <Select onValueChange={setProjectId} value={projectId}>
+                <Select onValueChange={setCustomerId} value={customerId}>
                   <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Selecteer een project" />
+                    <SelectValue placeholder="Selecteer een klant" />
                   </SelectTrigger>
                   <SelectContent>
-                    {projects.map(project => (
-                      <SelectItem key={project.id} value={project.id}>
-                        {project.name}
+                    {customers.map(customer => (
+                      <SelectItem key={customer.id} value={customer.id}>
+                        {customer.name}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -368,7 +357,7 @@ const WorkHours: React.FC = () => {
               <CardContent className="p-4">
                 <div className="flex justify-between items-center">
                   <div>
-                    <h3 className="text-lg font-semibold">{projects.find(p => p.id === hour.project_id)?.name}</h3>
+                    <h3 className="text-lg font-semibold">{customers.find(c => c.id === hour.customer_id)?.name || 'Onbekende klant'}</h3>
                     <p className="text-gray-600">{hour.description}</p>
                     <div className="flex items-center text-gray-500 mt-2">
                       <Clock className="h-4 w-4 mr-1" />
@@ -409,14 +398,14 @@ const WorkHours: React.FC = () => {
           </DialogHeader>
           <form onSubmit={handleUpdate} className="space-y-4">
             <div>
-              <Select onValueChange={setProjectId} value={projectId}>
+              <Select onValueChange={setCustomerId} value={customerId}>
                 <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Selecteer een project" />
+                  <SelectValue placeholder="Selecteer een klant" />
                 </SelectTrigger>
                 <SelectContent>
-                  {projects.map(project => (
-                    <SelectItem key={project.id} value={project.id}>
-                      {project.name}
+                  {customers.map(customer => (
+                    <SelectItem key={customer.id} value={customer.id}>
+                      {customer.name}
                     </SelectItem>
                   ))}
                 </SelectContent>

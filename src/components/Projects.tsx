@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -6,23 +7,24 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
-import { Calendar, Plus, User, Building, Clock, FileText, Image as ImageIcon, Trash2 } from 'lucide-react';
+import { Calendar, Plus, User, Building, Clock, FileText, Image as ImageIcon, Trash2, Edit } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { uploadProjectImages } from '@/utils/uploadProjectImages';
 import { PageLayout } from '@/components/ui/page-layout';
 
+// Use the actual database schema types
 interface Project {
   id: string;
   title: string;
-  description: string;
-  status: 'nieuw' | 'bezig' | 'afgerond' | 'geannuleerd';
-  start_date: string | null;
-  end_date: string | null;
+  description: string | null;
+  status: string | null;
+  date: string;
+  hours_spent: number;
+  created_at: string | null;
+  updated_at: string | null;
+  technician_id: string | null;
   customer_id: string | null;
-  assigned_users: string[] | null;
-  created_at: string;
-  updated_at: string;
   images: string[] | null;
 }
 
@@ -33,8 +35,8 @@ interface Customer {
 
 interface UserProfile {
   id: string;
-  username: string;
-  fullName: string;
+  username: string | null;
+  full_name: string | null;
 }
 
 const Projects: React.FC = () => {
@@ -50,11 +52,11 @@ const Projects: React.FC = () => {
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
-  const [status, setStatus] = useState<'nieuw' | 'bezig' | 'afgerond' | 'geannuleerd'>('nieuw');
-  const [startDate, setStartDate] = useState<string | null>(null);
-  const [endDate, setEndDate] = useState<string | null>(null);
-  const [customerId, setCustomerId] = useState<string | null>(null);
-  const [assignedUsers, setAssignedUsers] = useState<string[]>([]);
+  const [status, setStatus] = useState<string>('in-progress');
+  const [date, setDate] = useState<string>('');
+  const [hoursSpent, setHoursSpent] = useState<number>(0);
+  const [customerId, setCustomerId] = useState<string>('');
+  const [technicianId, setTechnicianId] = useState<string>('');
   const [newImages, setNewImages] = useState<File[]>([]);
   const [existingImages, setExistingImages] = useState<string[]>([]);
 
@@ -72,7 +74,7 @@ const Projects: React.FC = () => {
         .select('*');
 
       if (!isAdmin) {
-        query = query.contains('assigned_users', [user?.id]);
+        query = query.eq('technician_id', user?.id);
       }
 
       const { data, error } = await query;
@@ -105,7 +107,7 @@ const Projects: React.FC = () => {
     try {
       const { data, error } = await supabase
         .from('profiles')
-        .select('id, username, fullName');
+        .select('id, username, full_name');
 
       if (error) throw error;
 
@@ -121,11 +123,11 @@ const Projects: React.FC = () => {
     setSelectedProject(null);
     setTitle('');
     setDescription('');
-    setStatus('nieuw');
-    setStartDate(null);
-    setEndDate(null);
-    setCustomerId(null);
-    setAssignedUsers([]);
+    setStatus('in-progress');
+    setDate('');
+    setHoursSpent(0);
+    setCustomerId('');
+    setTechnicianId('');
     setNewImages([]);
     setExistingImages([]);
   };
@@ -134,12 +136,12 @@ const Projects: React.FC = () => {
     setEditMode(true);
     setSelectedProject(project);
     setTitle(project.title);
-    setDescription(project.description);
-    setStatus(project.status);
-    setStartDate(project.start_date);
-    setEndDate(project.end_date);
-    setCustomerId(project.customer_id);
-    setAssignedUsers(project.assigned_users || []);
+    setDescription(project.description || '');
+    setStatus(project.status || 'in-progress');
+    setDate(project.date);
+    setHoursSpent(project.hours_spent);
+    setCustomerId(project.customer_id || '');
+    setTechnicianId(project.technician_id || '');
     setExistingImages(project.images || []);
     setNewImages([]);
     setOpen(true);
@@ -154,10 +156,10 @@ const Projects: React.FC = () => {
             title,
             description,
             status,
-            start_date: startDate,
-            end_date: endDate,
-            customer_id: customerId,
-            assigned_users: assignedUsers,
+            date,
+            hours_spent: hoursSpent,
+            customer_id: customerId || null,
+            technician_id: technicianId || null,
             images: [],
           },
         ])
@@ -196,10 +198,10 @@ const Projects: React.FC = () => {
           title,
           description,
           status,
-          start_date: startDate,
-          end_date: endDate,
-          customer_id: customerId,
-          assigned_users: assignedUsers,
+          date,
+          hours_spent: hoursSpent,
+          customer_id: customerId || null,
+          technician_id: technicianId || null,
           images: updatedImages,
         })
         .eq('id', selectedProject.id);
@@ -214,10 +216,10 @@ const Projects: React.FC = () => {
                 title,
                 description,
                 status,
-                start_date: startDate,
-                end_date: endDate,
-                customer_id: customerId,
-                assigned_users: assignedUsers,
+                date,
+                hours_spent: hoursSpent,
+                customer_id: customerId || null,
+                technician_id: technicianId || null,
                 images: updatedImages,
               }
             : project
@@ -248,10 +250,8 @@ const Projects: React.FC = () => {
     if (!selectedProject) return;
   
     try {
-      // Filter out the image URL to be deleted
       const updatedImages = selectedProject.images ? selectedProject.images.filter(url => url !== imageUrl) : [];
   
-      // Update the project in the database with the new image URLs
       const { error } = await supabase
         .from('projects')
         .update({ images: updatedImages })
@@ -261,7 +261,6 @@ const Projects: React.FC = () => {
         throw error;
       }
   
-      // Update the local state to reflect the changes
       setProjects(prevProjects =>
         prevProjects.map(project =>
           project.id === selectedProject.id
@@ -270,7 +269,6 @@ const Projects: React.FC = () => {
         )
       );
   
-      // Update the existingImages state to reflect the changes in the UI
       setExistingImages(updatedImages);
   
     } catch (error) {
@@ -300,7 +298,7 @@ const Projects: React.FC = () => {
               {isAdmin ? 'Projecten beheren' : 'Mijn projecten'}
             </h2>
             {isAdmin && (
-              <Dialog>
+              <Dialog open={open} onOpenChange={setOpen}>
                 <DialogTrigger asChild>
                   <Button onClick={handleOpen} className="bg-green-600 text-white hover:bg-green-700">
                     <Plus className="h-4 w-4 mr-2" />
@@ -338,39 +336,38 @@ const Projects: React.FC = () => {
                       <label htmlFor="status" className="text-right font-medium">
                         Status
                       </label>
-                      <Select value={status} onValueChange={setStatus}>
+                      <Select value={status} onValueChange={(value) => setStatus(value)}>
                         <SelectTrigger className="col-span-3">
                           <SelectValue placeholder="Selecteer een status" />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="nieuw">Nieuw</SelectItem>
-                          <SelectItem value="bezig">Bezig</SelectItem>
-                          <SelectItem value="afgerond">Afgerond</SelectItem>
-                          <SelectItem value="geannuleerd">Geannuleerd</SelectItem>
+                          <SelectItem value="in-progress">Bezig</SelectItem>
+                          <SelectItem value="completed">Afgerond</SelectItem>
+                          <SelectItem value="needs-review">Controle nodig</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
                     <div className="grid grid-cols-4 items-center gap-4">
-                      <label htmlFor="startDate" className="text-right font-medium">
-                        Startdatum
+                      <label htmlFor="date" className="text-right font-medium">
+                        Datum
                       </label>
                       <Input
                         type="date"
-                        id="startDate"
-                        value={startDate || ''}
-                        onChange={(e) => setStartDate(e.target.value)}
+                        id="date"
+                        value={date}
+                        onChange={(e) => setDate(e.target.value)}
                         className="col-span-3"
                       />
                     </div>
                     <div className="grid grid-cols-4 items-center gap-4">
-                      <label htmlFor="endDate" className="text-right font-medium">
-                        Einddatum
+                      <label htmlFor="hoursSpent" className="text-right font-medium">
+                        Gewerkte uren
                       </label>
                       <Input
-                        type="date"
-                        id="endDate"
-                        value={endDate || ''}
-                        onChange={(e) => setEndDate(e.target.value)}
+                        type="number"
+                        id="hoursSpent"
+                        value={hoursSpent}
+                        onChange={(e) => setHoursSpent(Number(e.target.value))}
                         className="col-span-3"
                       />
                     </div>
@@ -378,7 +375,7 @@ const Projects: React.FC = () => {
                       <label htmlFor="customerId" className="text-right font-medium">
                         Klant
                       </label>
-                      <Select value={customerId || ''} onValueChange={setCustomerId}>
+                      <Select value={customerId} onValueChange={setCustomerId}>
                         <SelectTrigger className="col-span-3">
                           <SelectValue placeholder="Selecteer een klant" />
                         </SelectTrigger>
@@ -392,21 +389,17 @@ const Projects: React.FC = () => {
                       </Select>
                     </div>
                     <div className="grid grid-cols-4 items-center gap-4">
-                      <label htmlFor="assignedUsers" className="text-right font-medium">
-                        Toegewezen gebruikers
+                      <label htmlFor="technicianId" className="text-right font-medium">
+                        Technicus
                       </label>
-                      <Select
-                        multiple
-                        value={assignedUsers}
-                        onValueChange={(value) => setAssignedUsers(value as string[])}
-                      >
+                      <Select value={technicianId} onValueChange={setTechnicianId}>
                         <SelectTrigger className="col-span-3">
-                          <SelectValue placeholder="Selecteer gebruikers" />
+                          <SelectValue placeholder="Selecteer een technicus" />
                         </SelectTrigger>
                         <SelectContent>
                           {users.map((user) => (
                             <SelectItem key={user.id} value={user.id}>
-                              {user.fullName} ({user.username})
+                              {user.full_name} ({user.username})
                             </SelectItem>
                           ))}
                         </SelectContent>
@@ -484,13 +477,13 @@ const Projects: React.FC = () => {
               <div className="mt-2 space-y-1">
                 <div className="flex items-center space-x-2">
                   <Calendar className="h-4 w-4 text-gray-500" />
-                  <span className="text-xs text-gray-500">Startdatum:</span>
-                  <span className="text-sm font-medium">{project.start_date || 'Niet ingesteld'}</span>
+                  <span className="text-xs text-gray-500">Datum:</span>
+                  <span className="text-sm font-medium">{project.date || 'Niet ingesteld'}</span>
                 </div>
                 <div className="flex items-center space-x-2">
-                  <Calendar className="h-4 w-4 text-gray-500" />
-                  <span className="text-xs text-gray-500">Einddatum:</span>
-                  <span className="text-sm font-medium">{project.end_date || 'Niet ingesteld'}</span>
+                  <Clock className="h-4 w-4 text-gray-500" />
+                  <span className="text-xs text-gray-500">Uren:</span>
+                  <span className="text-sm font-medium">{project.hours_spent} uur</span>
                 </div>
                 <div className="flex items-center space-x-2">
                   <Building className="h-4 w-4 text-gray-500" />
@@ -501,19 +494,10 @@ const Projects: React.FC = () => {
                 </div>
                 <div className="flex items-center space-x-2">
                   <User className="h-4 w-4 text-gray-500" />
-                  <span className="text-xs text-gray-500">Toegewezen gebruikers:</span>
-                  <div className="flex space-x-1">
-                    {(project.assigned_users || []).map(userId => {
-                      const user = users.find(user => user.id === userId);
-                      return (
-                        user ? (
-                          <Badge key={userId} variant="secondary">
-                            {user.fullName}
-                          </Badge>
-                        ) : null
-                      );
-                    })}
-                  </div>
+                  <span className="text-xs text-gray-500">Technicus:</span>
+                  <span className="text-sm font-medium">
+                    {users.find(user => user.id === project.technician_id)?.full_name || 'Niet toegewezen'}
+                  </span>
                 </div>
                 <div className="flex items-center space-x-2">
                   <FileText className="h-4 w-4 text-gray-500" />
