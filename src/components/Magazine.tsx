@@ -1,9 +1,10 @@
+
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Search, Package, ChevronLeft, ChevronRight, MapPin, Building } from 'lucide-react';
+import { Search, Package, ChevronLeft, ChevronRight, MapPin, Building, ChevronDown, ChevronUp } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { PageLayout } from '@/components/ui/page-layout';
@@ -36,6 +37,7 @@ const Magazine: React.FC = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
+  const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set());
   
   const itemsPerPage = 20;
 
@@ -113,12 +115,20 @@ const Magazine: React.FC = () => {
 
   const handleSearch = (value: string) => {
     setSearchTerm(value);
-    // Don't call fetchArticles here - let the debounced effect handle it
   };
 
   const handleCategoryChange = (value: string) => {
     setSelectedCategory(value);
-    // Don't call fetchArticles here - let the debounced effect handle it
+  };
+
+  const toggleExpanded = (id: string) => {
+    const newExpanded = new Set(expandedItems);
+    if (newExpanded.has(id)) {
+      newExpanded.delete(id);
+    } else {
+      newExpanded.add(id);
+    }
+    setExpandedItems(newExpanded);
   };
 
   if (loading && articles.length === 0) {
@@ -173,78 +183,89 @@ const Magazine: React.FC = () => {
         {totalCount} onderdelen gevonden - Pagina {currentPage} van {totalPages}
       </div>
 
-      {/* Articles Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 mb-6">
-        {articles.map((article) => (
-          <Card key={article.id} className="shadow-lg border-2 border-gray-200 hover:shadow-xl transition-shadow">
-            <CardHeader className="pb-2">
-              <div className="flex items-start justify-between">
-                <div className="flex-1">
-                  <CardTitle className="text-sm font-bold text-gray-900 mb-1">
-                    {article.part_number}
-                  </CardTitle>
-                  <h3 className="text-sm font-semibold text-gray-700 mb-2">
-                    {article.part_name}
-                  </h3>
+      {/* Articles List - Compact View */}
+      <div className="space-y-2 mb-6">
+        {articles.map((article) => {
+          const isExpanded = expandedItems.has(article.id);
+          
+          return (
+            <Card key={article.id} className="shadow-sm border border-gray-200 hover:shadow-md transition-shadow">
+              <CardContent className="p-3">
+                {/* Compact Row */}
+                <div 
+                  className="flex items-center justify-between cursor-pointer"
+                  onClick={() => toggleExpanded(article.id)}
+                >
+                  <div className="flex-1 grid grid-cols-2 md:grid-cols-4 gap-2 text-sm">
+                    <div>
+                      <span className="font-semibold text-gray-900">{article.part_name}</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-600">{article.part_number}</span>
+                    </div>
+                    <div className="flex items-center">
+                      <MapPin className="h-3 w-3 mr-1 text-gray-400" />
+                      <span className="text-gray-600">{article.Location || 'Onbekend'}</span>
+                    </div>
+                    <div className="flex items-center">
+                      <Building className="h-3 w-3 mr-1 text-gray-400" />
+                      <span className="text-gray-600">{article.Magazine_name || 'Onbekend'}</span>
+                    </div>
+                  </div>
+                  <div className="ml-4">
+                    {isExpanded ? (
+                      <ChevronUp className="h-4 w-4 text-gray-400" />
+                    ) : (
+                      <ChevronDown className="h-4 w-4 text-gray-400" />
+                    )}
+                  </div>
                 </div>
-                <Package className="h-5 w-5 text-gray-400" />
-              </div>
-            </CardHeader>
-            <CardContent className="pt-2">
-              {article.description && (
-                <p className="text-xs text-gray-600 mb-3 line-clamp-2">
-                  {article.description}
-                </p>
-              )}
-              <div className="space-y-2">
-                <div className="flex justify-between items-center">
-                  <span className="text-xs text-gray-500">Voorraad:</span>
-                  <span className="text-sm font-semibold text-gray-900">
-                    {article.stock_quantity} stuks
-                  </span>
-                </div>
-                {article.price && (
-                  <div className="flex justify-between items-center">
-                    <span className="text-xs text-gray-500">Prijs:</span>
-                    <span className="text-sm font-semibold text-green-600">
-                      €{article.price.toFixed(2)}
-                    </span>
+
+                {/* Expanded Details */}
+                {isExpanded && (
+                  <div className="mt-4 pt-4 border-t border-gray-200">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {article.description && (
+                        <div>
+                          <h4 className="text-sm font-medium text-gray-700 mb-1">Beschrijving</h4>
+                          <p className="text-sm text-gray-600">{article.description}</p>
+                        </div>
+                      )}
+                      <div className="space-y-2">
+                        <div className="flex justify-between items-center">
+                          <span className="text-sm text-gray-500">Voorraad:</span>
+                          <span className="text-sm font-semibold text-gray-900">
+                            {article.stock_quantity} stuks
+                          </span>
+                        </div>
+                        {article.price && (
+                          <div className="flex justify-between items-center">
+                            <span className="text-sm text-gray-500">Prijs:</span>
+                            <span className="text-sm font-semibold text-green-600">
+                              €{article.price.toFixed(2)}
+                            </span>
+                          </div>
+                        )}
+                        {article.category && (
+                          <div className="flex justify-between items-center">
+                            <span className="text-sm text-gray-500">Categorie:</span>
+                            <span className="text-sm text-gray-700">{article.category}</span>
+                          </div>
+                        )}
+                        {article.supplier && (
+                          <div className="flex justify-between items-center">
+                            <span className="text-sm text-gray-500">Leverancier:</span>
+                            <span className="text-sm text-gray-700">{article.supplier}</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
                   </div>
                 )}
-                {article.Location && (
-                  <div className="flex justify-between items-center">
-                    <span className="text-xs text-gray-500 flex items-center">
-                      <MapPin className="h-3 w-3 mr-1" />
-                      Locatie:
-                    </span>
-                    <span className="text-xs text-gray-700">{article.Location}</span>
-                  </div>
-                )}
-                {article.Magazine_name && (
-                  <div className="flex justify-between items-center">
-                    <span className="text-xs text-gray-500 flex items-center">
-                      <Building className="h-3 w-3 mr-1" />
-                      Magazijn:
-                    </span>
-                    <span className="text-xs text-gray-700">{article.Magazine_name}</span>
-                  </div>
-                )}
-                {article.category && (
-                  <div className="flex justify-between items-center">
-                    <span className="text-xs text-gray-500">Categorie:</span>
-                    <span className="text-xs text-gray-700">{article.category}</span>
-                  </div>
-                )}
-                {article.supplier && (
-                  <div className="flex justify-between items-center">
-                    <span className="text-xs text-gray-500">Leverancier:</span>
-                    <span className="text-xs text-gray-700">{article.supplier}</span>
-                  </div>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-        ))}
+              </CardContent>
+            </Card>
+          );
+        })}
       </div>
 
       {/* No Results */}

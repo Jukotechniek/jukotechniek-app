@@ -1,50 +1,40 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
-import { Project } from '@/types/projects';
 import { supabase } from '@/integrations/supabase/client';
+import { Trash2, Edit2, Save, X, Plus, Eye, Upload, Calendar, Clock, User, Building2 } from 'lucide-react';
 import { uploadProjectImages } from '@/utils/uploadProjectImages';
-import {
-  Camera,
-  X,
-  Plus,
-  Trash2,
-  Edit2,
-  Save,
-  CheckCircle,
-  AlertCircle,
-  Clock,
-  ChevronDown
-} from 'lucide-react';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 
-interface Customer { id: string; name: string; }
-interface Technician { id: string; name: string; }
+interface Project {
+  id: string;
+  title: string;
+  description: string | null;
+  date: string;
+  hours_spent: number;
+  status: string;
+  technician_id: string | null;
+  customer_id: string | null;
+  images: string[] | null;
+  created_at: string;
+  updated_at: string;
+  technician?: { full_name: string };
+  customers?: { name: string };
+}
 
-// Helper: haal een lijst met signed URLs op voor een lijst met storage paths
-const getSignedUrls = async (paths: string[]) => {
-  if (!paths || paths.length === 0) return [];
-  const storagePaths = paths.map(url =>
-    url.includes('/project-images/')
-      ? url.split('/project-images/')[1]
-      : url
-  );
-  const { data, error } = await supabase.storage.from('project-images').createSignedUrls(storagePaths, 3600);
-  if (error) {
-    console.error('Kan signed urls niet ophalen:', error);
-    return [];
-  }
-  return data.map(item => item.signedUrl);
-};
+interface Customer {
+  id: string;
+  name: string;
+}
 
-// Helper voor safe mod
-function mod(n: number, m: number) {
-  return ((n % m) + m) % m;
+interface Technician {
+  id: string;
+  full_name: string;
 }
 
 const Projects = () => {
@@ -52,211 +42,67 @@ const Projects = () => {
   const { toast } = useToast();
   const [projects, setProjects] = useState<Project[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
-  const [techniciansList, setTechniciansList] = useState<Technician[]>([]);
+  const [technicians, setTechnicians] = useState<Technician[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingProject, setEditingProject] = useState<Project | null>(null);
   const [selectedImages, setSelectedImages] = useState<File[]>([]);
+
+  const isAdmin = user?.role === 'admin';
+
   const [newProject, setNewProject] = useState({
     title: '',
     description: '',
-    hoursSpent: '',
-    customerId: '',
     date: new Date().toISOString().split('T')[0],
-    status: 'in-progress' as Project['status'],
-    technicianId: ''
+    hours_spent: '',
+    status: 'in-progress',
+    technician_id: user?.role === 'technician' ? user.id : '',
+    customer_id: ''
   });
-  const [selectedTech, setSelectedTech] = useState<string>('all');
-  const [selectedMonth, setSelectedMonth] = useState<string>('');
-  const [collapsed, setCollapsed] = useState<Record<Project['status'], boolean>>({
-    'in-progress': false,
-    'needs-review': false,
-    'completed': false
-  });
-
-  // Modal state voor details
-  const [selectedProject, setSelectedProject] = useState<Project | null>(null);
-  const [detailsOpen, setDetailsOpen] = useState(false);
-  const [signedImageUrls, setSignedImageUrls] = useState<string[]>([]);
-  const [signedPreviewUrls, setSignedPreviewUrls] = useState<{ [projectId: string]: string[] }>({});
-
-  // Fullscreen galerij state (welke index van signedImageUrls)
-  const [fullscreenImageIndex, setFullscreenImageIndex] = useState<number | null>(null);
-
-  // Ref voor swipe
-  const swipeRef = useRef<HTMLDivElement | null>(null);
-  const swipeStart = useRef<number | null>(null);
-
-  // Fullscreen afsluiten & pijltjes navigatie (escape, left, right)
-  useEffect(() => {
-    if (fullscreenImageIndex === null) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setFullscreenImageIndex(null);
-      if (e.key === 'ArrowLeft')
-        setFullscreenImageIndex(i =>
-          i === null
-            ? 0
-            : mod(i - 1, signedImageUrls.length)
-        );
-      if (e.key === 'ArrowRight')
-        setFullscreenImageIndex(i =>
-          i === null
-            ? 0
-            : mod(i + 1, signedImageUrls.length)
-        );
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [fullscreenImageIndex, signedImageUrls.length]);
-
-  // Swipe (touch én mouse)
-  useEffect(() => {
-    if (fullscreenImageIndex === null) return;
-    const el = swipeRef.current;
-    if (!el) return;
-
-    let x0: number | null = null;
-    let lastX: number | null = null;
-
-    const onTouchStart = (e: TouchEvent) => {
-      x0 = e.touches[0].clientX;
-      lastX = x0;
-    };
-    const onTouchMove = (e: TouchEvent) => {
-      lastX = e.touches[0].clientX;
-    };
-    const onTouchEnd = () => {
-      if (x0 !== null && lastX !== null) {
-        const dx = lastX - x0;
-        if (Math.abs(dx) > 60) {
-          if (dx > 0) { // swipe right
-            setFullscreenImageIndex(i =>
-              i === null ? 0 : mod(i - 1, signedImageUrls.length)
-            );
-          } else { // swipe left
-            setFullscreenImageIndex(i =>
-              i === null ? 0 : mod(i + 1, signedImageUrls.length)
-            );
-          }
-        }
-      }
-      x0 = null;
-      lastX = null;
-    };
-    el.addEventListener('touchstart', onTouchStart);
-    el.addEventListener('touchmove', onTouchMove);
-    el.addEventListener('touchend', onTouchEnd);
-
-    // Mouse events voor desktop swipe (optioneel)
-    let mouseDown = false;
-    let mx0 = null as number | null;
-    let mxLast = null as number | null;
-    const onMouseDown = (e: MouseEvent) => {
-      mouseDown = true;
-      mx0 = e.clientX;
-      mxLast = mx0;
-    };
-    const onMouseMove = (e: MouseEvent) => {
-      if (!mouseDown) return;
-      mxLast = e.clientX;
-    };
-    const onMouseUp = () => {
-      if (mouseDown && mx0 !== null && mxLast !== null) {
-        const dx = mxLast - mx0;
-        if (Math.abs(dx) > 60) {
-          if (dx > 0) { // swipe right
-            setFullscreenImageIndex(i =>
-              i === null ? 0 : mod(i - 1, signedImageUrls.length)
-            );
-          } else { // swipe left
-            setFullscreenImageIndex(i =>
-              i === null ? 0 : mod(i + 1, signedImageUrls.length)
-            );
-          }
-        }
-      }
-      mouseDown = false;
-      mx0 = null;
-      mxLast = null;
-    };
-    el.addEventListener('mousedown', onMouseDown);
-    el.addEventListener('mousemove', onMouseMove);
-    el.addEventListener('mouseup', onMouseUp);
-    el.addEventListener('mouseleave', onMouseUp);
-
-    return () => {
-      el.removeEventListener('touchstart', onTouchStart);
-      el.removeEventListener('touchmove', onTouchMove);
-      el.removeEventListener('touchend', onTouchEnd);
-      el.removeEventListener('mousedown', onMouseDown);
-      el.removeEventListener('mousemove', onMouseMove);
-      el.removeEventListener('mouseup', onMouseUp);
-      el.removeEventListener('mouseleave', onMouseUp);
-    };
-  }, [fullscreenImageIndex, signedImageUrls.length]);
-
-  // --- DATA ophalen en prepareren ---
-  useEffect(() => {
-    async function fetchAllSignedPreviews() {
-      const allUrls: { [projectId: string]: string[] } = {};
-      for (let project of projects) {
-        if (project.images && project.images.length > 0) {
-          const urls = await getSignedUrls(project.images);
-          allUrls[project.id] = urls;
-        }
-      }
-      setSignedPreviewUrls(allUrls);
-    }
-    if (projects.length > 0) fetchAllSignedPreviews();
-  }, [projects]);
-
-  useEffect(() => {
-    if (detailsOpen && selectedProject && selectedProject.images && selectedProject.images.length > 0) {
-      getSignedUrls(selectedProject.images).then(urls => setSignedImageUrls(urls));
-    } else {
-      setSignedImageUrls([]);
-    }
-  }, [selectedProject, detailsOpen]);
 
   const fetchData = async () => {
     setLoading(true);
     try {
-      const { data: customerData } = await supabase
+      const { data: customerData, error: custError } = await supabase
         .from('customers')
         .select('*')
+        .eq('is_active', true)
         .order('name');
-      const { data: profilesData } = await supabase
+      if (custError) throw custError;
+
+      const { data: technicianData, error: techError } = await supabase
         .from('profiles')
-        .select('id, full_name')
-        .order('full_name', { ascending: true });
-      const { data: projectData } = await supabase
+        .select('*')
+        .eq('role', 'technician')
+        .order('full_name');
+      if (techError) throw techError;
+
+      let query = supabase
         .from('projects')
-        .select('*, customers(name), profiles(full_name)')
-        .order('date', { ascending: false });
+        .select(`
+          *,
+          technician:profiles!projects_technician_id_fkey(full_name),
+          customers(name)
+        `)
+        .order('created_at', { ascending: false });
+
+      if (!isAdmin) {
+        query = query.eq('technician_id', user?.id);
+      }
+
+      const { data: projectData, error: projError } = await query;
+      if (projError) throw projError;
+
       setCustomers(customerData || []);
-      setTechniciansList(
-        (profilesData || []).map(t => ({
-          id: t.id,
-          name: t.full_name
-        }))
-      );
-      const formatted = (projectData || []).map(p => ({
-        id: p.id,
-        technicianId: p.technician_id || '',
-        technicianName: p.profiles?.full_name || '',
-        customerId: p.customer_id || '',
-        customerName: p.customers?.name || '',
-        date: p.date,
-        title: p.title,
-        description: p.description || '',
-        images: p.images || [],
-        hoursSpent: p.hours_spent,
-        status: p.status as Project['status'],
-        createdAt: p.created_at || ''
-      }));
-      setProjects(formatted);
-    } catch (err) {
-      console.error('Error fetching projects:', err);
+      setTechnicians(technicianData || []);
+      setProjects(projectData || []);
+    } catch (error) {
+      console.error('Error fetching data:', error);
+      toast({
+        title: 'Fout',
+        description: 'Er is een fout opgetreden bij het ophalen van gegevens',
+        variant: 'destructive'
+      });
     } finally {
       setLoading(false);
     }
@@ -266,652 +112,483 @@ const Projects = () => {
     fetchData();
   }, []);
 
-  useEffect(() => {
-    if (
-      customers.length === 1 &&
-      (!newProject.customerId || !customers.some(c => c.id === newProject.customerId)) &&
-      showAddForm
-    ) {
-      setNewProject(prev => ({ ...prev, customerId: customers[0].id }));
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!newProject.title || !newProject.date || !newProject.hours_spent || !newProject.customer_id) {
+      toast({
+        title: 'Fout',
+        description: 'Vul alle verplichte velden in',
+        variant: 'destructive'
+      });
+      return;
     }
-    // eslint-disable-next-line
-  }, [customers, showAddForm]);
 
-  const isAdmin = user?.role === 'admin' || user?.role === 'opdrachtgever';
-
-  const technicians = Array.from(
-    new Map(projects.map(p => [p.technicianId, p.technicianName])).entries()
-  ).filter(([id]) => !!id && !!id.trim())
-    .map(([id, name]) => ({ id, name }));
-
-  const filteredProjects = projects.filter(p => {
-    if (!isAdmin && p.technicianId !== user?.id) return false;
-    if (isAdmin && selectedTech !== 'all' && p.technicianId !== selectedTech) return false;
-    if (selectedMonth) {
-      const [y, m] = selectedMonth.split('-').map(n => parseInt(n, 10));
-      const d = new Date(p.date);
-      if (d.getFullYear() !== y || d.getMonth() + 1 !== m) return false;
+    const hours = parseFloat(newProject.hours_spent);
+    if (hours <= 0) {
+      toast({
+        title: 'Fout',
+        description: 'Uren moeten groter zijn dan 0',
+        variant: 'destructive'
+      });
+      return;
     }
-    return true;
-  });
 
-  const projectsByStatus: Record<Project['status'], Project[]> = {
-    'in-progress': [],
-    'needs-review': [],
-    'completed': []
+    try {
+      let imageUrls: string[] = [];
+      if (selectedImages.length > 0) {
+        imageUrls = await uploadProjectImages(selectedImages);
+      }
+
+      const { data, error } = await supabase
+        .from('projects')
+        .insert([
+          {
+            title: newProject.title,
+            description: newProject.description,
+            date: newProject.date,
+            hours_spent: hours,
+            status: newProject.status,
+            technician_id: newProject.technician_id,
+            customer_id: newProject.customer_id,
+            images: imageUrls.length > 0 ? imageUrls : null
+          }
+        ])
+        .select(`
+          *,
+          technician:profiles!projects_technician_id_fkey(full_name),
+          customers(name)
+        `)
+        .single();
+
+      if (error) throw error;
+
+      if (data) {
+        setProjects(prev => [data, ...prev]);
+        toast({
+          title: 'Succes',
+          description: 'Project succesvol toegevoegd'
+        });
+        setNewProject({
+          title: '',
+          description: '',
+          date: new Date().toISOString().split('T')[0],
+          hours_spent: '',
+          status: 'in-progress',
+          technician_id: user?.role === 'technician' ? user.id : '',
+          customer_id: ''
+        });
+        setSelectedImages([]);
+        setShowAddForm(false);
+      }
+    } catch (error) {
+      console.error('Error adding project:', error);
+      toast({
+        title: 'Fout',
+        description: 'Er is een fout opgetreden bij het toevoegen van het project',
+        variant: 'destructive'
+      });
+    }
   };
-  filteredProjects.forEach(p => {
-    projectsByStatus[p.status].push(p);
-  });
+
+  const handleEdit = (project: Project) => {
+    if (!isAdmin && project.technician_id !== user?.id) {
+      toast({
+        title: 'Fout',
+        description: 'Je kunt alleen je eigen projecten bewerken',
+        variant: 'destructive'
+      });
+      return;
+    }
+    setEditingProject(project);
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editingProject) return;
+
+    try {
+      const { error } = await supabase
+        .from('projects')
+        .update({
+          title: editingProject.title,
+          description: editingProject.description,
+          date: editingProject.date,
+          hours_spent: editingProject.hours_spent,
+          status: editingProject.status
+        })
+        .eq('id', editingProject.id);
+
+      if (error) throw error;
+
+      setProjects(prev =>
+        prev.map(p => p.id === editingProject.id ? editingProject : p)
+      );
+      setEditingProject(null);
+      toast({
+        title: 'Succes',
+        description: 'Project succesvol bijgewerkt'
+      });
+    } catch (error) {
+      console.error('Error updating project:', error);
+      toast({
+        title: 'Fout',
+        description: 'Er is een fout opgetreden bij het bijwerken van het project',
+        variant: 'destructive'
+      });
+    }
+  };
+
+  const handleDelete = async (projectId: string, project: Project) => {
+    if (!isAdmin && project.technician_id !== user?.id) {
+      toast({
+        title: 'Fout',
+        description: 'Je kunt alleen je eigen projecten verwijderen',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    try {
+      const { error } = await supabase.from('projects').delete().eq('id', projectId);
+      if (error) throw error;
+
+      setProjects(prev => prev.filter(p => p.id !== projectId));
+      toast({
+        title: 'Succes',
+        description: 'Project succesvol verwijderd'
+      });
+    } catch (error) {
+      console.error('Error deleting project:', error);
+      toast({
+        title: 'Fout',
+        description: 'Er is een fout opgetreden bij het verwijderen van het project',
+        variant: 'destructive'
+      });
+    }
+  };
 
   if (loading) {
     return (
       <div className="p-6 bg-gray-50 min-h-screen">
-        <div className="flex items-center justify-center h-64">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-red-600"></div>
+        <div className="max-w-7xl mx-auto">
+          <div className="flex items-center justify-center h-64">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-red-600" />
+          </div>
         </div>
       </div>
     );
   }
 
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (files) {
-      const newImages = Array.from(files).slice(0, 5 - selectedImages.length);
-      setSelectedImages(prev => [...prev, ...newImages]);
-    }
-  };
-
-  const removeImage = (index: number) => {
-    setSelectedImages(prev => prev.filter((_, i) => i !== index));
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (
-      !newProject.title ||
-      !newProject.date ||
-      !newProject.customerId ||
-      (isAdmin && !newProject.technicianId) ||
-      (newProject.status === 'completed' && !newProject.hoursSpent)
-    ) {
-      toast({ title: "Fout", description: "Vul alle verplichte velden in", variant: "destructive" });
-      return;
-    }
-    if (newProject.status === 'completed') {
-      const hours = parseFloat(newProject.hoursSpent);
-      if (isNaN(hours) || hours <= 0 || hours > 24) {
-        toast({ title: "Fout", description: "Uren moeten tussen 0 en 24 liggen", variant: "destructive" });
-        return;
-      }
-    }
-
-    const technicianIdToSave = isAdmin
-      ? newProject.technicianId
-      : user?.id;
-
-    let projectId: string | null = null;
-
-    if (editingProject) {
-      const { error } = await supabase
-        .from('projects')
-        .update({
-          title: newProject.title,
-          description: newProject.description,
-          date: newProject.date,
-          hours_spent: newProject.hoursSpent !== '' ? parseFloat(newProject.hoursSpent) : 0,
-          status: newProject.status,
-          customer_id: newProject.customerId,
-          technician_id: technicianIdToSave
-        })
-        .eq('id', editingProject.id);
-      if (error) {
-        toast({ title: 'Fout', description: error.message, variant: 'destructive' });
-        return;
-      }
-      projectId = editingProject.id;
-      toast({ title: 'Succes', description: 'Project succesvol bijgewerkt' });
-    } else {
-      const { data, error } = await supabase.from('projects').insert([{
-        technician_id: technicianIdToSave,
-        customer_id: newProject.customerId,
-        title: newProject.title,
-        description: newProject.description,
-        date: newProject.date,
-        hours_spent: newProject.hoursSpent !== '' ? parseFloat(newProject.hoursSpent) : 0,
-        status: newProject.status,
-        images: []
-      }]).select().single();
-      if (error) {
-        toast({ title: 'Fout', description: error.message, variant: 'destructive' });
-        return;
-      }
-      projectId = data?.id || null;
-      toast({ title: 'Succes', description: 'Project succesvol toegevoegd' });
-    }
-
-    if (projectId && selectedImages.length > 0) {
-      const urls = await uploadProjectImages(selectedImages, projectId);
-      if (urls.length > 0) {
-        const { error } = await supabase
-          .from('projects')
-          .update({ images: urls })
-          .eq('id', projectId);
-        if (error) {
-          toast({ title: 'Fout', description: error.message, variant: 'destructive' });
-        }
-      }
-    }
-
-    fetchData();
-    setNewProject({
-      title: '',
-      description: '',
-      hoursSpent: '',
-      customerId: '',
-      date: new Date().toISOString().split('T')[0],
-      status: 'in-progress',
-      technicianId: ''
-    });
-    setSelectedImages([]);
-    setShowAddForm(false);
-    setEditingProject(null);
-  };
-
-  const handleEdit = (project: Project) => {
-    if (!isAdmin && project.technicianId !== user?.id) {
-      toast({ title: "Fout", description: "Je kunt alleen je eigen projecten bewerken", variant: "destructive" });
-      return;
-    }
-    setEditingProject(project);
-    setNewProject({
-      title: project.title,
-      description: project.description,
-      hoursSpent: project.hoursSpent ? project.hoursSpent.toString() : '',
-      customerId: project.customerId,
-      date: project.date,
-      status: project.status,
-      technicianId: project.technicianId
-    });
-    setShowAddForm(true);
-  };
-
-  const handleDelete = async (projectId: string, project: Project) => {
-    if (!isAdmin && project.technicianId !== user?.id) {
-      toast({ title: "Fout", description: "Je kunt alleen je eigen projecten verwijderen", variant: "destructive" });
-      return;
-    }
-    if (!window.confirm('Weet je zeker dat je dit project wilt verwijderen?')) return;
-    const { error } = await supabase.from('projects').delete().eq('id', projectId);
-    if (error) {
-      toast({ title: 'Fout', description: error.message, variant: 'destructive' });
-      return;
-    }
-    toast({ title: 'Succes', description: 'Project succesvol verwijderd' });
-    fetchData();
-  };
-
-  const handleStatusChange = async (project: Project, newStatus: Project['status']) => {
-    if (newStatus === 'completed' && (!project.hoursSpent || project.hoursSpent <= 0)) {
-      toast({ title: 'Fout', description: 'Voer eerst het aantal bestede uren in via "Bewerken"', variant: 'destructive' });
-      return;
-    }
-    const { error } = await supabase
-      .from('projects')
-      .update({ status: newStatus })
-      .eq('id', project.id);
-    if (error) {
-      toast({ title: 'Fout', description: error.message, variant: 'destructive' });
-      return;
-    }
-    toast({ title: 'Succes', description: `Project status bijgewerkt naar: ${getStatusText(newStatus)}` });
-    fetchData();
-  };
-
-  const getStatusIcon = (status: Project['status']) => {
-    switch (status) {
-      case 'completed': return <CheckCircle className="h-4 w-4 text-green-600" />;
-      case 'needs-review': return <AlertCircle className="h-4 w-4 text-orange-600" />;
-      default: return <Clock className="h-4 w-4 text-blue-600" />;
-    }
-  };
-  const getStatusText = (status: Project['status']) => {
-    switch (status) {
-      case 'completed': return 'Voltooid';
-      case 'needs-review': return 'Controle Nodig';
-      default: return 'In Behandeling';
-    }
-  };
-
-  const canStatusChange = (project: Project) =>
-    isAdmin || project.technicianId === user?.id;
-
-  // --- Details modal open/close ---
-  const openDetails = (project: Project) => {
-    setSelectedProject(project);
-    setDetailsOpen(true);
-  };
-
-  // PROJECTCARD inclusief tooltip op hover én statusknoppen
-  const renderProjectCard = (project: Project) => (
-    <Tooltip key={project.id}>
-      <TooltipTrigger asChild>
-        <Card
-          className="bg-white hover:shadow-lg transition-shadow duration-200 cursor-pointer"
-          onClick={() => openDetails(project)}
-        >
-          <CardHeader>
-            <div className="flex justify-between items-start">
-              <div>
-                <CardTitle className="text-lg font-semibold text-gray-900">
-                  {project.title}
-                </CardTitle>
-                {isAdmin && <p className="text-sm text-gray-600">{project.technicianName}</p>}
-                <p className="text-sm text-gray-600">{project.customerName}</p>
-                <div className="flex items-center mt-2">
-                  {getStatusIcon(project.status)}
-                  <span className="ml-1 text-sm font-medium">{getStatusText(project.status)}</span>
-                </div>
-              </div>
-              <div className="text-right">
-                <p className="text-sm text-gray-600">
-                  {new Date(project.date).toLocaleDateString('nl-NL')}
-                </p>
-                <p className="text-lg font-semibold text-red-600">{project.hoursSpent ? project.hoursSpent + 'u' : ''}</p>
-                <div className="flex space-x-1 mt-2">
-                  {(isAdmin || project.technicianId === user?.id) && (
-                    <>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={e => { e.stopPropagation(); handleEdit(project); }}
-                        className="h-8 w-8 p-0"
-                      >
-                        <Edit2 className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={e => { e.stopPropagation(); handleDelete(project.id, project); }}
-                        className="h-8 w-8 p-0 border-red-300 text-red-600 hover:bg-red-50"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </>
-                  )}
-                </div>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent>
-            {canStatusChange(project) && (
-              <div className="flex flex-wrap gap-2 mb-2">
-                <Button
-                  size="sm"
-                  onClick={e => { e.stopPropagation(); handleStatusChange(project, 'in-progress'); }}
-                  variant={project.status === 'in-progress' ? 'default' : 'outline'}
-                  className="text-xs"
-                >
-                  <Clock className="h-3 w-3 mr-1" /> In Behandeling
-                </Button>
-                <Button
-                  size="sm"
-                  onClick={e => { e.stopPropagation(); handleStatusChange(project, 'needs-review'); }}
-                  variant={project.status === 'needs-review' ? 'default' : 'outline'}
-                  className="text-xs"
-                >
-                  <AlertCircle className="h-3 w-3 mr-1" /> Controle Nodig
-                </Button>
-                <Button
-                  size="sm"
-                  onClick={e => { e.stopPropagation(); handleStatusChange(project, 'completed'); }}
-                  variant={project.status === 'completed' ? 'default' : 'outline'}
-                  className="text-xs"
-                >
-                  <CheckCircle className="h-3 w-3 mr-1" /> Voltooid
-                </Button>
-              </div>
-            )}
-            {project.images?.length > 0 && signedPreviewUrls[project.id]?.length > 0 && (
-              <div className="mt-2 grid grid-cols-2 gap-2">
-                {signedPreviewUrls[project.id].map((url, idx) => (
-                  <img
-                    key={idx}
-                    src={url}
-                    alt={`Projectafbeelding ${idx + 1}`}
-                    className="h-24 w-full object-cover rounded"
-                  />
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </TooltipTrigger>
-      <TooltipContent side="top" className="max-w-xs text-wrap">
-        <p className="font-semibold mb-1">{project.title}</p>
-        <p className="text-sm text-gray-700">
-          {project.description || 'Geen omschrijving'}
-        </p>
-      </TooltipContent>
-    </Tooltip>
-  );
-
   return (
     <div className="p-6 bg-gray-50 min-h-screen">
-      <div className="mx-auto max-w-7xl">
+      <div className="max-w-7xl mx-auto">
         <div className="mb-8 flex justify-between items-center">
           <div>
-            <h1 className="mb-2 text-3xl font-bold text-gray-900">{isAdmin ? 'Alle Projecten' : 'Mijn Projecten'}</h1>
-            <p className="text-gray-600">{isAdmin ? 'Bekijk alle monteur projecten' : 'Volg je dagelijkse projecten en werk'}</p>
+            <h1 className="text-3xl font-bold text-red-700 mb-2">
+              {isAdmin ? 'Project Beheer' : 'Mijn Projecten'}
+            </h1>
+            <p className="text-gray-600">
+              {isAdmin ? 'Beheer en volg alle projecten' : 'Bekijk en beheer jouw projecten'}
+            </p>
           </div>
           <Button
-            onClick={() => {
-              setShowAddForm(!showAddForm);
-              setEditingProject(null);
-              setNewProject({
-                title: '',
-                description: '',
-                hoursSpent: '',
-                customerId: '',
-                date: new Date().toISOString().split('T')[0],
-                status: 'in-progress',
-                technicianId: ''
-              });
-            }}
-            className="bg-red-600 text-white hover:bg-red-700"
+            onClick={() => setShowAddForm(!showAddForm)}
+            className="bg-red-600 hover:bg-red-700 text-white"
           >
-            <Plus className="mr-2 h-4 w-4" />
+            <Plus className="h-4 w-4 mr-2" />
             {showAddForm ? 'Annuleren' : 'Project Toevoegen'}
           </Button>
         </div>
 
-        {isAdmin && (
-          <div className="mb-6 flex items-center space-x-4">
-            <select
-              value={selectedTech}
-              onChange={e => setSelectedTech(e.target.value)}
-              className="rounded border p-2"
-            >
-              <option value="all">Alle monteurs</option>
-              {technicians.map(t => (
-                <option key={t.id} value={t.id}>{t.name}</option>
-              ))}
-            </select>
-            <Input
-              type="month"
-              value={selectedMonth}
-              onChange={e => setSelectedMonth(e.target.value)}
-              className="rounded border p-2"
-            />
-            <Button onClick={() => setSelectedMonth('')} className="bg-red-600 text-white">Alles</Button>
-          </div>
-        )}
-
         {showAddForm && (
-          <Card className="mb-6 bg-white">
+          <Card className="bg-white mb-6">
             <CardHeader>
-              <CardTitle className="text-lg font-semibold text-gray-900">
-                {editingProject ? 'Project Bewerken' : 'Nieuw Project Toevoegen'}
-              </CardTitle>
+              <CardTitle className="text-lg font-semibold text-gray-900">Nieuw Project</CardTitle>
             </CardHeader>
             <CardContent>
               <form onSubmit={handleSubmit} className="space-y-4">
-                <div>
-                  <Label htmlFor="title">Project Titel *</Label>
-                  <Input
-                    id="title"
-                    required
-                    value={newProject.title}
-                    onChange={e => setNewProject({ ...newProject, title: e.target.value })}
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="customer">Klant *</Label>
-                  <select
-                    id="customer"
-                    required
-                    value={newProject.customerId}
-                    onChange={e => setNewProject({ ...newProject, customerId: e.target.value })}
-                    className="w-full rounded border p-2"
-                  >
-                    <option value="">Selecteer Klant</option>
-                    {customers.map(c => (
-                      <option key={c.id} value={c.id}>{c.name}</option>
-                    ))}
-                  </select>
-                </div>
-                {isAdmin && (
-                  <div>
-                    <Label htmlFor="technician">Monteur *</Label>
-                    <select
-                      id="technician"
-                      required
-                      value={newProject.technicianId}
-                      onChange={e => setNewProject({ ...newProject, technicianId: e.target.value })}
-                      className="w-full rounded border p-2"
-                    >
-                      <option value="">Selecteer Monteur</option>
-                      {techniciansList.map(t => (
-                        <option key={t.id} value={t.id}>{t.name}</option>
-                      ))}
-                    </select>
-                  </div>
-                )}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
+                  <div className="space-y-2">
+                    <Label htmlFor="title">Titel *</Label>
+                    <Input
+                      id="title"
+                      value={newProject.title}
+                      onChange={(e) => setNewProject({ ...newProject, title: e.target.value })}
+                      required
+                      className="focus:ring-red-500 focus:border-red-500"
+                    />
+                  </div>
+                  {isAdmin && (
+                    <div className="space-y-2">
+                      <Label htmlFor="technician">Monteur *</Label>
+                      <Select
+                        value={newProject.technician_id}
+                        onValueChange={(value) => setNewProject({ ...newProject, technician_id: value })}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Selecteer monteur" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {technicians.map(tech => (
+                            <SelectItem key={tech.id} value={tech.id}>
+                              {tech.full_name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+                  <div className="space-y-2">
+                    <Label htmlFor="customer">Klant *</Label>
+                    <Select
+                      value={newProject.customer_id}
+                      onValueChange={(value) => setNewProject({ ...newProject, customer_id: value })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecteer klant" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {customers.map(customer => (
+                          <SelectItem key={customer.id} value={customer.id}>
+                            {customer.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
                     <Label htmlFor="date">Datum *</Label>
                     <Input
                       id="date"
                       type="date"
-                      required
                       value={newProject.date}
-                      onChange={e => setNewProject({ ...newProject, date: e.target.value })}
+                      onChange={(e) => setNewProject({ ...newProject, date: e.target.value })}
+                      required
+                      className="focus:ring-red-500 focus:border-red-500"
                     />
                   </div>
-                  <div>
-                    <Label htmlFor="hours">
-                      Bestede Uren {newProject.status === 'completed' && '*'}
-                      {newProject.status !== 'completed' && ' (optioneel)'}
-                    </Label>
+                  <div className="space-y-2">
+                    <Label htmlFor="hours">Bestede Uren *</Label>
                     <Input
                       id="hours"
                       type="number"
                       step="0.5"
                       min="0.5"
-                      max="24"
-                      required={newProject.status === 'completed'}
-                      value={newProject.hoursSpent}
-                      onChange={e => setNewProject({ ...newProject, hoursSpent: e.target.value })}
+                      value={newProject.hours_spent}
+                      onChange={(e) => setNewProject({ ...newProject, hours_spent: e.target.value })}
+                      required
+                      className="focus:ring-red-500 focus:border-red-500"
                     />
                   </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="status">Status</Label>
+                    <Select
+                      value={newProject.status}
+                      onValueChange={(value) => setNewProject({ ...newProject, status: value })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="in-progress">In Uitvoering</SelectItem>
+                        <SelectItem value="completed">Afgerond</SelectItem>
+                        <SelectItem value="on-hold">On Hold</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
-                <div>
-                  <Label htmlFor="status">Status</Label>
-                  <select
-                    id="status"
-                    value={newProject.status}
-                    onChange={e => setNewProject({ ...newProject, status: e.target.value as Project['status'] })}
-                    className="w-full rounded border p-2"
-                  >
-                    <option value="in-progress">In Behandeling</option>
-                    <option value="needs-review">Controle Nodig</option>
-                    <option value="completed">Voltooid</option>
-                  </select>
-                </div>
-                <div>
-                  <Label htmlFor="description">Omschrijving</Label>
+                <div className="space-y-2">
+                  <Label htmlFor="description">Beschrijving</Label>
                   <Textarea
                     id="description"
-                    rows={3}
                     value={newProject.description}
-                    onChange={e => setNewProject({ ...newProject, description: e.target.value })}
+                    onChange={(e) => setNewProject({ ...newProject, description: e.target.value })}
+                    placeholder="Beschrijf het project..."
+                    className="focus:ring-red-500 focus:border-red-500"
                   />
                 </div>
-                <div>
-                  <Label>Project Afbeeldingen (max 5)</Label>
-                  <div className="rounded border-2 border-dashed p-4 text-center">
-                    <Camera className="mx-auto mb-2 h-12 w-12 text-gray-400" />
-                    <input
-                      id="image-upload"
-                      type="file"
-                      multiple
-                      accept="image/*"
-                      disabled={selectedImages.length >= 5}
-                      onChange={handleImageUpload}
-                      className="hidden"
-                    />
-                    <label htmlFor="image-upload" className="cursor-pointer text-red-600 hover:text-red-700">
-                      Klik om afbeeldingen te uploaden
-                    </label>
-                    {selectedImages.length > 0 && (
-                      <div className="mt-4 grid grid-cols-2 gap-4">
-                        {selectedImages.map((img, i) => (
-                          <div key={i} className="relative">
-                            <img
-                              src={URL.createObjectURL(img)}
-                              alt={`Voorbeeld ${i + 1}`}
-                              className="h-24 w-full rounded object-cover"
-                            />
-                            <button
-                              onClick={() => removeImage(i)}
-                              className="absolute -top-2 -right-2 rounded-full bg-red-600 p-1 text-white"
-                            >
-                              <X size={16} />
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
+                <div className="space-y-2">
+                  <Label htmlFor="images">Afbeeldingen</Label>
+                  <Input
+                    id="images"
+                    type="file"
+                    multiple
+                    accept="image/*"
+                    onChange={(e) => setSelectedImages(Array.from(e.target.files || []))}
+                    className="focus:ring-red-500 focus:border-red-500"
+                  />
+                  {selectedImages.length > 0 && (
+                    <p className="text-sm text-gray-600">
+                      {selectedImages.length} bestand(en) geselecteerd
+                    </p>
+                  )}
                 </div>
                 <Button type="submit" className="bg-red-600 hover:bg-red-700 text-white">
-                  <Save className="mr-2 h-4 w-4" />
-                  {editingProject ? 'Opslaan' : 'Toevoegen'}
+                  Project Toevoegen
                 </Button>
               </form>
             </CardContent>
           </Card>
         )}
 
-        <div className="space-y-10">
-          {(['in-progress', 'needs-review', 'completed'] as Project['status'][]).map(status => (
-            <div key={status}>
-              <h2
-                onClick={() => setCollapsed(prev => ({ ...prev, [status]: !prev[status] }))}
-                className="mb-4 flex cursor-pointer items-center select-none text-xl font-semibold text-gray-900"
-              >
-                {getStatusText(status)} ({projectsByStatus[status].length})
-                <ChevronDown
-                  className={`ml-2 h-4 w-4 transition-transform ${collapsed[status] ? '-rotate-90' : ''}`}
-                />
-              </h2>
-              {!collapsed[status] && (
-                <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-                  {projectsByStatus[status].length === 0 ? (
-                    <div className="col-span-2 py-8 text-center text-gray-500">
-                      Geen projecten gevonden
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {projects.map((project) => (
+            <Card key={project.id} className="bg-white hover:shadow-lg transition-shadow">
+              <CardHeader className="pb-3">
+                <div className="flex justify-between items-start">
+                  <div className="flex-1">
+                    {editingProject?.id === project.id ? (
+                      <Input
+                        value={editingProject.title}
+                        onChange={(e) => setEditingProject({ ...editingProject, title: e.target.value })}
+                        className="font-semibold text-lg mb-2"
+                      />
+                    ) : (
+                      <CardTitle className="text-lg font-semibold text-gray-900 mb-2">
+                        {project.title}
+                      </CardTitle>
+                    )}
+                    <div className="flex items-center text-sm text-gray-600 mb-1">
+                      <Building2 className="h-4 w-4 mr-1" />
+                      {project.customers?.name || 'Geen klant'}
                     </div>
-                  ) : (
-                    projectsByStatus[status].map(renderProjectCard)
-                  )}
+                    {isAdmin && (
+                      <div className="flex items-center text-sm text-gray-600 mb-1">
+                        <User className="h-4 w-4 mr-1" />
+                        {project.technician?.full_name || 'Geen monteur'}
+                      </div>
+                    )}
+                    <div className="flex items-center text-sm text-gray-600 mb-1">
+                      <Calendar className="h-4 w-4 mr-1" />
+                      {new Date(project.date).toLocaleDateString('nl-NL')}
+                    </div>
+                    <div className="flex items-center text-sm text-gray-600">
+                      <Clock className="h-4 w-4 mr-1" />
+                      {project.hours_spent} uur
+                    </div>
+                  </div>
+                  <div className="flex space-x-1">
+                    {editingProject?.id === project.id ? (
+                      <>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={handleSaveEdit}
+                          className="h-8 w-8 p-0 border-green-300 text-green-600 hover:bg-green-50"
+                        >
+                          <Save className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setEditingProject(null)}
+                          className="h-8 w-8 p-0"
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </>
+                    ) : (
+                      <>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleEdit(project)}
+                          className="h-8 w-8 p-0"
+                        >
+                          <Edit2 className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleDelete(project.id, project)}
+                          className="h-8 w-8 p-0 border-red-300 text-red-600 hover:bg-red-50"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </>
+                    )}
+                  </div>
                 </div>
-              )}
-            </div>
+              </CardHeader>
+              <CardContent className="pt-0">
+                {editingProject?.id === project.id ? (
+                  <div className="space-y-3">
+                    <Textarea
+                      value={editingProject.description || ''}
+                      onChange={(e) => setEditingProject({ ...editingProject, description: e.target.value })}
+                      placeholder="Beschrijving..."
+                      className="min-h-[60px]"
+                    />
+                    <Input
+                      type="date"
+                      value={editingProject.date}
+                      onChange={(e) => setEditingProject({ ...editingProject, date: e.target.value })}
+                    />
+                    <Input
+                      type="number"
+                      step="0.5"
+                      min="0.5"
+                      value={editingProject.hours_spent}
+                      onChange={(e) => setEditingProject({ ...editingProject, hours_spent: parseFloat(e.target.value) })}
+                    />
+                    <Select
+                      value={editingProject.status}
+                      onValueChange={(value) => setEditingProject({ ...editingProject, status: value })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="in-progress">In Uitvoering</SelectItem>
+                        <SelectItem value="completed">Afgerond</SelectItem>
+                        <SelectItem value="on-hold">On Hold</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                ) : (
+                  <>
+                    {project.description && (
+                      <p className="text-gray-700 text-sm mb-3 line-clamp-3">
+                        {project.description}
+                      </p>
+                    )}
+                    <div className="flex justify-between items-center">
+                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                        project.status === 'completed'
+                          ? 'bg-green-100 text-green-800'
+                          : project.status === 'in-progress'
+                          ? 'bg-blue-100 text-blue-800'
+                          : 'bg-yellow-100 text-yellow-800'
+                      }`}>
+                        {project.status === 'completed' ? 'Afgerond' : 
+                         project.status === 'in-progress' ? 'In Uitvoering' : 'On Hold'}
+                      </span>
+                      {project.images && project.images.length > 0 && (
+                        <div className="flex items-center text-sm text-gray-500">
+                          <Eye className="h-4 w-4 mr-1" />
+                          {project.images.length} foto's
+                        </div>
+                      )}
+                    </div>
+                  </>
+                )}
+              </CardContent>
+            </Card>
           ))}
         </div>
+
+        {projects.length === 0 && (
+          <Card className="bg-white">
+            <CardContent className="p-8 text-center">
+              <div className="text-gray-500 mb-4">
+                <Calendar className="h-12 w-12 mx-auto mb-2" />
+                <h3 className="text-lg font-semibold">Geen projecten gevonden</h3>
+                <p>Er zijn nog geen projecten toegevoegd.</p>
+              </div>
+            </CardContent>
+          </Card>
+        )}
       </div>
-      {/* DETAILS MODAL */}
-      {selectedProject && detailsOpen && (
-        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center">
-          <div className="bg-white rounded-lg shadow-xl p-6 max-w-xl w-full relative">
-            <button
-              className="absolute top-2 right-2 text-gray-400 hover:text-red-500 text-2xl"
-              onClick={() => setDetailsOpen(false)}
-            >
-              &times;
-            </button>
-            <h2 className="text-xl font-bold mb-2">{selectedProject.title}</h2>
-            <div className="mb-2 text-gray-600">{selectedProject.customerName}</div>
-            <div className="mb-2">{selectedProject.description || <span className="text-gray-400">Geen omschrijving</span>}</div>
-            <div className="grid grid-cols-2 gap-3 mt-4">
-              {signedImageUrls && signedImageUrls.length > 0 ? (
-                signedImageUrls.map((url, i) => (
-                  <img
-                    key={i}
-                    src={url}
-                    alt={`Projectafbeelding ${i + 1}`}
-                    className="w-full rounded cursor-zoom-in"
-                    style={{ maxHeight: 140, objectFit: 'cover' }}
-                    onClick={() => setFullscreenImageIndex(i)}
-                  />
-                ))
-              ) : (
-                <div className="col-span-2 text-gray-400">Geen afbeeldingen toegevoegd</div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-      {/* FULLSCREEN GALERIJ OVERLAY */}
-      {fullscreenImageIndex !== null && signedImageUrls.length > 0 && (
-        <div
-          ref={swipeRef}
-          className="fixed inset-0 z-[9999] flex items-center justify-center bg-black bg-opacity-95 select-none"
-          onClick={() => setFullscreenImageIndex(null)}
-          style={{ cursor: 'zoom-out', touchAction: 'none' }}
-        >
-          {/* Vorige */}
-          {signedImageUrls.length > 1 && (
-            <button
-              onClick={e => {
-                e.stopPropagation();
-                setFullscreenImageIndex(i =>
-                  i === null ? 0 : mod(i - 1, signedImageUrls.length)
-                );
-              }}
-              className="absolute left-2 top-1/2 -translate-y-1/2 bg-black/60 hover:bg-black/90 text-white rounded-full p-3 text-3xl z-10"
-              aria-label="Vorige foto"
-              style={{ userSelect: 'none' }}
-            >
-              &#8592;
-            </button>
-          )}
-          {/* Volgende */}
-          {signedImageUrls.length > 1 && (
-            <button
-              onClick={e => {
-                e.stopPropagation();
-                setFullscreenImageIndex(i =>
-                  i === null ? 0 : mod(i + 1, signedImageUrls.length)
-                );
-              }}
-              className="absolute right-2 top-1/2 -translate-y-1/2 bg-black/60 hover:bg-black/90 text-white rounded-full p-3 text-3xl z-10"
-              aria-label="Volgende foto"
-              style={{ userSelect: 'none' }}
-            >
-              &#8594;
-            </button>
-          )}
-          {/* Sluitknop */}
-          <button
-            onClick={e => { e.stopPropagation(); setFullscreenImageIndex(null); }}
-            className="absolute top-4 right-4 bg-black/70 hover:bg-black/90 text-white rounded-full p-3 text-2xl z-10 shadow-md"
-            aria-label="Sluiten"
-            style={{ lineHeight: 1 }}
-          >
-            &times;
-          </button>
-          {/* Foto */}
-          <img
-            src={signedImageUrls[fullscreenImageIndex]}
-            alt={`Projectafbeelding ${fullscreenImageIndex + 1}`}
-            className="w-screen h-screen object-contain bg-black select-none"
-            style={{ display: 'block', maxWidth: '100vw', maxHeight: '100vh' }}
-            draggable={false}
-            onClick={e => e.stopPropagation()}
-          />
-        </div>
-      )}
     </div>
   );
 };

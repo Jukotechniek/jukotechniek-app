@@ -347,7 +347,7 @@ const WorkHours = () => {
       <div className="max-w-7xl mx-auto">
         <div className="mb-8 flex justify-between items-center">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">
+            <h1 className="text-3xl font-bold text-red-700 mb-2">
               {isAdmin ? 'Werkuren Beheer' : 'Mijn Werkuren'}
             </h1>
             <p className="text-gray-600">
@@ -362,38 +362,34 @@ const WorkHours = () => {
           </Button>
         </div>
 
-        <div className="
-  mb-4
-  flex flex-col gap-y-2
-  sm:flex-row sm:items-center sm:space-x-4 sm:gap-y-0
-">
-  {isAdmin && (
-    <select
-      value={selectedTech}
-      onChange={e => setSelectedTech(e.target.value)}
-      className="p-2 border rounded w-full sm:w-auto"
-    >
-      <option value="all">Alle monteurs</option>
-      {technicians.map(t => (
-        <option key={t.id} value={t.id}>
-          {t.full_name}
-        </option>
-      ))}
-    </select>
-  )}
-  <Input
-    type="month"
-    value={selectedMonth === 'all' ? '' : selectedMonth}
-    onChange={e => setSelectedMonth(e.target.value || 'all')}
-    className="p-2 border rounded w-full sm:w-auto"
-  />
-  <Button
-    onClick={() => setSelectedMonth('all')}
-    className="bg-red-600 text-white w-full sm:w-auto"
-  >
-    Alles
-  </Button>
-</div>
+        <div className="mb-4 flex flex-col gap-y-2 sm:flex-row sm:items-center sm:space-x-4 sm:gap-y-0">
+          {isAdmin && (
+            <select
+              value={selectedTech}
+              onChange={e => setSelectedTech(e.target.value)}
+              className="p-2 border rounded w-full sm:w-auto"
+            >
+              <option value="all">Alle monteurs</option>
+              {technicians.map(t => (
+                <option key={t.id} value={t.id}>
+                  {t.full_name}
+                </option>
+              ))}
+            </select>
+          )}
+          <Input
+            type="month"
+            value={selectedMonth === 'all' ? '' : selectedMonth}
+            onChange={e => setSelectedMonth(e.target.value || 'all')}
+            className="p-2 border rounded w-full sm:w-auto"
+          />
+          <Button
+            onClick={() => setSelectedMonth('all')}
+            className="bg-red-600 text-white w-full sm:w-auto"
+          >
+            Alles
+          </Button>
+        </div>
 
         {showAddForm && (
           <Card className="bg-white mb-6">
