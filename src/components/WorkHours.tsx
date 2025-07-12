@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -11,7 +12,6 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { format, parseISO, startOfWeek, endOfWeek, eachDayOfInterval, isSameDay } from 'date-fns';
 import { nl } from 'date-fns/locale';
-import { PageLayout } from '@/components/ui/page-layout';
 
 interface WorkHourEntry {
   id: string;
@@ -253,55 +253,157 @@ const WorkHours: React.FC = () => {
   });
 
   return (
-    <PageLayout 
-      title={isAdmin ? "Werk Uren" : "Mijn Uren"} 
-      subtitle={isAdmin ? "Beheer alle werkuren van technici." : "Registreer en bekijk je gewerkte uren."}
-    >
-      <Card className="mb-4 shadow-lg border-2 border-gray-200">
-        <CardContent className="p-4">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold">
-              {getWeekInterval(selectedDate)}
-            </h2>
-            <div className="flex items-center space-x-2">
-              <Button variant="outline" size="sm" onClick={() => handleDateChange(new Date(selectedDate.setDate(selectedDate.getDate() - 7)))}>
-                <Calendar className="h-4 w-4 mr-1" />
-                Vorige week
-              </Button>
-              <Button variant="outline" size="sm" onClick={() => handleDateChange(new Date(selectedDate.setDate(selectedDate.getDate() + 7)))}>
-                Volgende week
-                <Calendar className="h-4 w-4 ml-1" />
-              </Button>
-            </div>
-          </div>
+    <div className="p-2 md:p-6 bg-gradient-to-br from-white via-gray-100 to-red-50 min-h-screen">
+      <div className="max-w-7xl mx-auto">
+        <header className="mb-4 md:mb-8">
+          <h1 className="text-2xl md:text-3xl font-bold text-red-700 mb-1 md:mb-2 tracking-tight">
+            {isAdmin ? "Werk Uren" : "Mijn Uren"}
+          </h1>
+          <p className="text-gray-600 text-sm md:text-base">
+            {isAdmin ? "Beheer alle werkuren van technici." : "Registreer en bekijk je gewerkte uren."}
+          </p>
+        </header>
 
-          <div className="grid grid-cols-1 md:grid-cols-7 gap-2">
-            {weekDays.map(day => (
-              <div key={day.toISOString()} className="text-center">
-                <div className="text-sm text-gray-600">{format(day, 'EEE', { locale: nl })}</div>
-                <div
-                  className={`rounded-full h-8 w-8 flex items-center justify-center ${isSameDay(day, selectedDate) ? 'bg-red-600 text-white' : 'hover:bg-gray-100 text-gray-800'
-                    } cursor-pointer`}
-                  onClick={() => handleDateChange(day)}
-                >
-                  {format(day, 'dd')}
-                </div>
+        <Card className="mb-4 shadow-lg border-2 border-gray-200">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold">
+                {getWeekInterval(selectedDate)}
+              </h2>
+              <div className="flex items-center space-x-2">
+                <Button variant="outline" size="sm" onClick={() => handleDateChange(new Date(selectedDate.setDate(selectedDate.getDate() - 7)))}>
+                  <Calendar className="h-4 w-4 mr-1" />
+                  Vorige week
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => handleDateChange(new Date(selectedDate.setDate(selectedDate.getDate() + 7)))}>
+                  Volgende week
+                  <Calendar className="h-4 w-4 ml-1" />
+                </Button>
               </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-7 gap-2">
+              {weekDays.map(day => (
+                <div key={day.toISOString()} className="text-center">
+                  <div className="text-sm text-gray-600">{format(day, 'EEE', { locale: nl })}</div>
+                  <div
+                    className={`rounded-full h-8 w-8 flex items-center justify-center ${isSameDay(day, selectedDate) ? 'bg-red-600 text-white' : 'hover:bg-gray-100 text-gray-800'
+                      } cursor-pointer`}
+                    onClick={() => handleDateChange(day)}
+                  >
+                    {format(day, 'dd')}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+
+        <div className="mb-4 flex justify-end">
+          <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
+            <DialogTrigger asChild>
+              <Button><Plus className="h-4 w-4 mr-2" /> Nieuwe Uren Registratie</Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-lg">
+              <DialogHeader>
+                <DialogTitle>Nieuwe Uren Registratie</DialogTitle>
+              </DialogHeader>
+              <form onSubmit={handleSubmit} className="space-y-4">
+                <div>
+                  <Select onValueChange={setCustomerId} value={customerId}>
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Selecteer een klant" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {customers.map(customer => (
+                        <SelectItem key={customer.id} value={customer.id}>
+                          {customer.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Input
+                    type="date"
+                    value={date}
+                    onChange={(e) => setDate(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <Input
+                    type="number"
+                    placeholder="Aantal gewerkte uren"
+                    value={hoursWorked}
+                    onChange={(e) => setHoursWorked(parseFloat(e.target.value) || '')}
+                  />
+                </div>
+                <div>
+                  <Textarea
+                    placeholder="Beschrijving van de werkzaamheden"
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                  />
+                </div>
+                <div className="flex justify-end">
+                  <Button type="submit">Opslaan</Button>
+                </div>
+              </form>
+            </DialogContent>
+          </Dialog>
+        </div>
+
+        {loading ? (
+          <div className="flex items-center justify-center h-32">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-red-600"></div>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 gap-4">
+            {workHours.map(hour => (
+              <Card key={hour.id} className="shadow-sm border border-gray-200">
+                <CardContent className="p-4">
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <h3 className="text-lg font-semibold">{customers.find(c => c.id === hour.customer_id)?.name || 'Onbekende klant'}</h3>
+                      <p className="text-gray-600">{hour.description}</p>
+                      <div className="flex items-center text-gray-500 mt-2">
+                        <Clock className="h-4 w-4 mr-1" />
+                        <span>{hour.hours_worked} uren</span>
+                        <Calendar className="h-4 w-4 mx-1" />
+                        <span>{format(parseISO(hour.date), 'dd-MM-yyyy')}</span>
+                      </div>
+                    </div>
+                    <div className="flex space-x-2">
+                      {isAdmin && (
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          onClick={() => handleEditClick(hour)}
+                        >
+                          <Edit className="h-4 w-4" />
+                        </Button>
+                      )}
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        onClick={() => handleDelete(hour.id)}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
             ))}
           </div>
-        </CardContent>
-      </Card>
+        )}
 
-      <div className="mb-4 flex justify-end">
-        <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
-          <DialogTrigger asChild>
-            <Button><Plus className="h-4 w-4 mr-2" /> Nieuwe Uren Registratie</Button>
-          </DialogTrigger>
+        <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
           <DialogContent className="max-w-lg">
             <DialogHeader>
-              <DialogTitle>Nieuwe Uren Registratie</DialogTitle>
+              <DialogTitle>Uren Registratie Bewerken</DialogTitle>
             </DialogHeader>
-            <form onSubmit={handleSubmit} className="space-y-4">
+            <form onSubmit={handleUpdate} className="space-y-4">
               <div>
                 <Select onValueChange={setCustomerId} value={customerId}>
                   <SelectTrigger className="w-full">
@@ -328,7 +430,7 @@ const WorkHours: React.FC = () => {
                   type="number"
                   placeholder="Aantal gewerkte uren"
                   value={hoursWorked}
-                  onChange={(e) => setHoursWorked(e.target.value)}
+                  onChange={(e) => setHoursWorked(parseFloat(e.target.value) || '')}
                 />
               </div>
               <div>
@@ -339,107 +441,13 @@ const WorkHours: React.FC = () => {
                 />
               </div>
               <div className="flex justify-end">
-                <Button type="submit">Opslaan</Button>
+                <Button type="submit">Update</Button>
               </div>
             </form>
           </DialogContent>
         </Dialog>
       </div>
-
-      {loading ? (
-        <div className="flex items-center justify-center h-32">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-red-600"></div>
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 gap-4">
-          {workHours.map(hour => (
-            <Card key={hour.id} className="shadow-sm border border-gray-200">
-              <CardContent className="p-4">
-                <div className="flex justify-between items-center">
-                  <div>
-                    <h3 className="text-lg font-semibold">{customers.find(c => c.id === hour.customer_id)?.name || 'Onbekende klant'}</h3>
-                    <p className="text-gray-600">{hour.description}</p>
-                    <div className="flex items-center text-gray-500 mt-2">
-                      <Clock className="h-4 w-4 mr-1" />
-                      <span>{hour.hours_worked} uren</span>
-                      <Calendar className="h-4 w-4 mx-1" />
-                      <span>{format(parseISO(hour.date), 'dd-MM-yyyy')}</span>
-                    </div>
-                  </div>
-                  <div className="flex space-x-2">
-                    {isAdmin && (
-                      <Button
-                        variant="outline"
-                        size="icon"
-                        onClick={() => handleEditClick(hour)}
-                      >
-                        <Edit className="h-4 w-4" />
-                      </Button>
-                    )}
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      onClick={() => handleDelete(hour.id)}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      )}
-
-      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle>Uren Registratie Bewerken</DialogTitle>
-          </DialogHeader>
-          <form onSubmit={handleUpdate} className="space-y-4">
-            <div>
-              <Select onValueChange={setCustomerId} value={customerId}>
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Selecteer een klant" />
-                </SelectTrigger>
-                <SelectContent>
-                  {customers.map(customer => (
-                    <SelectItem key={customer.id} value={customer.id}>
-                      {customer.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Input
-                type="date"
-                value={date}
-                onChange={(e) => setDate(e.target.value)}
-              />
-            </div>
-            <div>
-              <Input
-                type="number"
-                placeholder="Aantal gewerkte uren"
-                value={hoursWorked}
-                onChange={(e) => setHoursWorked(e.target.value)}
-              />
-            </div>
-            <div>
-              <Textarea
-                placeholder="Beschrijving van de werkzaamheden"
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-              />
-            </div>
-            <div className="flex justify-end">
-              <Button type="submit">Update</Button>
-            </div>
-          </form>
-        </DialogContent>
-      </Dialog>
-    </PageLayout>
+    </div>
   );
 };
 

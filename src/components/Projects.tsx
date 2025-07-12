@@ -7,26 +7,11 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
-import { Calendar, Plus, User, Building, Clock, FileText, Image as ImageIcon, Trash2, Edit } from 'lucide-react';
+import { Plus, Calendar, Clock, Building, User, Image as ImageIcon, Edit, Trash2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
-import { uploadProjectImages } from '@/utils/uploadProjectImages';
-import { PageLayout } from '@/components/ui/page-layout';
-
-// Use the actual database schema types
-interface Project {
-  id: string;
-  title: string;
-  description: string | null;
-  status: string | null;
-  date: string;
-  hours_spent: number;
-  created_at: string | null;
-  updated_at: string | null;
-  technician_id: string | null;
-  customer_id: string | null;
-  images: string[] | null;
-}
+import { format, parseISO } from 'date-fns';
+import { Project } from '@/types/projects';
 
 interface Customer {
   id: string;
@@ -47,489 +32,506 @@ const Projects: React.FC = () => {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [loading, setLoading] = useState(true);
-  const [open, setOpen] = useState(false);
-  const [editMode, setEditMode] = useState(false);
+  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
+
+  // Form state
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
-  const [status, setStatus] = useState<string>('in-progress');
-  const [date, setDate] = useState<string>('');
-  const [hoursSpent, setHoursSpent] = useState<number>(0);
-  const [customerId, setCustomerId] = useState<string>('');
-  const [technicianId, setTechnicianId] = useState<string>('');
-  const [newImages, setNewImages] = useState<File[]>([]);
-  const [existingImages, setExistingImages] = useState<string[]>([]);
+  const [customerId, setCustomerId] = useState('');
+  const [date, setDate] = useState(format(new Date(), 'yyyy-MM-dd'));
+  const [hoursSpent, setHoursSpent] = useState<number | ''>('');
+  const [status, setStatus] = useState<'in-progress' | 'completed' | 'needs-review'>('in-progress');
+  const [technicianId, setTechnicianId] = useState(user?.id || '');
 
   useEffect(() => {
-    fetchProjects();
-    fetchCustomers();
-    fetchUsers();
-  }, []);
+    if (user) {
+      setTechnicianId(user.id);
+      fetchData();
+    }
+  }, [user]);
 
-  const fetchProjects = async () => {
+  const fetchData = async () => {
     setLoading(true);
     try {
-      let query = supabase
-        .from('projects')
-        .select('*');
+      const [projectsData, customersData, usersData] = await Promise.all([
+        fetchProjects(),
+        fetchCustomers(),
+        fetchUsers()
+      ]);
 
-      if (!isAdmin) {
-        query = query.eq('technician_id', user?.id);
-      }
-
-      const { data, error } = await query;
-
-      if (error) throw error;
-
-      setProjects(data || []);
+      setProjects(projectsData);
+      setCustomers(customersData);
+      setUsers(usersData);
     } catch (error) {
-      console.error('Error fetching projects:', error);
+      console.error('Error fetching data:', error);
     } finally {
       setLoading(false);
     }
   };
 
-  const fetchCustomers = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('customers')
-        .select('id, name');
+  const fetchProjects = async () => {
+    let query = supabase
+      .from('projects')
+      .select('*')
+      .order('date', { ascending: false });
 
-      if (error) throw error;
-
-      setCustomers(data || []);
-    } catch (error) {
-      console.error('Error fetching customers:', error);
+    if (!isAdmin) {
+      query = query.eq('technician_id', user?.id);
     }
+
+    const { data, error } = await query;
+
+    if (error) throw error;
+    
+    // Map database data to Project interface
+    return (data || []).map(item => ({
+      id: item.id,
+      technicianId: item.technician_id || '',
+      technicianName: '',
+      customerId: item.customer_id,
+      customerName: '',
+      date: item.date,
+      title: item.title,
+      description: item.description || '',
+      images: item.images || [],
+      hoursSpent: item.hours_spent,
+      status: (item.status as Project['status']) || 'in-progress',
+      createdAt: item.created_at || '',
+      updatedAt: item.updated_at
+    }));
+  };
+
+  const fetchCustomers = async () => {
+    const { data, error } = await supabase
+      .from('customers')
+      .select('*')
+      .order('name');
+
+    if (error) throw error;
+    return data || [];
   };
 
   const fetchUsers = async () => {
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('*')
+      .order('full_name');
+
+    if (error) throw error;
+    return data || [];
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!title || !description || !customerId || !date || !hoursSpent || !technicianId) {
+      alert('Please fill in all fields.');
+      return;
+    }
+
+    const newProject = {
+      title: title,
+      description: description,
+      customer_id: customerId,
+      technician_id: technicianId,
+      date: date,
+      hours_spent: parseFloat(hoursSpent.toString()),
+      status: status,
+      images: [],
+    };
+
     try {
       const { data, error } = await supabase
-        .from('profiles')
-        .select('id, username, full_name');
-
-      if (error) throw error;
-
-      setUsers(data || []);
-    } catch (error) {
-      console.error('Error fetching users:', error);
-    }
-  };
-
-  const handleOpen = () => {
-    setOpen(true);
-    setEditMode(false);
-    setSelectedProject(null);
-    setTitle('');
-    setDescription('');
-    setStatus('in-progress');
-    setDate('');
-    setHoursSpent(0);
-    setCustomerId('');
-    setTechnicianId('');
-    setNewImages([]);
-    setExistingImages([]);
-  };
-
-  const handleEdit = (project: Project) => {
-    setEditMode(true);
-    setSelectedProject(project);
-    setTitle(project.title);
-    setDescription(project.description || '');
-    setStatus(project.status || 'in-progress');
-    setDate(project.date);
-    setHoursSpent(project.hours_spent);
-    setCustomerId(project.customer_id || '');
-    setTechnicianId(project.technician_id || '');
-    setExistingImages(project.images || []);
-    setNewImages([]);
-    setOpen(true);
-  };
-
-  const handleCreate = async () => {
-    try {
-      const { data: projectData, error: projectError } = await supabase
         .from('projects')
-        .insert([
-          {
-            title,
-            description,
-            status,
-            date,
-            hours_spent: hoursSpent,
-            customer_id: customerId || null,
-            technician_id: technicianId || null,
-            images: [],
-          },
-        ])
+        .insert([newProject])
         .select()
         .single();
 
-      if (projectError) throw projectError;
+      if (error) throw error;
 
-      const uploadedImageUrls = await uploadProjectImages(newImages, projectData.id);
+      const mappedProject: Project = {
+        id: data.id,
+        technicianId: data.technician_id || '',
+        technicianName: '',
+        customerId: data.customer_id,
+        customerName: '',
+        date: data.date,
+        title: data.title,
+        description: data.description || '',
+        images: data.images || [],
+        hoursSpent: data.hours_spent,
+        status: (data.status as Project['status']) || 'in-progress',
+        createdAt: data.created_at || '',
+        updatedAt: data.updated_at
+      };
 
-      const { error: updateError } = await supabase
-        .from('projects')
-        .update({ images: uploadedImageUrls })
-        .eq('id', projectData.id);
-
-      if (updateError) throw updateError;
-
-      setProjects(prevProjects => [...prevProjects, { ...projectData, images: uploadedImageUrls }]);
-      setOpen(false);
+      setProjects(prevProjects => [...prevProjects, mappedProject]);
+      setIsCreateDialogOpen(false);
+      clearForm();
+      fetchData();
     } catch (error) {
       console.error('Error creating project:', error);
+      alert('Failed to create project.');
     }
   };
 
-  const handleUpdate = async () => {
-    if (!selectedProject) return;
+  const handleUpdate = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!selectedProject?.id) {
+      alert('No project selected to update.');
+      return;
+    }
+
+    if (!title || !description || !customerId || !date || !hoursSpent) {
+      alert('Please fill in all fields.');
+      return;
+    }
+
+    const updatedProject = {
+      title: title,
+      description: description,
+      customer_id: customerId,
+      date: date,
+      hours_spent: parseFloat(hoursSpent.toString()),
+      status: status,
+    };
 
     try {
-      const uploadedImageUrls = await uploadProjectImages(newImages, selectedProject.id);
-
-      const updatedImages = [...(selectedProject.images || []), ...uploadedImageUrls];
-
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('projects')
-        .update({
-          title,
-          description,
-          status,
-          date,
-          hours_spent: hoursSpent,
-          customer_id: customerId || null,
-          technician_id: technicianId || null,
-          images: updatedImages,
-        })
-        .eq('id', selectedProject.id);
+        .update(updatedProject)
+        .eq('id', selectedProject.id)
+        .select()
+        .single();
 
       if (error) throw error;
 
+      const mappedProject: Project = {
+        id: data.id,
+        technicianId: data.technician_id || '',
+        technicianName: '',
+        customerId: data.customer_id,
+        customerName: '',
+        date: data.date,
+        title: data.title,
+        description: data.description || '',
+        images: data.images || [],
+        hoursSpent: data.hours_spent,
+        status: (data.status as Project['status']) || 'in-progress',
+        createdAt: data.created_at || '',
+        updatedAt: data.updated_at
+      };
+
       setProjects(prevProjects =>
-        prevProjects.map(project =>
-          project.id === selectedProject.id
-            ? {
-                ...project,
-                title,
-                description,
-                status,
-                date,
-                hours_spent: hoursSpent,
-                customer_id: customerId || null,
-                technician_id: technicianId || null,
-                images: updatedImages,
-              }
-            : project
-        )
+        prevProjects.map(project => (project.id === selectedProject.id ? mappedProject : project))
       );
-      setOpen(false);
+      setIsEditDialogOpen(false);
+      clearForm();
+      fetchData();
     } catch (error) {
       console.error('Error updating project:', error);
+      alert('Failed to update project.');
     }
   };
 
-  const handleDelete = async (projectId: string) => {
-    try {
-      const { error } = await supabase
-        .from('projects')
-        .delete()
-        .eq('id', projectId);
+  const handleDelete = async (id: string) => {
+    if (window.confirm('Are you sure you want to delete this project?')) {
+      try {
+        const { error } = await supabase
+          .from('projects')
+          .delete()
+          .eq('id', id);
 
-      if (error) throw error;
+        if (error) throw error;
 
-      setProjects(prevProjects => prevProjects.filter(project => project.id !== projectId));
-    } catch (error) {
-      console.error('Error deleting project:', error);
-    }
-  };
-
-  const handleImageDelete = async (imageUrl: string) => {
-    if (!selectedProject) return;
-  
-    try {
-      const updatedImages = selectedProject.images ? selectedProject.images.filter(url => url !== imageUrl) : [];
-  
-      const { error } = await supabase
-        .from('projects')
-        .update({ images: updatedImages })
-        .eq('id', selectedProject.id);
-  
-      if (error) {
-        throw error;
+        setProjects(prevProjects => prevProjects.filter(project => project.id !== id));
+        fetchData();
+      } catch (error) {
+        console.error('Error deleting project:', error);
+        alert('Failed to delete project.');
       }
-  
-      setProjects(prevProjects =>
-        prevProjects.map(project =>
-          project.id === selectedProject.id
-            ? { ...project, images: updatedImages }
-            : project
-        )
-      );
-  
-      setExistingImages(updatedImages);
-  
-    } catch (error) {
-      console.error('Error deleting image:', error);
     }
   };
 
-  if (loading) {
+  const clearForm = () => {
+    setTitle('');
+    setDescription('');
+    setCustomerId('');
+    setDate(format(new Date(), 'yyyy-MM-dd'));
+    setHoursSpent('');
+    setStatus('in-progress');
+    setSelectedProject(null);
+  };
+
+  const handleEditClick = (project: Project) => {
+    setSelectedProject(project);
+    setTitle(project.title);
+    setDescription(project.description);
+    setCustomerId(project.customerId || '');
+    setDate(project.date);
+    setHoursSpent(project.hoursSpent);
+    setStatus(project.status);
+    setIsEditDialogOpen(true);
+  };
+
+  const getStatusBadge = (status: Project['status']) => {
+    const statusMap = {
+      'in-progress': { label: 'In Progress', color: 'bg-blue-100 text-blue-800' },
+      'completed': { label: 'Completed', color: 'bg-green-100 text-green-800' },
+      'needs-review': { label: 'Needs Review', color: 'bg-yellow-100 text-yellow-800' }
+    };
+    
+    const statusInfo = statusMap[status] || statusMap['in-progress'];
+    
     return (
-      <PageLayout title={isAdmin ? "Projecten" : "Mijn Projecten"} subtitle={isAdmin ? "Beheer alle projecten en hun status." : "Bekijk en beheer je toegewezen projecten."}>
-        <div className="flex items-center justify-center h-64">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-red-600" />
-        </div>
-      </PageLayout>
+      <Badge className={statusInfo.color}>
+        {statusInfo.label}
+      </Badge>
     );
-  }
+  };
 
   return (
-    <PageLayout 
-      title={isAdmin ? "Projecten" : "Mijn Projecten"} 
-      subtitle={isAdmin ? "Beheer alle projecten en hun status." : "Bekijk en beheer je toegewezen projecten."}
-    >
-      <Card className="mb-4 shadow-lg border-2 border-gray-200">
-        <CardContent className="p-4">
-          <div className="flex justify-between items-center">
-            <h2 className="text-lg font-semibold">
-              {isAdmin ? 'Projecten beheren' : 'Mijn projecten'}
-            </h2>
-            {isAdmin && (
-              <Dialog open={open} onOpenChange={setOpen}>
-                <DialogTrigger asChild>
-                  <Button onClick={handleOpen} className="bg-green-600 text-white hover:bg-green-700">
-                    <Plus className="h-4 w-4 mr-2" />
-                    Nieuw project
+    <div className="p-2 md:p-6 bg-gradient-to-br from-white via-gray-100 to-red-50 min-h-screen">
+      <div className="max-w-7xl mx-auto">
+        <header className="mb-4 md:mb-8">
+          <h1 className="text-2xl md:text-3xl font-bold text-red-700 mb-1 md:mb-2 tracking-tight">
+            Mijn Projecten
+          </h1>
+          <p className="text-gray-600 text-sm md:text-base">
+            Beheer je projecten en documenteer uitgevoerde werkzaamheden.
+          </p>
+        </header>
+
+        <div className="mb-6 flex justify-end">
+          <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
+            <DialogTrigger asChild>
+              <Button><Plus className="h-4 w-4 mr-2" /> Nieuw Project</Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-2xl">
+              <DialogHeader>
+                <DialogTitle>Nieuw Project</DialogTitle>
+              </DialogHeader>
+              <form onSubmit={handleSubmit} className="space-y-4">
+                <div>
+                  <Input
+                    placeholder="Project titel"
+                    value={title}
+                    onChange={(e) => setTitle(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <Textarea
+                    placeholder="Project beschrijving"
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <Select onValueChange={setCustomerId} value={customerId}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecteer een klant" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {customers.map(customer => (
+                        <SelectItem key={customer.id} value={customer.id}>
+                          {customer.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Input
+                    type="date"
+                    value={date}
+                    onChange={(e) => setDate(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <Input
+                    type="number"
+                    step="0.5"
+                    placeholder="Bestede uren"
+                    value={hoursSpent}
+                    onChange={(e) => setHoursSpent(parseFloat(e.target.value) || '')}
+                  />
+                </div>
+                <div>
+                  <Select value={status} onValueChange={(value: Project['status']) => setStatus(value)}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="in-progress">In Progress</SelectItem>
+                      <SelectItem value="completed">Completed</SelectItem>
+                      <SelectItem value="needs-review">Needs Review</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex justify-end space-x-2">
+                  <Button type="button" variant="outline" onClick={() => setIsCreateDialogOpen(false)}>
+                    Annuleren
                   </Button>
-                </DialogTrigger>
-                <DialogContent className="max-w-2xl">
-                  <DialogHeader>
-                    <DialogTitle>{editMode ? 'Project bewerken' : 'Nieuw project'}</DialogTitle>
-                  </DialogHeader>
-                  <div className="grid gap-4 py-4">
-                    <div className="grid grid-cols-4 items-center gap-4">
-                      <label htmlFor="title" className="text-right font-medium">
-                        Titel
-                      </label>
-                      <Input
-                        id="title"
-                        value={title}
-                        onChange={(e) => setTitle(e.target.value)}
-                        className="col-span-3"
-                      />
+                  <Button type="submit">Project Opslaan</Button>
+                </div>
+              </form>
+            </DialogContent>
+          </Dialog>
+        </div>
+
+        {loading ? (
+          <div className="flex items-center justify-center h-64">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-red-600" />
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {projects.map(project => (
+              <Card key={project.id} className="shadow-lg border-2 border-gray-200 hover:shadow-xl transition-shadow">
+                <CardHeader className="pb-3">
+                  <div className="flex justify-between items-start">
+                    <CardTitle className="text-lg font-bold text-gray-900 line-clamp-2">
+                      {project.title}
+                    </CardTitle>
+                    <div className="flex space-x-1">
+                      {isAdmin && (
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          onClick={() => handleEditClick(project)}
+                          className="h-8 w-8"
+                        >
+                          <Edit className="h-4 w-4" />
+                        </Button>
+                      )}
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        onClick={() => handleDelete(project.id)}
+                        className="h-8 w-8"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
                     </div>
-                    <div className="grid grid-cols-4 items-center gap-4">
-                      <label htmlFor="description" className="text-right font-medium">
-                        Beschrijving
-                      </label>
-                      <Textarea
-                        id="description"
-                        value={description}
-                        onChange={(e) => setDescription(e.target.value)}
-                        className="col-span-3"
-                      />
+                  </div>
+                  <div className="flex items-center justify-between">
+                    {getStatusBadge(project.status)}
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <p className="text-gray-600 text-sm line-clamp-3">{project.description}</p>
+                  
+                  <div className="space-y-2 text-sm text-gray-500">
+                    <div className="flex items-center">
+                      <Building className="h-4 w-4 mr-2" />
+                      <span>{customers.find(c => c.id === project.customerId)?.name || 'Unknown Customer'}</span>
                     </div>
-                    <div className="grid grid-cols-4 items-center gap-4">
-                      <label htmlFor="status" className="text-right font-medium">
-                        Status
-                      </label>
-                      <Select value={status} onValueChange={(value) => setStatus(value)}>
-                        <SelectTrigger className="col-span-3">
-                          <SelectValue placeholder="Selecteer een status" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="in-progress">Bezig</SelectItem>
-                          <SelectItem value="completed">Afgerond</SelectItem>
-                          <SelectItem value="needs-review">Controle nodig</SelectItem>
-                        </SelectContent>
-                      </Select>
+                    <div className="flex items-center">
+                      <Calendar className="h-4 w-4 mr-2" />
+                      <span>{format(parseISO(project.date), 'dd-MM-yyyy')}</span>
                     </div>
-                    <div className="grid grid-cols-4 items-center gap-4">
-                      <label htmlFor="date" className="text-right font-medium">
-                        Datum
-                      </label>
-                      <Input
-                        type="date"
-                        id="date"
-                        value={date}
-                        onChange={(e) => setDate(e.target.value)}
-                        className="col-span-3"
-                      />
+                    <div className="flex items-center">
+                      <Clock className="h-4 w-4 mr-2" />
+                      <span>{project.hoursSpent} uren</span>
                     </div>
-                    <div className="grid grid-cols-4 items-center gap-4">
-                      <label htmlFor="hoursSpent" className="text-right font-medium">
-                        Gewerkte uren
-                      </label>
-                      <Input
-                        type="number"
-                        id="hoursSpent"
-                        value={hoursSpent}
-                        onChange={(e) => setHoursSpent(Number(e.target.value))}
-                        className="col-span-3"
-                      />
-                    </div>
-                    <div className="grid grid-cols-4 items-center gap-4">
-                      <label htmlFor="customerId" className="text-right font-medium">
-                        Klant
-                      </label>
-                      <Select value={customerId} onValueChange={setCustomerId}>
-                        <SelectTrigger className="col-span-3">
-                          <SelectValue placeholder="Selecteer een klant" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {customers.map((customer) => (
-                            <SelectItem key={customer.id} value={customer.id}>
-                              {customer.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="grid grid-cols-4 items-center gap-4">
-                      <label htmlFor="technicianId" className="text-right font-medium">
-                        Technicus
-                      </label>
-                      <Select value={technicianId} onValueChange={setTechnicianId}>
-                        <SelectTrigger className="col-span-3">
-                          <SelectValue placeholder="Selecteer een technicus" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {users.map((user) => (
-                            <SelectItem key={user.id} value={user.id}>
-                              {user.full_name} ({user.username})
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="grid grid-cols-4 items-center gap-4">
-                      <label htmlFor="images" className="text-right font-medium">
-                        Nieuwe afbeeldingen
-                      </label>
-                      <Input
-                        type="file"
-                        id="images"
-                        multiple
-                        onChange={(e) => {
-                          if (e.target.files) {
-                            setNewImages(Array.from(e.target.files));
-                          }
-                        }}
-                        className="col-span-3"
-                      />
-                    </div>
-                    {editMode && (
-                      <div className="grid grid-cols-4 items-start gap-4">
-                        <label className="text-right font-medium">
-                          Bestaande afbeeldingen
-                        </label>
-                        <div className="col-span-3 flex flex-wrap gap-2">
-                          {existingImages.map((url, index) => (
-                            <div key={index} className="relative">
-                              <img src={url} alt={`Project Image ${index}`} className="w-32 h-24 object-cover rounded-md" />
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="absolute top-0 right-0 bg-black/50 text-white hover:bg-black/80"
-                                onClick={() => handleImageDelete(url)}
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            </div>
-                          ))}
-                        </div>
+                    {project.images && project.images.join('').length > 0 && (
+                      <div className="flex items-center">
+                        <ImageIcon className="h-4 w-4 mr-2" />
+                        <span>{project.images.length} foto's</span>
                       </div>
                     )}
                   </div>
-                  <div className="flex justify-end">
-                    <Button type="button" variant="secondary" onClick={() => setOpen(false)}>
-                      Annuleren
-                    </Button>
-                    <Button type="submit" onClick={editMode ? handleUpdate : handleCreate} className="ml-2">
-                      {editMode ? 'Update project' : 'Maak project'}
-                    </Button>
-                  </div>
-                </DialogContent>
-              </Dialog>
-            )}
+                </CardContent>
+              </Card>
+            ))}
           </div>
-        </CardContent>
-      </Card>
+        )}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {projects.map((project) => (
-          <Card key={project.id} className="shadow-md border-2 border-gray-200">
-            <CardHeader>
-              <div className="flex items-start justify-between">
-                <CardTitle className="text-lg font-semibold">{project.title}</CardTitle>
-                {isAdmin && (
-                  <Button variant="ghost" size="icon" onClick={() => handleEdit(project)}>
-                    <Edit className="h-4 w-4" />
-                  </Button>
-                )}
-              </div>
-            </CardHeader>
-            <CardContent>
-              <p className="text-sm text-gray-600">{project.description}</p>
-              <div className="mt-2 space-y-1">
-                <div className="flex items-center space-x-2">
-                  <Calendar className="h-4 w-4 text-gray-500" />
-                  <span className="text-xs text-gray-500">Datum:</span>
-                  <span className="text-sm font-medium">{project.date || 'Niet ingesteld'}</span>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <Clock className="h-4 w-4 text-gray-500" />
-                  <span className="text-xs text-gray-500">Uren:</span>
-                  <span className="text-sm font-medium">{project.hours_spent} uur</span>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <Building className="h-4 w-4 text-gray-500" />
-                  <span className="text-xs text-gray-500">Klant:</span>
-                  <span className="text-sm font-medium">
-                    {customers.find(customer => customer.id === project.customer_id)?.name || 'Niet toegewezen'}
-                  </span>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <User className="h-4 w-4 text-gray-500" />
-                  <span className="text-xs text-gray-500">Technicus:</span>
-                  <span className="text-sm font-medium">
-                    {users.find(user => user.id === project.technician_id)?.full_name || 'Niet toegewezen'}
-                  </span>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <FileText className="h-4 w-4 text-gray-500" />
-                  <span className="text-xs text-gray-500">Status:</span>
-                  <span className="text-sm font-medium">{project.status}</span>
-                </div>
-              </div>
-              {project.images && project.images.length > 0 && (
-                <div className="mt-4">
-                  <h4 className="text-sm font-semibold mb-2">Afbeeldingen:</h4>
-                  <div className="flex flex-wrap gap-2">
-                    {project.images.map((url, index) => (
-                      <img key={index} src={url} alt={`Project Image ${index}`} className="w-24 h-20 object-cover rounded-md" />
-                    ))}
-                  </div>
-                </div>
-              )}
-              {isAdmin && (
-                <Button
-                  variant="destructive"
-                  size="sm"
-                  className="mt-4 w-full"
-                  onClick={() => handleDelete(project.id)}
-                >
-                  Verwijder project
-                </Button>
-              )}
+        {projects.length === 0 && !loading && (
+          <Card className="shadow-lg border-2 border-gray-200">
+            <CardContent className="p-8 text-center">
+              <Building className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">Geen projecten gevonden</h3>
+              <p className="text-gray-600">Begin met het toevoegen van je eerste project.</p>
             </CardContent>
           </Card>
-        ))}
+        )}
+
+        <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+          <DialogContent className="max-w-2xl">
+            <DialogHeader>
+              <DialogTitle>Project Bewerken</DialogTitle>
+            </DialogHeader>
+            <form onSubmit={handleUpdate} className="space-y-4">
+              <div>
+                <Input
+                  placeholder="Project titel"
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                />
+              </div>
+              <div>
+                <Textarea
+                  placeholder="Project beschrijving"
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                />
+              </div>
+              <div>
+                <Select onValueChange={setCustomerId} value={customerId}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecteer een klant" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {customers.map(customer => (
+                      <SelectItem key={customer.id} value={customer.id}>
+                        {customer.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Input
+                  type="date"
+                  value={date}
+                  onChange={(e) => setDate(e.target.value)}
+                />
+              </div>
+              <div>
+                <Input
+                  type="number"
+                  step="0.5"
+                  placeholder="Bestede uren"
+                  value={hoursSpent}
+                  onChange={(e) => setHoursSpent(parseFloat(e.target.value) || '')}
+                />
+              </div>
+              <div>
+                <Select value={status} onValueChange={(value: Project['status']) => setStatus(value)}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="in-progress">In Progress</SelectItem>
+                    <SelectItem value="completed">Completed</SelectItem>
+                    <SelectItem value="needs-review">Needs Review</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex justify-end space-x-2">
+                <Button type="button" variant="outline" onClick={() => setIsEditDialogOpen(false)}>
+                  Annuleren
+                </Button>
+                <Button type="submit">Wijzigingen Opslaan</Button>
+              </div>
+            </form>
+          </DialogContent>
+        </Dialog>
       </div>
-    </PageLayout>
+    </div>
   );
 };
 
