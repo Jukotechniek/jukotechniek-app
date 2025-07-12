@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -18,8 +17,8 @@ interface MagazineArticle {
   stock_quantity: number;
   price: number | null;
   supplier: string | null;
-  location: string | null;
-  magazine_name: string | null;
+  Location: string | null;
+  Magazine_name: string | null;
   image_url: string | null;
   created_at: string;
   updated_at: string;
@@ -45,7 +44,7 @@ const Magazine: React.FC = () => {
     const timeoutId = setTimeout(() => {
       setCurrentPage(1);
       fetchArticles();
-    }, 500); // Wait 500ms after user stops typing
+    }, 500);
 
     return () => clearTimeout(timeoutId);
   }, [searchTerm, selectedCategory]);
@@ -98,8 +97,8 @@ const Magazine: React.FC = () => {
       // Map the data to include the missing properties with fallback values
       const mappedData: MagazineArticle[] = (data || []).map(item => ({
         ...item,
-        location: item.location || null,
-        magazine_name: item.magazine_name || null,
+        Location: item.Location || null,
+        Magazine_name: item.Magazine_name || null,
       }));
 
       setArticles(mappedData);
@@ -212,22 +211,22 @@ const Magazine: React.FC = () => {
                     </span>
                   </div>
                 )}
-                {article.location && (
+                {article.Location && (
                   <div className="flex justify-between items-center">
                     <span className="text-xs text-gray-500 flex items-center">
                       <MapPin className="h-3 w-3 mr-1" />
                       Locatie:
                     </span>
-                    <span className="text-xs text-gray-700">{article.location}</span>
+                    <span className="text-xs text-gray-700">{article.Location}</span>
                   </div>
                 )}
-                {article.magazine_name && (
+                {article.Magazine_name && (
                   <div className="flex justify-between items-center">
                     <span className="text-xs text-gray-500 flex items-center">
                       <Building className="h-3 w-3 mr-1" />
                       Magazijn:
                     </span>
-                    <span className="text-xs text-gray-700">{article.magazine_name}</span>
+                    <span className="text-xs text-gray-700">{article.Magazine_name}</span>
                   </div>
                 )}
                 {article.category && (
