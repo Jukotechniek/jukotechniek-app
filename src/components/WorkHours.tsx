@@ -21,7 +21,6 @@ interface WorkHourEntry {
   hours_worked: number;
   description: string | null;
   created_at: string | null;
-  updated_at: string | null;
 }
 
 interface Customer {
@@ -84,7 +83,7 @@ const WorkHours: React.FC = () => {
   const fetchWorkHours = async () => {
     let query = supabase
       .from('work_hours')
-      .select('*')
+      .select('id, technician_id, customer_id, date, hours_worked, description, created_at')
       .order('date', { ascending: false });
 
     if (!isAdmin) {
@@ -143,7 +142,7 @@ const WorkHours: React.FC = () => {
       const { data, error } = await supabase
         .from('work_hours')
         .insert([newWorkHour])
-        .select()
+        .select('id, technician_id, customer_id, date, hours_worked, description, created_at')
         .single();
 
       if (error) throw error;
@@ -183,7 +182,7 @@ const WorkHours: React.FC = () => {
         .from('work_hours')
         .update(updatedWorkHour)
         .eq('id', selectedWorkHour.id)
-        .select()
+        .select('id, technician_id, customer_id, date, hours_worked, description, created_at')
         .single();
 
       if (error) throw error;
