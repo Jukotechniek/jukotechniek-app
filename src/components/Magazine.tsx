@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -37,7 +36,7 @@ const Magazine: React.FC = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
-  const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set());
+  const [expandedArticle, setExpandedArticle] = useState<string | null>(null);
   
   const itemsPerPage = 20;
 
@@ -121,14 +120,8 @@ const Magazine: React.FC = () => {
     setSelectedCategory(value);
   };
 
-  const toggleExpanded = (id: string) => {
-    const newExpanded = new Set(expandedItems);
-    if (newExpanded.has(id)) {
-      newExpanded.delete(id);
-    } else {
-      newExpanded.add(id);
-    }
-    setExpandedItems(newExpanded);
+  const toggleExpanded = (articleId: string) => {
+    setExpandedArticle(expandedArticle === articleId ? null : articleId);
   };
 
   if (loading && articles.length === 0) {
@@ -183,89 +176,78 @@ const Magazine: React.FC = () => {
         {totalCount} onderdelen gevonden - Pagina {currentPage} van {totalPages}
       </div>
 
-      {/* Articles List - Compact View */}
+      {/* Articles List */}
       <div className="space-y-2 mb-6">
-        {articles.map((article) => {
-          const isExpanded = expandedItems.has(article.id);
-          
-          return (
-            <Card key={article.id} className="shadow-sm border border-gray-200 hover:shadow-md transition-shadow">
-              <CardContent className="p-3">
-                {/* Compact Row */}
-                <div 
-                  className="flex items-center justify-between cursor-pointer"
-                  onClick={() => toggleExpanded(article.id)}
-                >
-                  <div className="flex-1 grid grid-cols-2 md:grid-cols-4 gap-2 text-sm">
-                    <div>
-                      <span className="font-semibold text-gray-900">{article.part_name}</span>
-                    </div>
-                    <div>
-                      <span className="text-gray-600">{article.part_number}</span>
-                    </div>
-                    <div className="flex items-center">
-                      <MapPin className="h-3 w-3 mr-1 text-gray-400" />
-                      <span className="text-gray-600">{article.Location || 'Onbekend'}</span>
-                    </div>
-                    <div className="flex items-center">
-                      <Building className="h-3 w-3 mr-1 text-gray-400" />
-                      <span className="text-gray-600">{article.Magazine_name || 'Onbekend'}</span>
-                    </div>
+        {articles.map((article) => (
+          <Card key={article.id} className="shadow-sm border border-gray-200 hover:shadow-md transition-shadow">
+            <CardContent className="p-3">
+              <div 
+                className="flex items-center justify-between cursor-pointer"
+                onClick={() => toggleExpanded(article.id)}
+              >
+                <div className="flex-1 grid grid-cols-2 md:grid-cols-5 gap-2 text-sm">
+                  <div>
+                    <span className="font-semibold text-gray-900">{article.part_number}</span>
                   </div>
-                  <div className="ml-4">
-                    {isExpanded ? (
-                      <ChevronUp className="h-4 w-4 text-gray-400" />
-                    ) : (
-                      <ChevronDown className="h-4 w-4 text-gray-400" />
-                    )}
+                  <div>
+                    <span className="text-gray-700">{article.part_name}</span>
+                  </div>
+                  <div className="flex items-center text-gray-600">
+                    <MapPin className="h-3 w-3 mr-1" />
+                    <span>{article.Location || 'Onbekend'}</span>
+                  </div>
+                  <div className="flex items-center text-gray-600">
+                    <Building className="h-3 w-3 mr-1" />
+                    <span>{article.Magazine_name || 'Onbekend'}</span>
+                  </div>
+                  <div className="text-right">
+                    <span className="font-medium text-gray-900">{article.stock_quantity} stuks</span>
                   </div>
                 </div>
-
-                {/* Expanded Details */}
-                {isExpanded && (
-                  <div className="mt-4 pt-4 border-t border-gray-200">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {article.description && (
-                        <div>
-                          <h4 className="text-sm font-medium text-gray-700 mb-1">Beschrijving</h4>
-                          <p className="text-sm text-gray-600">{article.description}</p>
+                <div className="ml-4">
+                  {expandedArticle === article.id ? (
+                    <ChevronUp className="h-4 w-4 text-gray-400" />
+                  ) : (
+                    <ChevronDown className="h-4 w-4 text-gray-400" />
+                  )}
+                </div>
+              </div>
+              
+              {expandedArticle === article.id && (
+                <div className="mt-4 pt-3 border-t border-gray-200">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                    {article.description && (
+                      <div>
+                        <span className="font-medium text-gray-700">Beschrijving:</span>
+                        <p className="text-gray-600 mt-1">{article.description}</p>
+                      </div>
+                    )}
+                    <div className="space-y-2">
+                      {article.price && (
+                        <div className="flex justify-between">
+                          <span className="text-gray-500">Prijs:</span>
+                          <span className="font-semibold text-green-600">€{article.price.toFixed(2)}</span>
                         </div>
                       )}
-                      <div className="space-y-2">
-                        <div className="flex justify-between items-center">
-                          <span className="text-sm text-gray-500">Voorraad:</span>
-                          <span className="text-sm font-semibold text-gray-900">
-                            {article.stock_quantity} stuks
-                          </span>
+                      {article.category && (
+                        <div className="flex justify-between">
+                          <span className="text-gray-500">Categorie:</span>
+                          <span className="text-gray-700">{article.category}</span>
                         </div>
-                        {article.price && (
-                          <div className="flex justify-between items-center">
-                            <span className="text-sm text-gray-500">Prijs:</span>
-                            <span className="text-sm font-semibold text-green-600">
-                              €{article.price.toFixed(2)}
-                            </span>
-                          </div>
-                        )}
-                        {article.category && (
-                          <div className="flex justify-between items-center">
-                            <span className="text-sm text-gray-500">Categorie:</span>
-                            <span className="text-sm text-gray-700">{article.category}</span>
-                          </div>
-                        )}
-                        {article.supplier && (
-                          <div className="flex justify-between items-center">
-                            <span className="text-sm text-gray-500">Leverancier:</span>
-                            <span className="text-sm text-gray-700">{article.supplier}</span>
-                          </div>
-                        )}
-                      </div>
+                      )}
+                      {article.supplier && (
+                        <div className="flex justify-between">
+                          <span className="text-gray-500">Leverancier:</span>
+                          <span className="text-gray-700">{article.supplier}</span>
+                        </div>
+                      )}
                     </div>
                   </div>
-                )}
-              </CardContent>
-            </Card>
-          );
-        })}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        ))}
       </div>
 
       {/* No Results */}

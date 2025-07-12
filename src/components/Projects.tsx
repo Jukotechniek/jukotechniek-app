@@ -2,29 +2,28 @@ import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { useAuth } from '@/contexts/AuthContext';
-import { useToast } from '@/hooks/use-toast';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Badge } from '@/components/ui/badge';
+import { Calendar, Plus, User, Building, Clock, FileText, Image as ImageIcon, Trash2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
-import { Trash2, Edit2, Save, X, Plus, Eye, Upload, Calendar, Clock, User, Building2 } from 'lucide-react';
+import { useAuth } from '@/contexts/AuthContext';
 import { uploadProjectImages } from '@/utils/uploadProjectImages';
+import { PageLayout } from '@/components/ui/page-layout';
 
 interface Project {
   id: string;
   title: string;
-  description: string | null;
-  date: string;
-  hours_spent: number;
-  status: string;
-  technician_id: string | null;
+  description: string;
+  status: 'nieuw' | 'bezig' | 'afgerond' | 'geannuleerd';
+  start_date: string | null;
+  end_date: string | null;
   customer_id: string | null;
-  images: string[] | null;
+  assigned_users: string[] | null;
   created_at: string;
   updated_at: string;
-  technician?: { full_name: string };
-  customers?: { name: string };
+  images: string[] | null;
 }
 
 interface Customer {
@@ -32,564 +31,521 @@ interface Customer {
   name: string;
 }
 
-interface Technician {
+interface UserProfile {
   id: string;
-  full_name: string;
+  username: string;
+  fullName: string;
 }
 
-const Projects = () => {
+const Projects: React.FC = () => {
   const { user } = useAuth();
-  const { toast } = useToast();
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [customers, setCustomers] = useState<Customer[]>([]);
-  const [technicians, setTechnicians] = useState<Technician[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [showAddForm, setShowAddForm] = useState(false);
-  const [editingProject, setEditingProject] = useState<Project | null>(null);
-  const [selectedImages, setSelectedImages] = useState<File[]>([]);
-
   const isAdmin = user?.role === 'admin';
 
-  const [newProject, setNewProject] = useState({
-    title: '',
-    description: '',
-    date: new Date().toISOString().split('T')[0],
-    hours_spent: '',
-    status: 'in-progress',
-    technician_id: user?.role === 'technician' ? user.id : '',
-    customer_id: ''
-  });
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [users, setUsers] = useState<UserProfile[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [open, setOpen] = useState(false);
+  const [editMode, setEditMode] = useState(false);
+  const [selectedProject, setSelectedProject] = useState<Project | null>(null);
+  const [title, setTitle] = useState('');
+  const [description, setDescription] = useState('');
+  const [status, setStatus] = useState<'nieuw' | 'bezig' | 'afgerond' | 'geannuleerd'>('nieuw');
+  const [startDate, setStartDate] = useState<string | null>(null);
+  const [endDate, setEndDate] = useState<string | null>(null);
+  const [customerId, setCustomerId] = useState<string | null>(null);
+  const [assignedUsers, setAssignedUsers] = useState<string[]>([]);
+  const [newImages, setNewImages] = useState<File[]>([]);
+  const [existingImages, setExistingImages] = useState<string[]>([]);
 
-  const fetchData = async () => {
+  useEffect(() => {
+    fetchProjects();
+    fetchCustomers();
+    fetchUsers();
+  }, []);
+
+  const fetchProjects = async () => {
     setLoading(true);
     try {
-      const { data: customerData, error: custError } = await supabase
-        .from('customers')
-        .select('*')
-        .eq('is_active', true)
-        .order('name');
-      if (custError) throw custError;
-
-      const { data: technicianData, error: techError } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('role', 'technician')
-        .order('full_name');
-      if (techError) throw techError;
-
       let query = supabase
         .from('projects')
-        .select(`
-          *,
-          technician:profiles!projects_technician_id_fkey(full_name),
-          customers(name)
-        `)
-        .order('created_at', { ascending: false });
+        .select('*');
 
       if (!isAdmin) {
-        query = query.eq('technician_id', user?.id);
+        query = query.contains('assigned_users', [user?.id]);
       }
 
-      const { data: projectData, error: projError } = await query;
-      if (projError) throw projError;
+      const { data, error } = await query;
 
-      setCustomers(customerData || []);
-      setTechnicians(technicianData || []);
-      setProjects(projectData || []);
+      if (error) throw error;
+
+      setProjects(data || []);
     } catch (error) {
-      console.error('Error fetching data:', error);
-      toast({
-        title: 'Fout',
-        description: 'Er is een fout opgetreden bij het ophalen van gegevens',
-        variant: 'destructive'
-      });
+      console.error('Error fetching projects:', error);
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => {
-    fetchData();
-  }, []);
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-
-    if (!newProject.title || !newProject.date || !newProject.hours_spent || !newProject.customer_id) {
-      toast({
-        title: 'Fout',
-        description: 'Vul alle verplichte velden in',
-        variant: 'destructive'
-      });
-      return;
-    }
-
-    const hours = parseFloat(newProject.hours_spent);
-    if (hours <= 0) {
-      toast({
-        title: 'Fout',
-        description: 'Uren moeten groter zijn dan 0',
-        variant: 'destructive'
-      });
-      return;
-    }
-
+  const fetchCustomers = async () => {
     try {
-      let imageUrls: string[] = [];
-      if (selectedImages.length > 0) {
-        imageUrls = await uploadProjectImages(selectedImages);
-      }
-
       const { data, error } = await supabase
-        .from('projects')
-        .insert([
-          {
-            title: newProject.title,
-            description: newProject.description,
-            date: newProject.date,
-            hours_spent: hours,
-            status: newProject.status,
-            technician_id: newProject.technician_id,
-            customer_id: newProject.customer_id,
-            images: imageUrls.length > 0 ? imageUrls : null
-          }
-        ])
-        .select(`
-          *,
-          technician:profiles!projects_technician_id_fkey(full_name),
-          customers(name)
-        `)
-        .single();
+        .from('customers')
+        .select('id, name');
 
       if (error) throw error;
 
-      if (data) {
-        setProjects(prev => [data, ...prev]);
-        toast({
-          title: 'Succes',
-          description: 'Project succesvol toegevoegd'
-        });
-        setNewProject({
-          title: '',
-          description: '',
-          date: new Date().toISOString().split('T')[0],
-          hours_spent: '',
-          status: 'in-progress',
-          technician_id: user?.role === 'technician' ? user.id : '',
-          customer_id: ''
-        });
-        setSelectedImages([]);
-        setShowAddForm(false);
-      }
+      setCustomers(data || []);
     } catch (error) {
-      console.error('Error adding project:', error);
-      toast({
-        title: 'Fout',
-        description: 'Er is een fout opgetreden bij het toevoegen van het project',
-        variant: 'destructive'
-      });
+      console.error('Error fetching customers:', error);
     }
+  };
+
+  const fetchUsers = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id, username, fullName');
+
+      if (error) throw error;
+
+      setUsers(data || []);
+    } catch (error) {
+      console.error('Error fetching users:', error);
+    }
+  };
+
+  const handleOpen = () => {
+    setOpen(true);
+    setEditMode(false);
+    setSelectedProject(null);
+    setTitle('');
+    setDescription('');
+    setStatus('nieuw');
+    setStartDate(null);
+    setEndDate(null);
+    setCustomerId(null);
+    setAssignedUsers([]);
+    setNewImages([]);
+    setExistingImages([]);
   };
 
   const handleEdit = (project: Project) => {
-    if (!isAdmin && project.technician_id !== user?.id) {
-      toast({
-        title: 'Fout',
-        description: 'Je kunt alleen je eigen projecten bewerken',
-        variant: 'destructive'
-      });
-      return;
-    }
-    setEditingProject(project);
+    setEditMode(true);
+    setSelectedProject(project);
+    setTitle(project.title);
+    setDescription(project.description);
+    setStatus(project.status);
+    setStartDate(project.start_date);
+    setEndDate(project.end_date);
+    setCustomerId(project.customer_id);
+    setAssignedUsers(project.assigned_users || []);
+    setExistingImages(project.images || []);
+    setNewImages([]);
+    setOpen(true);
   };
 
-  const handleSaveEdit = async () => {
-    if (!editingProject) return;
+  const handleCreate = async () => {
+    try {
+      const { data: projectData, error: projectError } = await supabase
+        .from('projects')
+        .insert([
+          {
+            title,
+            description,
+            status,
+            start_date: startDate,
+            end_date: endDate,
+            customer_id: customerId,
+            assigned_users: assignedUsers,
+            images: [],
+          },
+        ])
+        .select()
+        .single();
+
+      if (projectError) throw projectError;
+
+      const uploadedImageUrls = await uploadProjectImages(newImages, projectData.id);
+
+      const { error: updateError } = await supabase
+        .from('projects')
+        .update({ images: uploadedImageUrls })
+        .eq('id', projectData.id);
+
+      if (updateError) throw updateError;
+
+      setProjects(prevProjects => [...prevProjects, { ...projectData, images: uploadedImageUrls }]);
+      setOpen(false);
+    } catch (error) {
+      console.error('Error creating project:', error);
+    }
+  };
+
+  const handleUpdate = async () => {
+    if (!selectedProject) return;
 
     try {
+      const uploadedImageUrls = await uploadProjectImages(newImages, selectedProject.id);
+
+      const updatedImages = [...(selectedProject.images || []), ...uploadedImageUrls];
+
       const { error } = await supabase
         .from('projects')
         .update({
-          title: editingProject.title,
-          description: editingProject.description,
-          date: editingProject.date,
-          hours_spent: editingProject.hours_spent,
-          status: editingProject.status
+          title,
+          description,
+          status,
+          start_date: startDate,
+          end_date: endDate,
+          customer_id: customerId,
+          assigned_users: assignedUsers,
+          images: updatedImages,
         })
-        .eq('id', editingProject.id);
+        .eq('id', selectedProject.id);
 
       if (error) throw error;
 
-      setProjects(prev =>
-        prev.map(p => p.id === editingProject.id ? editingProject : p)
+      setProjects(prevProjects =>
+        prevProjects.map(project =>
+          project.id === selectedProject.id
+            ? {
+                ...project,
+                title,
+                description,
+                status,
+                start_date: startDate,
+                end_date: endDate,
+                customer_id: customerId,
+                assigned_users: assignedUsers,
+                images: updatedImages,
+              }
+            : project
+        )
       );
-      setEditingProject(null);
-      toast({
-        title: 'Succes',
-        description: 'Project succesvol bijgewerkt'
-      });
+      setOpen(false);
     } catch (error) {
       console.error('Error updating project:', error);
-      toast({
-        title: 'Fout',
-        description: 'Er is een fout opgetreden bij het bijwerken van het project',
-        variant: 'destructive'
-      });
     }
   };
 
-  const handleDelete = async (projectId: string, project: Project) => {
-    if (!isAdmin && project.technician_id !== user?.id) {
-      toast({
-        title: 'Fout',
-        description: 'Je kunt alleen je eigen projecten verwijderen',
-        variant: 'destructive'
-      });
-      return;
-    }
-
+  const handleDelete = async (projectId: string) => {
     try {
-      const { error } = await supabase.from('projects').delete().eq('id', projectId);
+      const { error } = await supabase
+        .from('projects')
+        .delete()
+        .eq('id', projectId);
+
       if (error) throw error;
 
-      setProjects(prev => prev.filter(p => p.id !== projectId));
-      toast({
-        title: 'Succes',
-        description: 'Project succesvol verwijderd'
-      });
+      setProjects(prevProjects => prevProjects.filter(project => project.id !== projectId));
     } catch (error) {
       console.error('Error deleting project:', error);
-      toast({
-        title: 'Fout',
-        description: 'Er is een fout opgetreden bij het verwijderen van het project',
-        variant: 'destructive'
-      });
+    }
+  };
+
+  const handleImageDelete = async (imageUrl: string) => {
+    if (!selectedProject) return;
+  
+    try {
+      // Filter out the image URL to be deleted
+      const updatedImages = selectedProject.images ? selectedProject.images.filter(url => url !== imageUrl) : [];
+  
+      // Update the project in the database with the new image URLs
+      const { error } = await supabase
+        .from('projects')
+        .update({ images: updatedImages })
+        .eq('id', selectedProject.id);
+  
+      if (error) {
+        throw error;
+      }
+  
+      // Update the local state to reflect the changes
+      setProjects(prevProjects =>
+        prevProjects.map(project =>
+          project.id === selectedProject.id
+            ? { ...project, images: updatedImages }
+            : project
+        )
+      );
+  
+      // Update the existingImages state to reflect the changes in the UI
+      setExistingImages(updatedImages);
+  
+    } catch (error) {
+      console.error('Error deleting image:', error);
     }
   };
 
   if (loading) {
     return (
-      <div className="p-6 bg-gray-50 min-h-screen">
-        <div className="max-w-7xl mx-auto">
-          <div className="flex items-center justify-center h-64">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-red-600" />
-          </div>
+      <PageLayout title={isAdmin ? "Projecten" : "Mijn Projecten"} subtitle={isAdmin ? "Beheer alle projecten en hun status." : "Bekijk en beheer je toegewezen projecten."}>
+        <div className="flex items-center justify-center h-64">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-red-600" />
         </div>
-      </div>
+      </PageLayout>
     );
   }
 
   return (
-    <div className="p-6 bg-gray-50 min-h-screen">
-      <div className="max-w-7xl mx-auto">
-        <div className="mb-8 flex justify-between items-center">
-          <div>
-            <h1 className="text-3xl font-bold text-red-700 mb-2">
-              {isAdmin ? 'Project Beheer' : 'Mijn Projecten'}
-            </h1>
-            <p className="text-gray-600">
-              {isAdmin ? 'Beheer en volg alle projecten' : 'Bekijk en beheer jouw projecten'}
-            </p>
-          </div>
-          <Button
-            onClick={() => setShowAddForm(!showAddForm)}
-            className="bg-red-600 hover:bg-red-700 text-white"
-          >
-            <Plus className="h-4 w-4 mr-2" />
-            {showAddForm ? 'Annuleren' : 'Project Toevoegen'}
-          </Button>
-        </div>
-
-        {showAddForm && (
-          <Card className="bg-white mb-6">
-            <CardHeader>
-              <CardTitle className="text-lg font-semibold text-gray-900">Nieuw Project</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <form onSubmit={handleSubmit} className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="title">Titel *</Label>
-                    <Input
-                      id="title"
-                      value={newProject.title}
-                      onChange={(e) => setNewProject({ ...newProject, title: e.target.value })}
-                      required
-                      className="focus:ring-red-500 focus:border-red-500"
-                    />
-                  </div>
-                  {isAdmin && (
-                    <div className="space-y-2">
-                      <Label htmlFor="technician">Monteur *</Label>
-                      <Select
-                        value={newProject.technician_id}
-                        onValueChange={(value) => setNewProject({ ...newProject, technician_id: value })}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Selecteer monteur" />
+    <PageLayout 
+      title={isAdmin ? "Projecten" : "Mijn Projecten"} 
+      subtitle={isAdmin ? "Beheer alle projecten en hun status." : "Bekijk en beheer je toegewezen projecten."}
+    >
+      <Card className="mb-4 shadow-lg border-2 border-gray-200">
+        <CardContent className="p-4">
+          <div className="flex justify-between items-center">
+            <h2 className="text-lg font-semibold">
+              {isAdmin ? 'Projecten beheren' : 'Mijn projecten'}
+            </h2>
+            {isAdmin && (
+              <Dialog>
+                <DialogTrigger asChild>
+                  <Button onClick={handleOpen} className="bg-green-600 text-white hover:bg-green-700">
+                    <Plus className="h-4 w-4 mr-2" />
+                    Nieuw project
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="max-w-2xl">
+                  <DialogHeader>
+                    <DialogTitle>{editMode ? 'Project bewerken' : 'Nieuw project'}</DialogTitle>
+                  </DialogHeader>
+                  <div className="grid gap-4 py-4">
+                    <div className="grid grid-cols-4 items-center gap-4">
+                      <label htmlFor="title" className="text-right font-medium">
+                        Titel
+                      </label>
+                      <Input
+                        id="title"
+                        value={title}
+                        onChange={(e) => setTitle(e.target.value)}
+                        className="col-span-3"
+                      />
+                    </div>
+                    <div className="grid grid-cols-4 items-center gap-4">
+                      <label htmlFor="description" className="text-right font-medium">
+                        Beschrijving
+                      </label>
+                      <Textarea
+                        id="description"
+                        value={description}
+                        onChange={(e) => setDescription(e.target.value)}
+                        className="col-span-3"
+                      />
+                    </div>
+                    <div className="grid grid-cols-4 items-center gap-4">
+                      <label htmlFor="status" className="text-right font-medium">
+                        Status
+                      </label>
+                      <Select value={status} onValueChange={setStatus}>
+                        <SelectTrigger className="col-span-3">
+                          <SelectValue placeholder="Selecteer een status" />
                         </SelectTrigger>
                         <SelectContent>
-                          {technicians.map(tech => (
-                            <SelectItem key={tech.id} value={tech.id}>
-                              {tech.full_name}
+                          <SelectItem value="nieuw">Nieuw</SelectItem>
+                          <SelectItem value="bezig">Bezig</SelectItem>
+                          <SelectItem value="afgerond">Afgerond</SelectItem>
+                          <SelectItem value="geannuleerd">Geannuleerd</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="grid grid-cols-4 items-center gap-4">
+                      <label htmlFor="startDate" className="text-right font-medium">
+                        Startdatum
+                      </label>
+                      <Input
+                        type="date"
+                        id="startDate"
+                        value={startDate || ''}
+                        onChange={(e) => setStartDate(e.target.value)}
+                        className="col-span-3"
+                      />
+                    </div>
+                    <div className="grid grid-cols-4 items-center gap-4">
+                      <label htmlFor="endDate" className="text-right font-medium">
+                        Einddatum
+                      </label>
+                      <Input
+                        type="date"
+                        id="endDate"
+                        value={endDate || ''}
+                        onChange={(e) => setEndDate(e.target.value)}
+                        className="col-span-3"
+                      />
+                    </div>
+                    <div className="grid grid-cols-4 items-center gap-4">
+                      <label htmlFor="customerId" className="text-right font-medium">
+                        Klant
+                      </label>
+                      <Select value={customerId || ''} onValueChange={setCustomerId}>
+                        <SelectTrigger className="col-span-3">
+                          <SelectValue placeholder="Selecteer een klant" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {customers.map((customer) => (
+                            <SelectItem key={customer.id} value={customer.id}>
+                              {customer.name}
                             </SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
                     </div>
-                  )}
-                  <div className="space-y-2">
-                    <Label htmlFor="customer">Klant *</Label>
-                    <Select
-                      value={newProject.customer_id}
-                      onValueChange={(value) => setNewProject({ ...newProject, customer_id: value })}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Selecteer klant" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {customers.map(customer => (
-                          <SelectItem key={customer.id} value={customer.id}>
-                            {customer.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="date">Datum *</Label>
-                    <Input
-                      id="date"
-                      type="date"
-                      value={newProject.date}
-                      onChange={(e) => setNewProject({ ...newProject, date: e.target.value })}
-                      required
-                      className="focus:ring-red-500 focus:border-red-500"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="hours">Bestede Uren *</Label>
-                    <Input
-                      id="hours"
-                      type="number"
-                      step="0.5"
-                      min="0.5"
-                      value={newProject.hours_spent}
-                      onChange={(e) => setNewProject({ ...newProject, hours_spent: e.target.value })}
-                      required
-                      className="focus:ring-red-500 focus:border-red-500"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="status">Status</Label>
-                    <Select
-                      value={newProject.status}
-                      onValueChange={(value) => setNewProject({ ...newProject, status: value })}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="in-progress">In Uitvoering</SelectItem>
-                        <SelectItem value="completed">Afgerond</SelectItem>
-                        <SelectItem value="on-hold">On Hold</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="description">Beschrijving</Label>
-                  <Textarea
-                    id="description"
-                    value={newProject.description}
-                    onChange={(e) => setNewProject({ ...newProject, description: e.target.value })}
-                    placeholder="Beschrijf het project..."
-                    className="focus:ring-red-500 focus:border-red-500"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="images">Afbeeldingen</Label>
-                  <Input
-                    id="images"
-                    type="file"
-                    multiple
-                    accept="image/*"
-                    onChange={(e) => setSelectedImages(Array.from(e.target.files || []))}
-                    className="focus:ring-red-500 focus:border-red-500"
-                  />
-                  {selectedImages.length > 0 && (
-                    <p className="text-sm text-gray-600">
-                      {selectedImages.length} bestand(en) geselecteerd
-                    </p>
-                  )}
-                </div>
-                <Button type="submit" className="bg-red-600 hover:bg-red-700 text-white">
-                  Project Toevoegen
-                </Button>
-              </form>
-            </CardContent>
-          </Card>
-        )}
-
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {projects.map((project) => (
-            <Card key={project.id} className="bg-white hover:shadow-lg transition-shadow">
-              <CardHeader className="pb-3">
-                <div className="flex justify-between items-start">
-                  <div className="flex-1">
-                    {editingProject?.id === project.id ? (
-                      <Input
-                        value={editingProject.title}
-                        onChange={(e) => setEditingProject({ ...editingProject, title: e.target.value })}
-                        className="font-semibold text-lg mb-2"
-                      />
-                    ) : (
-                      <CardTitle className="text-lg font-semibold text-gray-900 mb-2">
-                        {project.title}
-                      </CardTitle>
-                    )}
-                    <div className="flex items-center text-sm text-gray-600 mb-1">
-                      <Building2 className="h-4 w-4 mr-1" />
-                      {project.customers?.name || 'Geen klant'}
+                    <div className="grid grid-cols-4 items-center gap-4">
+                      <label htmlFor="assignedUsers" className="text-right font-medium">
+                        Toegewezen gebruikers
+                      </label>
+                      <Select
+                        multiple
+                        value={assignedUsers}
+                        onValueChange={(value) => setAssignedUsers(value as string[])}
+                      >
+                        <SelectTrigger className="col-span-3">
+                          <SelectValue placeholder="Selecteer gebruikers" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {users.map((user) => (
+                            <SelectItem key={user.id} value={user.id}>
+                              {user.fullName} ({user.username})
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </div>
-                    {isAdmin && (
-                      <div className="flex items-center text-sm text-gray-600 mb-1">
-                        <User className="h-4 w-4 mr-1" />
-                        {project.technician?.full_name || 'Geen monteur'}
+                    <div className="grid grid-cols-4 items-center gap-4">
+                      <label htmlFor="images" className="text-right font-medium">
+                        Nieuwe afbeeldingen
+                      </label>
+                      <Input
+                        type="file"
+                        id="images"
+                        multiple
+                        onChange={(e) => {
+                          if (e.target.files) {
+                            setNewImages(Array.from(e.target.files));
+                          }
+                        }}
+                        className="col-span-3"
+                      />
+                    </div>
+                    {editMode && (
+                      <div className="grid grid-cols-4 items-start gap-4">
+                        <label className="text-right font-medium">
+                          Bestaande afbeeldingen
+                        </label>
+                        <div className="col-span-3 flex flex-wrap gap-2">
+                          {existingImages.map((url, index) => (
+                            <div key={index} className="relative">
+                              <img src={url} alt={`Project Image ${index}`} className="w-32 h-24 object-cover rounded-md" />
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="absolute top-0 right-0 bg-black/50 text-white hover:bg-black/80"
+                                onClick={() => handleImageDelete(url)}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          ))}
+                        </div>
                       </div>
                     )}
-                    <div className="flex items-center text-sm text-gray-600 mb-1">
-                      <Calendar className="h-4 w-4 mr-1" />
-                      {new Date(project.date).toLocaleDateString('nl-NL')}
-                    </div>
-                    <div className="flex items-center text-sm text-gray-600">
-                      <Clock className="h-4 w-4 mr-1" />
-                      {project.hours_spent} uur
-                    </div>
                   </div>
+                  <div className="flex justify-end">
+                    <Button type="button" variant="secondary" onClick={() => setOpen(false)}>
+                      Annuleren
+                    </Button>
+                    <Button type="submit" onClick={editMode ? handleUpdate : handleCreate} className="ml-2">
+                      {editMode ? 'Update project' : 'Maak project'}
+                    </Button>
+                  </div>
+                </DialogContent>
+              </Dialog>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {projects.map((project) => (
+          <Card key={project.id} className="shadow-md border-2 border-gray-200">
+            <CardHeader>
+              <div className="flex items-start justify-between">
+                <CardTitle className="text-lg font-semibold">{project.title}</CardTitle>
+                {isAdmin && (
+                  <Button variant="ghost" size="icon" onClick={() => handleEdit(project)}>
+                    <Edit className="h-4 w-4" />
+                  </Button>
+                )}
+              </div>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-gray-600">{project.description}</p>
+              <div className="mt-2 space-y-1">
+                <div className="flex items-center space-x-2">
+                  <Calendar className="h-4 w-4 text-gray-500" />
+                  <span className="text-xs text-gray-500">Startdatum:</span>
+                  <span className="text-sm font-medium">{project.start_date || 'Niet ingesteld'}</span>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <Calendar className="h-4 w-4 text-gray-500" />
+                  <span className="text-xs text-gray-500">Einddatum:</span>
+                  <span className="text-sm font-medium">{project.end_date || 'Niet ingesteld'}</span>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <Building className="h-4 w-4 text-gray-500" />
+                  <span className="text-xs text-gray-500">Klant:</span>
+                  <span className="text-sm font-medium">
+                    {customers.find(customer => customer.id === project.customer_id)?.name || 'Niet toegewezen'}
+                  </span>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <User className="h-4 w-4 text-gray-500" />
+                  <span className="text-xs text-gray-500">Toegewezen gebruikers:</span>
                   <div className="flex space-x-1">
-                    {editingProject?.id === project.id ? (
-                      <>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={handleSaveEdit}
-                          className="h-8 w-8 p-0 border-green-300 text-green-600 hover:bg-green-50"
-                        >
-                          <Save className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => setEditingProject(null)}
-                          className="h-8 w-8 p-0"
-                        >
-                          <X className="h-4 w-4" />
-                        </Button>
-                      </>
-                    ) : (
-                      <>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => handleEdit(project)}
-                          className="h-8 w-8 p-0"
-                        >
-                          <Edit2 className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => handleDelete(project.id, project)}
-                          className="h-8 w-8 p-0 border-red-300 text-red-600 hover:bg-red-50"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </>
-                    )}
+                    {(project.assigned_users || []).map(userId => {
+                      const user = users.find(user => user.id === userId);
+                      return (
+                        user ? (
+                          <Badge key={userId} variant="secondary">
+                            {user.fullName}
+                          </Badge>
+                        ) : null
+                      );
+                    })}
                   </div>
                 </div>
-              </CardHeader>
-              <CardContent className="pt-0">
-                {editingProject?.id === project.id ? (
-                  <div className="space-y-3">
-                    <Textarea
-                      value={editingProject.description || ''}
-                      onChange={(e) => setEditingProject({ ...editingProject, description: e.target.value })}
-                      placeholder="Beschrijving..."
-                      className="min-h-[60px]"
-                    />
-                    <Input
-                      type="date"
-                      value={editingProject.date}
-                      onChange={(e) => setEditingProject({ ...editingProject, date: e.target.value })}
-                    />
-                    <Input
-                      type="number"
-                      step="0.5"
-                      min="0.5"
-                      value={editingProject.hours_spent}
-                      onChange={(e) => setEditingProject({ ...editingProject, hours_spent: parseFloat(e.target.value) })}
-                    />
-                    <Select
-                      value={editingProject.status}
-                      onValueChange={(value) => setEditingProject({ ...editingProject, status: value })}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="in-progress">In Uitvoering</SelectItem>
-                        <SelectItem value="completed">Afgerond</SelectItem>
-                        <SelectItem value="on-hold">On Hold</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                ) : (
-                  <>
-                    {project.description && (
-                      <p className="text-gray-700 text-sm mb-3 line-clamp-3">
-                        {project.description}
-                      </p>
-                    )}
-                    <div className="flex justify-between items-center">
-                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                        project.status === 'completed'
-                          ? 'bg-green-100 text-green-800'
-                          : project.status === 'in-progress'
-                          ? 'bg-blue-100 text-blue-800'
-                          : 'bg-yellow-100 text-yellow-800'
-                      }`}>
-                        {project.status === 'completed' ? 'Afgerond' : 
-                         project.status === 'in-progress' ? 'In Uitvoering' : 'On Hold'}
-                      </span>
-                      {project.images && project.images.length > 0 && (
-                        <div className="flex items-center text-sm text-gray-500">
-                          <Eye className="h-4 w-4 mr-1" />
-                          {project.images.length} foto's
-                        </div>
-                      )}
-                    </div>
-                  </>
-                )}
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-
-        {projects.length === 0 && (
-          <Card className="bg-white">
-            <CardContent className="p-8 text-center">
-              <div className="text-gray-500 mb-4">
-                <Calendar className="h-12 w-12 mx-auto mb-2" />
-                <h3 className="text-lg font-semibold">Geen projecten gevonden</h3>
-                <p>Er zijn nog geen projecten toegevoegd.</p>
+                <div className="flex items-center space-x-2">
+                  <FileText className="h-4 w-4 text-gray-500" />
+                  <span className="text-xs text-gray-500">Status:</span>
+                  <span className="text-sm font-medium">{project.status}</span>
+                </div>
               </div>
+              {project.images && project.images.length > 0 && (
+                <div className="mt-4">
+                  <h4 className="text-sm font-semibold mb-2">Afbeeldingen:</h4>
+                  <div className="flex flex-wrap gap-2">
+                    {project.images.map((url, index) => (
+                      <img key={index} src={url} alt={`Project Image ${index}`} className="w-24 h-20 object-cover rounded-md" />
+                    ))}
+                  </div>
+                </div>
+              )}
+              {isAdmin && (
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  className="mt-4 w-full"
+                  onClick={() => handleDelete(project.id)}
+                >
+                  Verwijder project
+                </Button>
+              )}
             </CardContent>
           </Card>
-        )}
+        ))}
       </div>
-    </div>
+    </PageLayout>
   );
 };
 
