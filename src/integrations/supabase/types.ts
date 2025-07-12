@@ -309,6 +309,8 @@ export type Database = {
           description: string | null
           id: string
           image_url: string | null
+          Location: string | null
+          Magazine_name: string | null
           part_name: string
           part_number: string
           price: number | null
@@ -322,6 +324,8 @@ export type Database = {
           description?: string | null
           id?: string
           image_url?: string | null
+          Location?: string | null
+          Magazine_name?: string | null
           part_name: string
           part_number: string
           price?: number | null
@@ -335,6 +339,8 @@ export type Database = {
           description?: string | null
           id?: string
           image_url?: string | null
+          Location?: string | null
+          Magazine_name?: string | null
           part_name?: string
           part_number?: string
           price?: number | null

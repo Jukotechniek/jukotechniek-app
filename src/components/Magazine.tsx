@@ -40,10 +40,20 @@ const Magazine: React.FC = () => {
   
   const itemsPerPage = 20;
 
+  // Debounced search effect
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      setCurrentPage(1);
+      fetchArticles();
+    }, 500); // Wait 500ms after user stops typing
+
+    return () => clearTimeout(timeoutId);
+  }, [searchTerm, selectedCategory]);
+
   useEffect(() => {
     fetchCategories();
     fetchArticles();
-  }, [currentPage, searchTerm, selectedCategory]);
+  }, [currentPage]);
 
   const fetchCategories = async () => {
     try {
@@ -85,7 +95,14 @@ const Magazine: React.FC = () => {
 
       if (error) throw error;
 
-      setArticles(data || []);
+      // Map the data to include the missing properties with fallback values
+      const mappedData: MagazineArticle[] = (data || []).map(item => ({
+        ...item,
+        location: item.location || null,
+        magazine_name: item.magazine_name || null,
+      }));
+
+      setArticles(mappedData);
       setTotalCount(count || 0);
       setTotalPages(Math.ceil((count || 0) / itemsPerPage));
     } catch (error) {
@@ -97,15 +114,15 @@ const Magazine: React.FC = () => {
 
   const handleSearch = (value: string) => {
     setSearchTerm(value);
-    setCurrentPage(1);
+    // Don't call fetchArticles here - let the debounced effect handle it
   };
 
   const handleCategoryChange = (value: string) => {
     setSelectedCategory(value);
-    setCurrentPage(1);
+    // Don't call fetchArticles here - let the debounced effect handle it
   };
 
-  if (loading) {
+  if (loading && articles.length === 0) {
     return (
       <PageLayout title="Magazijn" subtitle="Onderdelen Catalogus">
         <div className="flex items-center justify-center h-64">

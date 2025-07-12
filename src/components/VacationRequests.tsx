@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -6,6 +7,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { VacationRequest } from '@/types/vacation';
+import { PageLayout } from '@/components/ui/page-layout';
 
 const VacationRequests: React.FC = () => {
   const { user } = useAuth();
@@ -81,8 +83,11 @@ const VacationRequests: React.FC = () => {
   };
 
   return (
-    <div className="p-6 bg-gray-50 min-h-screen">
-      <div className="max-w-3xl mx-auto space-y-6">
+    <PageLayout 
+      title="Vakantie Aanvragen" 
+      subtitle="Beheer vakantiedagen en vrije tijd aanvragen."
+    >
+      <div className="max-w-4xl mx-auto space-y-6">
         {/* Vakantie aanvragen: multiple-dag selectie */}
         <Card>
           <CardHeader>
@@ -94,10 +99,11 @@ const VacationRequests: React.FC = () => {
               selected={selectedDates}
               onSelect={setSelectedDates}
               disabled={loading}
+              className="rounded-md border"
             />
             <Button
               onClick={submitVacation}
-              className="mt-4 bg-green-600 hover:bg-green-700 text-white"
+              className="mt-4 bg-red-600 hover:bg-red-700 text-white"
               disabled={loading || selectedDates.length === 0}
             >
               Voeg vakantie toe
@@ -112,28 +118,57 @@ const VacationRequests: React.FC = () => {
           </CardHeader>
           <CardContent>
             {loading ? (
-              <p>Loading...</p>
+              <div className="flex items-center justify-center h-32">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-red-600" />
+              </div>
             ) : (
-              <ul className="space-y-2">
+              <div className="space-y-3">
                 {requests.map(r => (
-                  <li key={r.id} className="flex justify-between border-b pb-1">
-                    <span>
-                      {r.technicianName} {r.startDate} - {r.endDate} ({r.status})
-                    </span>
-                    {isAdmin && r.status === 'pending' && (
-                      <span className="space-x-1">
-                        <Button size="sm" onClick={() => updateStatus(r.id, 'approved')}>Akkoord</Button>
-                        <Button size="sm" variant="outline" onClick={() => updateStatus(r.id, 'denied')}>Weiger</Button>
+                  <div key={r.id} className="flex flex-col md:flex-row md:justify-between border-b pb-3 last:border-b-0">
+                    <div className="mb-2 md:mb-0">
+                      <span className="font-medium">{r.technicianName}</span>
+                      <div className="text-sm text-gray-600">
+                        {r.startDate} - {r.endDate}
+                      </div>
+                      <span className={`inline-block px-2 py-1 text-xs rounded-full ${
+                        r.status === 'approved' ? 'bg-green-100 text-green-800' :
+                        r.status === 'denied' ? 'bg-red-100 text-red-800' :
+                        'bg-yellow-100 text-yellow-800'
+                      }`}>
+                        {r.status === 'approved' ? 'Goedgekeurd' : 
+                         r.status === 'denied' ? 'Afgewezen' : 'In behandeling'}
                       </span>
+                    </div>
+                    {isAdmin && r.status === 'pending' && (
+                      <div className="flex space-x-2">
+                        <Button 
+                          size="sm" 
+                          onClick={() => updateStatus(r.id, 'approved')}
+                          className="bg-green-600 hover:bg-green-700 text-white"
+                        >
+                          Akkoord
+                        </Button>
+                        <Button 
+                          size="sm" 
+                          variant="outline" 
+                          onClick={() => updateStatus(r.id, 'denied')}
+                          className="border-red-600 text-red-600 hover:bg-red-50"
+                        >
+                          Weiger
+                        </Button>
+                      </div>
                     )}
-                  </li>
+                  </div>
                 ))}
-              </ul>
+                {requests.length === 0 && (
+                  <p className="text-gray-500 text-center py-8">Geen vakantieaanvragen gevonden.</p>
+                )}
+              </div>
             )}
           </CardContent>
         </Card>
       </div>
-    </div>
+    </PageLayout>
   );
 };
 
