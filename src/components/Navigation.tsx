@@ -1,4 +1,3 @@
-
 import { useAuth } from '@/contexts/AuthContext';
 import {
   BarChart3,
@@ -64,7 +63,7 @@ const Navigation: React.FC<NavigationProps> = ({ activeTab, onTabChange }) => {
   ];
 
   const tabs = isAdmin ? adminTabs : isOpdrachtgever ? opdrachtgeverTabs : technicianTabs;
-  const primaryTabIds = ['dashboard', 'chatbot', 'hours', 'projects', 'magazine', 'billing', 'verification', 'schedule'];
+  const primaryTabIds = ['dashboard', 'chatbot', 'hours', 'projects', 'magazine', 'verification', 'schedule'];
   const visibleTabs = tabs.filter(t => primaryTabIds.includes(t.id));
   const dropdownTabs = tabs.filter(t => !primaryTabIds.includes(t.id));
 
@@ -80,22 +79,27 @@ const Navigation: React.FC<NavigationProps> = ({ activeTab, onTabChange }) => {
       <div className="max-w-7xl mx-auto px-4">
         <div className="flex items-center justify-between h-12">
           <div className="flex items-center">
-            <div className="flex items-center">
-              <img 
-                src="/logo_WEB.png" 
-                alt="JukoTechniek" 
-                className="h-8 w-auto"
-                onError={(e) => {
-                  const target = e.currentTarget as HTMLImageElement;
-                  target.style.display = 'none';
-                  const nextElement = target.nextElementSibling as HTMLElement;
-                  if (nextElement) {
-                    nextElement.style.display = 'block';
-                  }
-                }}
-              />
-              <h1 className="text-xl font-bold hidden">JukoTechniek</h1>
-              <div className="w-1 h-6 bg-red-600 ml-2"></div>
+            {/* Logo wrapper - altijd hoogte h-12 en items centreren */}
+            <div className="flex items-center h-12">
+              <div className="flex items-center h-12 w-[64px] justify-center">
+                <img 
+                  src="/logo_WEB.png" 
+                  alt="JukoTechniek" 
+                  className="object-contain h-10 w-auto"
+                  style={{ maxHeight: 40, maxWidth: 120 }}
+                  onError={(e) => {
+                    const target = e.currentTarget as HTMLImageElement;
+                    target.style.display = 'none';
+                    const nextElement = target.nextElementSibling as HTMLElement;
+                    if (nextElement) {
+                      nextElement.style.display = 'block';
+                    }
+                  }}
+                />
+                {/* Eventueel fallback tekstlogo */}
+                <h1 className="text-xl font-bold hidden">JukoTechniek</h1>
+              </div>
+              {/* Hier stond het rode streepje, deze is nu verwijderd */}
             </div>
             
             <div className="hidden md:flex space-x-1 ml-8">
