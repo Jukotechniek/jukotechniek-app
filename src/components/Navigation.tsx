@@ -72,7 +72,7 @@ const Navigation: React.FC<NavigationProps> = ({ activeTab, onTabChange }) => {
     { id: 'hours', label: 'Uren', icon: Clock },
     { id: 'projects', label: 'Project', icon: Briefcase },
     { id: 'magazine', label: 'Magazijn', icon: BookOpen },
-    { id: 'chatbot', label: 'AI', icon: Bot }
+    { id: 'chatbot', label: 'Chatbot', icon: Bot }
   ];
 
   return (
