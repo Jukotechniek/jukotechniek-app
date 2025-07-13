@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { AuthProvider, useAuth } from '@/contexts/AuthContext';
 import LoginForm from '@/components/LoginForm';
@@ -18,6 +17,29 @@ import Magazine from '@/components/Magazine';
 const AppContent: React.FC = () => {
   const { isAuthenticated, loading } = useAuth();
   const [activeTab, setActiveTab] = useState('dashboard');
+
+  // Fullscreen aan bij login, uit bij uitloggen
+  useEffect(() => {
+    let listener: (() => void) | null = null;
+
+    if (isAuthenticated) {
+      listener = () => {
+        if (!document.fullscreenElement && document.documentElement.requestFullscreen) {
+          document.documentElement.requestFullscreen().catch(() => {});
+        }
+      };
+      document.addEventListener('click', listener, { once: true });
+    } else {
+      // Bij uitloggen: exit fullscreen als het aan staat
+      if (document.fullscreenElement && document.exitFullscreen) {
+        document.exitFullscreen().catch(() => {});
+      }
+    }
+
+    return () => {
+      if (listener) document.removeEventListener('click', listener);
+    };
+  }, [isAuthenticated]);
 
   if (loading) {
     return (
@@ -71,21 +93,10 @@ const AppContent: React.FC = () => {
   );
 };
 
-const Index: React.FC = () => {
-  useEffect(() => {
-    const handleInteraction = () => {
-      if (!document.fullscreenElement && document.documentElement.requestFullscreen) {
-        document.documentElement.requestFullscreen().catch(() => {});
-      }
-    };
-    document.addEventListener('click', handleInteraction, { once: true });
-    return () => document.removeEventListener('click', handleInteraction);
-  }, []);
-  return (
-    <AuthProvider>
-      <AppContent />
-    </AuthProvider>
-  );
-};
+const Index: React.FC = () => (
+  <AuthProvider>
+    <AppContent />
+  </AuthProvider>
+);
 
 export default Index;
