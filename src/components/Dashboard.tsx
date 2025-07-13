@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
@@ -16,51 +17,45 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { PageLayout } from '@/components/ui/page-layout';
 
-interface Project {
+interface DashboardProject {
   id: string;
-  name: string;
+  title: string;
   description: string | null;
   status: string;
-  start_date: string | null;
-  end_date: string | null;
+  date: string;
   created_at: string;
   updated_at: string;
 }
 
-interface WorkEntry {
+interface DashboardWorkEntry {
   id: string;
-  technicianId: string;
-  technicianName: string;
-  customerId: string;
-  customerName: string;
+  technician_id: string;
+  customer_id: string;
   date: string;
-  hoursWorked: number;
-  isManualEntry: boolean;
-  description?: string;
-  travelExpenseToTechnician?: number;
-  travelExpenseFromClient?: number;
-  regularHours: number;
-  overtimeHours: number;
-  weekendHours: number;
-  sundayHours: number;
-  isWeekend: boolean;
-  isSunday: boolean;
-  createdAt: string;
-  createdBy: string;
-  startTime?: string;
-  endTime?: string;
+  hours_worked: number;
+  description: string;
+  overtime_hours: number;
+  weekend_hours: number;
+  sunday_hours: number;
+  created_at: string;
+}
+
+interface TechnicianHoursData {
+  name: string;
+  hours: number;
+  totalHours: number;
 }
 
 const Dashboard = () => {
   const { user } = useAuth();
   const isAdmin = user?.role === 'admin';
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [workEntries, setWorkEntries] = useState<WorkEntry[]>([]);
+  const [projects, setProjects] = useState<DashboardProject[]>([]);
+  const [workEntries, setWorkEntries] = useState<DashboardWorkEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [totalProjects, setTotalProjects] = useState(0);
   const [completedProjects, setCompletedProjects] = useState(0);
   const [totalHoursWorked, setTotalHoursWorked] = useState(0);
-  const [overtimeData, setOvertimeData] = useState([]);
+  const [technicianHoursData, setTechnicianHoursData] = useState<TechnicianHoursData[]>([]);
 
   useEffect(() => {
     fetchDashboardData();
@@ -80,37 +75,44 @@ const Dashboard = () => {
       setTotalProjects(projectsData?.length || 0);
       setCompletedProjects(projectsData?.filter(project => project.status === 'completed').length || 0);
 
-      // Fetch work entries
-      const { data: workEntriesData, error: workEntriesError } = await supabase
-        .from('work_entries')
+      // Fetch work hours
+      const { data: workHoursData, error: workHoursError } = await supabase
+        .from('work_hours')
         .select('*')
         .limit(5);
 
-      if (workEntriesError) throw workEntriesError;
-      setWorkEntries(workEntriesData || []);
+      if (workHoursError) throw workHoursError;
+      setWorkEntries(workHoursData || []);
 
       // Calculate total hours worked
-      const totalHours = workEntriesData?.reduce((acc, entry) => acc + entry.hoursWorked, 0) || 0;
+      const totalHours = workHoursData?.reduce((acc, entry) => acc + entry.hours_worked, 0) || 0;
       setTotalHoursWorked(totalHours);
 
-      // Calculate overtime per technician
-      const { data: allWorkEntries, error: allWorkEntriesError } = await supabase
-        .from('work_entries')
-        .select('*');
+      // Calculate hours per technician for charts
+      const { data: allWorkHours, error: allWorkHoursError } = await supabase
+        .from('work_hours')
+        .select(`
+          *,
+          profiles!work_hours_technician_id_fkey(full_name)
+        `);
 
-      if (allWorkEntriesError) throw allWorkEntriesError;
+      if (allWorkHoursError) throw allWorkHoursError;
 
-      const overtimeByTechnician = allWorkEntries?.reduce((acc, entry) => {
-        const technicianName = entry.technicianName;
+      const hoursByTechnician = allWorkHours?.reduce((acc, entry) => {
+        const technicianName = entry.profiles?.full_name || 'Unknown';
         if (!acc[technicianName]) {
-          acc[technicianName] = { name: technicianName, hours: 0, totalHours: 0 };
+          acc[technicianName] = { 
+            name: technicianName, 
+            hours: 0, 
+            totalHours: 0 
+          };
         }
-        acc[technicianName].hours += entry.overtimeHours + entry.weekendHours + entry.sundayHours;
-        acc[technicianName].totalHours += entry.hoursWorked;
+        acc[technicianName].hours += (entry.overtime_hours || 0) + (entry.weekend_hours || 0) + (entry.sunday_hours || 0);
+        acc[technicianName].totalHours += entry.hours_worked;
         return acc;
       }, {});
 
-      setOvertimeData(Object.values(overtimeByTechnician));
+      setTechnicianHoursData(Object.values(hoursByTechnician || {}));
 
     } catch (error) {
       console.error('Error fetching dashboard data:', error);
@@ -195,7 +197,7 @@ const Dashboard = () => {
             </CardHeader>
             <CardContent>
               <ResponsiveContainer width="100%" height={300}>
-                <BarChart data={overtimeData}>
+                <BarChart data={technicianHoursData}>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="name" />
                   <YAxis />
@@ -213,7 +215,7 @@ const Dashboard = () => {
             </CardHeader>
             <CardContent>
               <ResponsiveContainer width="100%" height={300}>
-                <BarChart data={overtimeData}>
+                <BarChart data={technicianHoursData}>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="name" />
                   <YAxis />
@@ -259,7 +261,7 @@ const Dashboard = () => {
                       <div className="flex items-center">
                         <div className="ml-3">
                           <p className="text-gray-900 whitespace-no-wrap">
-                            {project.name}
+                            {project.title}
                           </p>
                         </div>
                       </div>
@@ -269,7 +271,7 @@ const Dashboard = () => {
                     </td>
                     <td className="px-5 py-5 border-b border-gray-200 bg-white text-sm">
                       <p className="text-gray-900 whitespace-no-wrap">
-                        {project.start_date ? new Date(project.start_date).toLocaleDateString() : 'N/A'}
+                        {new Date(project.date).toLocaleDateString()}
                       </p>
                     </td>
                     <td className="px-5 py-5 border-b border-gray-200 bg-white text-sm">
@@ -296,7 +298,7 @@ const Dashboard = () => {
               <thead>
                 <tr>
                   <th className="px-5 py-3 border-b-2 border-gray-200 bg-gray-100 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                    Monteur
+                    Monteur ID
                   </th>
                   <th className="px-5 py-3 border-b-2 border-gray-200 bg-gray-100 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
                     Datum
@@ -316,7 +318,7 @@ const Dashboard = () => {
                       <div className="flex items-center">
                         <div className="ml-3">
                           <p className="text-gray-900 whitespace-no-wrap">
-                            {entry.technicianName}
+                            {entry.technician_id}
                           </p>
                         </div>
                       </div>
@@ -327,7 +329,7 @@ const Dashboard = () => {
                       </p>
                     </td>
                     <td className="px-5 py-5 border-b border-gray-200 bg-white text-sm">
-                      <p className="text-gray-900 whitespace-no-wrap">{entry.hoursWorked}</p>
+                      <p className="text-gray-900 whitespace-no-wrap">{entry.hours_worked}</p>
                     </td>
                     <td className="px-5 py-5 border-b border-gray-200 bg-white text-sm">
                       <p className="text-gray-900 whitespace-no-wrap">{entry.description}</p>
