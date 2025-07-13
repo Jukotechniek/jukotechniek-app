@@ -125,17 +125,27 @@ const TravelExpenseManagement = () => {
 
   try {
     // 1) Upsert in customer_technician_rates
-    const { error: ctrError } = await supabase
-      .from('customer_technician_rates')
-      .upsert([{
-          id: editingRate?.id,
-          customer_id: newRate.customerId,
-        technician_id: newRate.technicianId,
-        travel_expense_to_technician: parseFloat(newRate.toTechnician) || 0,
-        travel_expense_from_client: parseFloat(newRate.fromClient) || 0,
-      }], {
-        onConflict: 'customer_id,technician_id'
-      });
+  const upsertData = editingRate?.id
+  ? {
+      id: editingRate.id,
+      customer_id: newRate.customerId,
+      technician_id: newRate.technicianId,
+      travel_expense_to_technician: parseFloat(newRate.toTechnician) || 0,
+      travel_expense_from_client: parseFloat(newRate.fromClient) || 0,
+    }
+  : {
+      customer_id: newRate.customerId,
+      technician_id: newRate.technicianId,
+      travel_expense_to_technician: parseFloat(newRate.toTechnician) || 0,
+      travel_expense_from_client: parseFloat(newRate.fromClient) || 0,
+    };
+
+const { error: ctrError } = await supabase
+  .from('customer_technician_rates')
+  .upsert([upsertData], {
+    onConflict: 'customer_id,technician_id'
+  });
+
 
     if (ctrError) {
       toast({ title: 'Error', description: ctrError.message, variant: 'destructive' });
