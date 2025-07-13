@@ -52,7 +52,6 @@ const Dashboard = () => {
   const [projects, setProjects] = useState<DashboardProject[]>([]);
   const [workEntries, setWorkEntries] = useState<DashboardWorkEntry[]>([]);
   const [loading, setLoading] = useState(true);
-  const [totalProjects, setTotalProjects] = useState(0);
   const [completedProjects, setCompletedProjects] = useState(0);
   const [totalHoursWorked, setTotalHoursWorked] = useState(0);
   const [technicianHoursData, setTechnicianHoursData] = useState<TechnicianHoursData[]>([]);
@@ -72,7 +71,6 @@ const Dashboard = () => {
 
       if (projectsError) throw projectsError;
       setProjects(projectsData || []);
-      setTotalProjects(projectsData?.length || 0);
       setCompletedProjects(projectsData?.filter(project => project.status === 'completed').length || 0);
 
       // Fetch work hours
@@ -136,20 +134,8 @@ const Dashboard = () => {
       title="Dashboard" 
       subtitle="Overzicht van projecten, werkuren en team prestaties."
     >
-      {/* Stats Cards */}
+      {/* Stats Cards - Only showing completed projects */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
-        <Card className="bg-white shadow-lg border-2 border-gray-200">
-          <CardHeader>
-            <CardTitle className="text-lg font-semibold text-gray-900">
-              Projecten
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-4xl font-bold text-red-600">{totalProjects}</div>
-            <p className="text-sm text-gray-500">Totaal aantal projecten</p>
-          </CardContent>
-        </Card>
-
         <Card className="bg-white shadow-lg border-2 border-gray-200">
           <CardHeader>
             <CardTitle className="text-lg font-semibold text-gray-900">
@@ -190,10 +176,10 @@ const Dashboard = () => {
       {/* Admin Dashboard */}
       {isAdmin && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-          {/* Uren per Monteur Chart */}
+          {/* Overuren per Monteur Chart */}
           <Card className="bg-white shadow-lg border-2 border-gray-200">
             <CardHeader>
-              <CardTitle className="text-lg font-semibold text-red-600">Uren per Monteur</CardTitle>
+              <CardTitle className="text-lg font-semibold text-red-600">Overuren per Monteur</CardTitle>
             </CardHeader>
             <CardContent>
               <ResponsiveContainer width="100%" height={300}>
@@ -208,21 +194,31 @@ const Dashboard = () => {
             </CardContent>
           </Card>
 
-          {/* 100% Uren per Monteur */}
+          {/* Team Performance */}
           <Card className="bg-white shadow-lg border-2 border-gray-200">
             <CardHeader>
-              <CardTitle className="text-lg font-semibold text-red-600">100% Uren per Monteur</CardTitle>
+              <CardTitle className="text-lg font-semibold text-red-600">Team Prestaties</CardTitle>
             </CardHeader>
             <CardContent>
-              <ResponsiveContainer width="100%" height={300}>
-                <BarChart data={technicianHoursData}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="name" />
-                  <YAxis />
-                  <Tooltip />
-                  <Bar dataKey="totalHours" fill="#059669" />
-                </BarChart>
-              </ResponsiveContainer>
+              <div className="space-y-4">
+                <div className="flex justify-between items-center">
+                  <span className="text-sm font-medium">Projecten voltooiing</span>
+                  <span className="text-sm text-gray-500">85%</span>
+                </div>
+                <Progress value={85} />
+                
+                <div className="flex justify-between items-center">
+                  <span className="text-sm font-medium">Klant tevredenheid</span>
+                  <span className="text-sm text-gray-500">92%</span>
+                </div>
+                <Progress value={92} />
+                
+                <div className="flex justify-between items-center">
+                  <span className="text-sm font-medium">Efficiency</span>
+                  <span className="text-sm text-gray-500">78%</span>
+                </div>
+                <Progress value={78} />
+              </div>
             </CardContent>
           </Card>
         </div>
