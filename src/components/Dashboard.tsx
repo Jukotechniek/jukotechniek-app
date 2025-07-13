@@ -21,28 +21,23 @@ import { TechnicianSummary } from '@/types/workHours';
 import { formatDutchDate } from '@/utils/overtimeCalculations';
 import TechnicianFilter from './TechnicianFilter';
 
-const COLORS = ['#dc2626', '#991b1b', '#7f1d1d', '#f59e42', '#8b5cf6', '#059669', '#2563eb', '#fbbf24'];
+const COLORS = ['#2563eb', '#dc2626', '#991b1b', '#fbbf24', '#8b5cf6', '#059669'];
 
 function getInitials(name = '') {
   return name.split(' ').map(part => part[0]).join('').toUpperCase();
 }
 
-// --- Nieuwe zakelijke getal weergave componenten ---
-
-const ZakelijkUren = ({ value }: { value: number }) => (
+const ZakelijkUren = ({ value }) => (
   <span className="font-mono tabular-nums">{value.toFixed(2)}u</span>
 );
-
-const ZakelijkEuro = ({ value }: { value: number }) => (
+const ZakelijkEuro = ({ value }) => (
   <span className="font-mono tabular-nums">
     {new Intl.NumberFormat('nl-NL', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2 }).format(value)}
   </span>
 );
-
-const ZakelijkDagen = ({ value }: { value: number }) => (
+const ZakelijkDagen = ({ value }) => (
   <span className="font-mono tabular-nums">{value}</span>
 );
-
 const ProgressBar = ({ value, max, color = '#dc2626' }) => (
   <div className="w-full bg-gray-200 rounded-full h-2 mt-1 mb-2">
     <div
@@ -52,53 +47,27 @@ const ProgressBar = ({ value, max, color = '#dc2626' }) => (
   </div>
 );
 
-const WeekTooltip = ({ active, payload, label }) => {
-  if (!active || !payload?.length) return null;
-  const { dagen } = payload[0].payload;
-  return (
-    <div className="rounded-xl bg-white/95 p-4 shadow-2xl border border-gray-100 min-w-[180px]">
-      <div className="font-bold text-base mb-2 text-red-700">{label}</div>
-      <ul className="text-sm space-y-1">
-        {dagen
-          .sort((a, b) => a.date - b.date)
-          .map((dag, i) => (
-            <li key={i}>
-              <span className="font-semibold">
-                {dag.date.toLocaleDateString('nl-NL', { weekday: 'short', day: '2-digit', month: '2-digit' })}
-              </span>
-              {': '}
-              <ZakelijkUren value={dag.hours} />
-            </li>
-          ))}
-      </ul>
-      <div className="mt-2 text-xs text-gray-500">
-        Totaal: <ZakelijkUren value={payload[0].value} />
-      </div>
-    </div>
-  );
-};
-
 const Badge = ({ children, color = "bg-gray-100", text = "text-gray-800" }) => (
   <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${color} ${text} ml-1`}>
     {children}
   </span>
 );
 
-const Dashboard: React.FC = () => {
+const Dashboard = () => {
   const { user } = useAuth();
   const isAdmin = user?.role === 'admin';
 
-  const [rawWorkHours, setRawWorkHours] = useState<any[]>([]);
-  const [rawRates, setRawRates] = useState<any[]>([]);
-  const [travelRates, setTravelRates] = useState<any[]>([]);
-  const [technicianData, setTechnicianData] = useState<TechnicianSummary[]>([]);
-  const [weeklyData, setWeeklyData] = useState<any[]>([]);
-  const [weeklyAdminData, setWeeklyAdminData] = useState<any[]>([]);
-  const [selectedTechnician, setSelectedTechnician] = useState<string>('all');
+  const [rawWorkHours, setRawWorkHours] = useState([]);
+  const [rawRates, setRawRates] = useState([]);
+  const [travelRates, setTravelRates] = useState([]);
+  const [technicianData, setTechnicianData] = useState([]);
+  const [weeklyData, setWeeklyData] = useState([]);
+  const [weeklyAdminData, setWeeklyAdminData] = useState([]);
+  const [selectedTechnician, setSelectedTechnician] = useState('all');
   const [loading, setLoading] = useState(true);
 
-  const [selectedMonth, setSelectedMonth] = useState<string>(new Date().toISOString().slice(0, 7));
-  const [monthlyHours, setMonthlyHours] = useState<number>(0);
+  const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7));
+  const [monthlyHours, setMonthlyHours] = useState(0);
 
   useEffect(() => {
     fetchDashboardData();
@@ -174,8 +143,36 @@ const Dashboard: React.FC = () => {
     }
   };
 
-  // ... (processTechnicianData en processWeeklyData blijven hetzelfde als jouw code)
+  // === STACKED weeklyData (per soort uren) ===
+  const processWeeklyData = (workHours, filterUserId = null) => {
+    const weekMap = new Map();
+    workHours
+      .filter(e => !filterUserId || e.technician_id === filterUserId)
+      .forEach(e => {
+        const d = new Date(e.date);
+        const ws = new Date(d);
+        ws.setDate(d.getDate() - d.getDay());
+        const key = ws.toISOString().split('T')[0];
+        if (!weekMap.has(key)) {
+          weekMap.set(key, {
+            week: `Week ${formatDutchDate(key)}`,
+            regularHours: 0,
+            overtimeHours: 0,
+            weekendHours: 0,
+            sundayHours: 0,
+            allHours: 0,
+          });
+        }
+        weekMap.get(key).regularHours += Number(e.regular_hours || 0);
+        weekMap.get(key).overtimeHours += Number(e.overtime_hours || 0);
+        weekMap.get(key).weekendHours += Number(e.weekend_hours || 0);
+        weekMap.get(key).sundayHours += Number(e.sunday_hours || 0);
+        weekMap.get(key).allHours += Number(e.hours_worked || 0);
+      });
+    return Array.from(weekMap.values()).slice(-8);
+  };
 
+  // --- bestaande functies ---
   const processTechnicianData = (workHours, rates, travelRates) => {
     const techMap = new Map();
     const rateMap = new Map();
@@ -290,32 +287,7 @@ const Dashboard: React.FC = () => {
     return Array.from(techMap.values()).sort((a, b) => b.totalHours - a.totalHours);
   };
 
-  const processWeeklyData = (workHours: any[], filterUserId: string | null = null) => {
-    const weekMap = new Map<
-      string,
-      { week: string; uren: number; dagen: { date: Date; hours: number }[] }
-    >();
-    workHours
-      .filter(e => !filterUserId || e.technician_id === filterUserId)
-      .forEach(e => {
-        const d = new Date(e.date);
-        const ws = new Date(d);
-        ws.setDate(d.getDate() - d.getDay());
-        const key = ws.toISOString().split('T')[0];
-        if (!weekMap.has(key))
-          weekMap.set(key, {
-            week: `Week ${formatDutchDate(key)}`,
-            uren: 0,
-            dagen: [],
-          });
-        weekMap.get(key)!.uren += Number(e.hours_worked || 0);
-        weekMap.get(key)!.dagen.push({ date: d, hours: Number(e.hours_worked || 0) });
-      });
-    return Array.from(weekMap.values())
-      .sort((a, b) => new Date(a.week.split(' ')[1]).getTime() - new Date(b.week.split(' ')[1]).getTime())
-      .slice(-8);
-  };
-
+  // --------------- UI / Layout ---------------
   const totalHours = technicianData.reduce((s, t) => s + t.totalHours, 0);
   const totalDays = technicianData.reduce((s, t) => s + t.daysWorked, 0);
   const avgHoursPerDay = totalDays > 0 ? (totalHours / totalDays) : 0;
@@ -426,6 +398,7 @@ const Dashboard: React.FC = () => {
 
         {/* Grafieken */}
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-2 md:gap-8 mb-4 md:mb-8">
+          {/* --- WEEK (admin: stacked, monteur: normaal) --- */}
           <Card className="shadow-lg bg-white/80 border border-red-200">
             <CardHeader className="px-2 py-3 md:px-4 md:py-4">
               <CardTitle className="text-sm md:text-base text-red-700">
@@ -438,16 +411,26 @@ const Dashboard: React.FC = () => {
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="week" fontSize={11} />
                   <YAxis fontSize={11} />
-                  <Bar
-                    dataKey="uren"
-                    fill="#dc2626"
-                    radius={[8, 8, 0, 0]}
-                  />
-                  <RechartTooltip content={WeekTooltip} />
+                  <RechartTooltip />
+                  <Legend />
+                  {isAdmin ? (
+                    <>
+                     <Bar dataKey="regularHours" name="Normaal 100%" stackId="a" fill="#1e3a8a" />
+                     <Bar dataKey="overtimeHours" name="Overtime 125%" stackId="a" fill="#2563eb" />
+                     <Bar dataKey="weekendHours" name="Weekend 150%" stackId="a" fill="#60a5fa" />
+                     <Bar dataKey="sundayHours" name="Sunday 200%" stackId="a" fill="#93c5fd" />
+
+
+                    </>
+                  ) : (
+                    <Bar dataKey="allHours" name="Totaal uren" fill="#dc2626" />
+                  )}
                 </BarChart>
               </ResponsiveContainer>
             </CardContent>
           </Card>
+
+          {/* --- REST unchanged --- */}
           {isAdmin && (
             <>
               <Card className="shadow-lg bg-white/80 border border-red-200">
@@ -467,7 +450,10 @@ const Dashboard: React.FC = () => {
                       <YAxis fontSize={11} />
                       <CartesianGrid strokeDasharray="3 3" />
                       <RechartTooltip />
-                      <Area type="monotone" dataKey="uren" stroke="#dc2626" fill="url(#colorArea)" />
+                      <Area type="monotone" dataKey="regularHours" stroke="#2563eb" fill="url(#colorArea)" name="Normaal 100%" />
+                      <Area type="monotone" dataKey="overtimeHours" stroke="#dc2626" fill="url(#colorArea)" name="Overtime 125%" />
+                      <Area type="monotone" dataKey="weekendHours" stroke="#991b1b" fill="url(#colorArea)" name="Weekend 150%" />
+                      <Area type="monotone" dataKey="sundayHours" stroke="#fbbf24" fill="url(#colorArea)" name="Sunday 200%" />
                     </AreaChart>
                   </ResponsiveContainer>
                 </CardContent>
@@ -503,7 +489,7 @@ const Dashboard: React.FC = () => {
               </Card>
               <Card className="shadow-lg bg-white/80 border border-green-200">
                 <CardHeader className="px-2 py-3 md:px-4 md:py-4">
-                  <CardTitle className="text-sm md:text-base text-green-700">Overtime per monteur (125%, 150%, 200%)</CardTitle>
+                  <CardTitle className="text-sm md:text-base text-green-700">Overtime per monteur (100%, 125%, 150%, 200%)</CardTitle>
                 </CardHeader>
                 <CardContent className="p-1 md:p-4">
                   <ResponsiveContainer width="100%" height={220}>
@@ -513,9 +499,10 @@ const Dashboard: React.FC = () => {
                       <YAxis fontSize={11} />
                       <RechartTooltip formatter={v => `${Number(v).toFixed(2)}u`} />
                       <Legend />
-                      <Bar dataKey="overtimeHours" fill={COLORS[1]} name="Overtime 125%" />
-                      <Bar dataKey="weekendHours" fill={COLORS[2]} name="Weekend 150%" />
-                      <Bar dataKey="sundayHours" fill={COLORS[3]} name="Sunday 200%" />
+                      <Bar dataKey="regularHours" fill="#2563eb" name="Normaal 100%" stackId="a" />
+                      <Bar dataKey="overtimeHours" fill="#dc2626" name="Overtime 125%" stackId="a" />
+                      <Bar dataKey="weekendHours" fill="#991b1b" name="Weekend 150%" stackId="a" />
+                      <Bar dataKey="sundayHours" fill="#fbbf24" name="Sunday 200%" stackId="a" />
                     </BarChart>
                   </ResponsiveContainer>
                 </CardContent>
