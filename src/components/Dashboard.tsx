@@ -438,24 +438,28 @@ const Dashboard = () => {
                   <CardTitle className="text-sm md:text-base text-blue-700">Wekelijkse uren (trend)</CardTitle>
                 </CardHeader>
                 <CardContent className="p-1 md:p-4">
-                  <ResponsiveContainer width="100%" height={220}>
-                    <AreaChart data={weeklyAdminData}>
-                      <defs>
-                        <linearGradient id="colorArea" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#dc2626" stopOpacity={0.7} />
-                          <stop offset="95%" stopColor="#dc2626" stopOpacity={0.15} />
-                        </linearGradient>
-                      </defs>
-                      <XAxis dataKey="week" fontSize={11} />
-                      <YAxis fontSize={11} />
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <RechartTooltip />
-                      <Area type="monotone" dataKey="regularHours" stroke="#2563eb" fill="url(#colorArea)" name="Normaal 100%" />
-                      <Area type="monotone" dataKey="overtimeHours" stroke="#dc2626" fill="url(#colorArea)" name="Overtime 125%" />
-                      <Area type="monotone" dataKey="weekendHours" stroke="#991b1b" fill="url(#colorArea)" name="Weekend 150%" />
-                      <Area type="monotone" dataKey="sundayHours" stroke="#fbbf24" fill="url(#colorArea)" name="Sunday 200%" />
-                    </AreaChart>
-                  </ResponsiveContainer>
+                 <ResponsiveContainer width="100%" height={220}>
+  <AreaChart data={weeklyAdminData}>
+    <defs>
+      <linearGradient id="colorArea" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="5%" stopColor="#2563eb" stopOpacity={0.7} />
+        <stop offset="95%" stopColor="#2563eb" stopOpacity={0.15} />
+      </linearGradient>
+    </defs>
+    <XAxis dataKey="week" fontSize={11} />
+    <YAxis fontSize={11} />
+    <CartesianGrid strokeDasharray="3 3" />
+    <RechartTooltip />
+    <Area
+      type="monotone"
+      dataKey="allHours"     
+      stroke="#2563eb"
+      fill="url(#colorArea)"
+      name="Totaal uren"
+    />
+       </AreaChart>
+      </ResponsiveContainer>
+
                 </CardContent>
               </Card>
               <Card className="shadow-lg bg-white/80 border border-yellow-200">
@@ -499,10 +503,10 @@ const Dashboard = () => {
                       <YAxis fontSize={11} />
                       <RechartTooltip formatter={v => `${Number(v).toFixed(2)}u`} />
                       <Legend />
-                      <Bar dataKey="regularHours" fill="#2563eb" name="Normaal 100%" stackId="a" />
-                      <Bar dataKey="overtimeHours" fill="#dc2626" name="Overtime 125%" stackId="a" />
-                      <Bar dataKey="weekendHours" fill="#991b1b" name="Weekend 150%" stackId="a" />
-                      <Bar dataKey="sundayHours" fill="#fbbf24" name="Sunday 200%" stackId="a" />
+                      <Bar dataKey="regularHours" fill="#1e3a8a" name="Normaal 100%" stackId="a" />
+                      <Bar dataKey="overtimeHours" fill="#2563eb" name="Overtime 125%" stackId="a" />
+                      <Bar dataKey="weekendHours" fill="#60a5fa" name="Weekend 150%" stackId="a" />
+                      <Bar dataKey="sundayHours" fill="#93c5fd" name="Sunday 200%" stackId="a" />
                     </BarChart>
                   </ResponsiveContainer>
                 </CardContent>
