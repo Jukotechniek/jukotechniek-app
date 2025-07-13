@@ -24,6 +24,40 @@ interface MagazineArticle {
   updated_at: string;
 }
 
+const getPaginationRange = (currentPage: number, totalPages: number) => {
+  const delta = 2; // Hoeveel knoppen rondom de huidige pagina zichtbaar
+  const range = [];
+  let left = Math.max(2, currentPage - delta);
+  let right = Math.min(totalPages - 1, currentPage + delta);
+
+  if (currentPage - delta <= 2) {
+    right = Math.min(totalPages - 1, 1 + 2 * delta);
+  }
+  if (currentPage + delta >= totalPages - 1) {
+    left = Math.max(2, totalPages - 2 * delta);
+  }
+
+  for (let i = left; i <= right; i++) {
+    range.push(i);
+  }
+
+  if (left > 2) {
+    range.unshift('...');
+  }
+  if (right < totalPages - 1) {
+    range.push('...');
+  }
+
+  // Altijd eerste en laatste pagina tonen als er meer dan 1 pagina is
+  if (totalPages > 1) {
+    range.unshift(1);
+    if (totalPages > 1) range.push(totalPages);
+  }
+
+  // Unieke en juiste volgorde
+  return Array.from(new Set(range.filter(v => typeof v === 'number' ? v > 0 && v <= totalPages : true)));
+};
+
 const Magazine: React.FC = () => {
   const { user } = useAuth();
   const isAdmin = user?.role === 'admin';
@@ -94,7 +128,6 @@ const Magazine: React.FC = () => {
 
       if (error) throw error;
 
-      // Map the data to include the missing properties with fallback values
       const mappedData: MagazineArticle[] = (data || []).map(item => ({
         ...item,
         Location: item.Location || null,
@@ -113,12 +146,10 @@ const Magazine: React.FC = () => {
 
   const handleSearch = (value: string) => {
     setSearchTerm(value);
-    // Don't call fetchArticles here - let the debounced effect handle it
   };
 
   const handleCategoryChange = (value: string) => {
     setSelectedCategory(value);
-    // Don't call fetchArticles here - let the debounced effect handle it
   };
 
   if (loading && articles.length === 0) {
@@ -174,74 +205,79 @@ const Magazine: React.FC = () => {
       </div>
 
       {/* Articles Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 mb-6">
         {articles.map((article) => (
-          <Card key={article.id} className="shadow-lg border-2 border-gray-200 hover:shadow-xl transition-shadow">
+          <Card key={article.id} className="shadow-xl border border-gray-200 hover:shadow-2xl transition-shadow rounded-2xl">
             <CardHeader className="pb-2">
               <div className="flex items-start justify-between">
                 <div className="flex-1">
-                  <CardTitle className="text-sm font-bold text-gray-900 mb-1">
+                  <CardTitle className="text-base font-extrabold text-gray-900 mb-0 leading-tight">
                     {article.part_number}
                   </CardTitle>
-                  <h3 className="text-sm font-semibold text-gray-700 mb-2">
+                  <h3 className="text-sm font-semibold text-gray-700 mb-1 leading-tight">
                     {article.part_name}
                   </h3>
+                  {article.description && (
+                    <p className="text-xs text-gray-600 mb-2 line-clamp-2">{article.description}</p>
+                  )}
                 </div>
-                <Package className="h-5 w-5 text-gray-400" />
+                <div>
+                  <Package className="h-6 w-6 text-gray-400" />
+                </div>
               </div>
             </CardHeader>
+            {article.image_url && (
+              <div className="flex justify-center mb-2">
+                <img
+                  src={article.image_url}
+                  alt={article.part_name || ''}
+                  className="rounded-md object-contain h-24 max-w-full border"
+                  style={{ background: "#f6f6f6" }}
+                  loading="lazy"
+                />
+              </div>
+            )}
             <CardContent className="pt-2">
-              {article.description && (
-                <p className="text-xs text-gray-600 mb-3 line-clamp-2">
-                  {article.description}
-                </p>
-              )}
-              <div className="space-y-2">
-                <div className="flex justify-between items-center">
-                  <span className="text-xs text-gray-500">Voorraad:</span>
-                  <span className="text-sm font-semibold text-gray-900">
-                    {article.stock_quantity} stuks
-                  </span>
-                </div>
+              <div className="flex items-center gap-2 mb-2">
+                <span
+                  className={`inline-block rounded-full px-3 py-1 text-xs font-semibold
+                    ${article.stock_quantity < 2
+                      ? 'bg-red-100 text-red-600'
+                      : article.stock_quantity < 5
+                      ? 'bg-yellow-100 text-yellow-700'
+                      : 'bg-green-100 text-green-700'
+                    }`}
+                >
+                  {article.stock_quantity} stuks
+                </span>
                 {article.price && (
-                  <div className="flex justify-between items-center">
-                    <span className="text-xs text-gray-500">Prijs:</span>
-                    <span className="text-sm font-semibold text-green-600">
-                      €{article.price.toFixed(2)}
-                    </span>
-                  </div>
-                )}
-                {article.Location && (
-                  <div className="flex justify-between items-center">
-                    <span className="text-xs text-gray-500 flex items-center">
-                      <MapPin className="h-3 w-3 mr-1" />
-                      Locatie:
-                    </span>
-                    <span className="text-xs text-gray-700">{article.Location}</span>
-                  </div>
-                )}
-                {article.Magazine_name && (
-                  <div className="flex justify-between items-center">
-                    <span className="text-xs text-gray-500 flex items-center">
-                      <Building className="h-3 w-3 mr-1" />
-                      Magazijn:
-                    </span>
-                    <span className="text-xs text-gray-700">{article.Magazine_name}</span>
-                  </div>
-                )}
-                {article.category && (
-                  <div className="flex justify-between items-center">
-                    <span className="text-xs text-gray-500">Categorie:</span>
-                    <span className="text-xs text-gray-700">{article.category}</span>
-                  </div>
-                )}
-                {article.supplier && (
-                  <div className="flex justify-between items-center">
-                    <span className="text-xs text-gray-500">Leverancier:</span>
-                    <span className="text-xs text-gray-700">{article.supplier}</span>
-                  </div>
+                  <span className="ml-auto text-xs text-green-700 font-bold bg-green-50 px-2 py-1 rounded">
+                    €{article.price.toFixed(2)}
+                  </span>
                 )}
               </div>
+              <div className="flex items-center text-xs text-gray-500 mb-1">
+                <MapPin className="h-3 w-3 mr-1" />
+                <span className="font-semibold mr-2">Locatie:</span>
+                <span className="text-gray-700">{article.Location || '—'}</span>
+              </div>
+              <div className="flex items-center text-xs text-gray-500 mb-1">
+                <Building className="h-3 w-3 mr-1" />
+                <span className="font-semibold mr-2">Magazijn:</span>
+                <span className="text-gray-700">{article.Magazine_name || '—'}</span>
+              </div>
+              {article.category && (
+                <div className="flex items-center text-xs text-gray-500 mb-1">
+                  <span className="font-semibold mr-2">Categorie:</span>
+                  <span className="text-gray-700">{article.category}</span>
+                </div>
+              )}
+              {article.supplier && (
+                <div className="flex items-center text-xs text-gray-500 mb-1">
+                  <span className="font-semibold mr-2">Leverancier:</span>
+                  <span className="text-gray-700">{article.supplier}</span>
+                </div>
+              )}
             </CardContent>
           </Card>
         ))}
@@ -265,53 +301,38 @@ const Magazine: React.FC = () => {
       {/* Pagination */}
       {totalPages > 1 && (
         <Card className="shadow-lg border-2 border-gray-200">
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
+          <CardContent className="p-2">
+            <div className="flex items-center justify-center w-full gap-1 flex-wrap">
               <Button
                 variant="outline"
                 onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
                 disabled={currentPage === 1}
-                className="flex items-center"
+                className="flex items-center min-w-[34px] px-1 py-2 sm:px-2 sm:py-2"
               >
-                <ChevronLeft className="h-4 w-4 mr-1" />
-                Vorige
+                <ChevronLeft className="h-4 w-4" />
               </Button>
-              
-              <div className="flex items-center space-x-2">
-                {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                  let pageNum;
-                  if (totalPages <= 5) {
-                    pageNum = i + 1;
-                  } else if (currentPage <= 3) {
-                    pageNum = i + 1;
-                  } else if (currentPage >= totalPages - 2) {
-                    pageNum = totalPages - 4 + i;
-                  } else {
-                    pageNum = currentPage - 2 + i;
-                  }
-                  
-                  return (
-                    <Button
-                      key={pageNum}
-                      variant={currentPage === pageNum ? "default" : "outline"}
-                      size="sm"
-                      onClick={() => setCurrentPage(pageNum)}
-                      className={currentPage === pageNum ? "bg-red-600 hover:bg-red-700" : ""}
-                    >
-                      {pageNum}
-                    </Button>
-                  );
-                })}
-              </div>
-
+              {getPaginationRange(currentPage, totalPages).map((page, idx) =>
+                page === '...' ? (
+                  <span key={idx} className="px-1 text-gray-400">...</span>
+                ) : (
+                  <Button
+                    key={page as number}
+                    variant={currentPage === page ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setCurrentPage(page as number)}
+                    className={`min-w-[32px] px-2 ${currentPage === page ? "bg-red-600 hover:bg-red-700 text-white" : ""}`}
+                  >
+                    {page}
+                  </Button>
+                )
+              )}
               <Button
                 variant="outline"
                 onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
                 disabled={currentPage === totalPages}
-                className="flex items-center"
+                className="flex items-center min-w-[34px] px-1 py-2 sm:px-2 sm:py-2"
               >
-                Volgende
-                <ChevronRight className="h-4 w-4 ml-1" />
+                <ChevronRight className="h-4 w-4" />
               </Button>
             </div>
           </CardContent>
