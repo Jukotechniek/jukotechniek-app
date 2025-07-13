@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { AuthProvider, useAuth } from '@/contexts/AuthContext';
 import LoginForm from '@/components/LoginForm';
 import Navigation from '@/components/Navigation';
@@ -72,6 +72,15 @@ const AppContent: React.FC = () => {
 };
 
 const Index: React.FC = () => {
+  useEffect(() => {
+    const handleInteraction = () => {
+      if (!document.fullscreenElement && document.documentElement.requestFullscreen) {
+        document.documentElement.requestFullscreen().catch(() => {});
+      }
+    };
+    document.addEventListener('click', handleInteraction, { once: true });
+    return () => document.removeEventListener('click', handleInteraction);
+  }, []);
   return (
     <AuthProvider>
       <AppContent />
