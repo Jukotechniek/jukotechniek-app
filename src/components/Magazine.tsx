@@ -1,10 +1,9 @@
-
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Search, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Package } from 'lucide-react';
+import { Search, Package, ChevronLeft, ChevronRight, MapPin, Building } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { PageLayout } from '@/components/ui/page-layout';
@@ -37,7 +36,6 @@ const Magazine: React.FC = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
-  const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set());
   
   const itemsPerPage = 20;
 
@@ -96,6 +94,7 @@ const Magazine: React.FC = () => {
 
       if (error) throw error;
 
+      // Map the data to include the missing properties with fallback values
       const mappedData: MagazineArticle[] = (data || []).map(item => ({
         ...item,
         Location: item.Location || null,
@@ -114,22 +113,12 @@ const Magazine: React.FC = () => {
 
   const handleSearch = (value: string) => {
     setSearchTerm(value);
+    // Don't call fetchArticles here - let the debounced effect handle it
   };
 
   const handleCategoryChange = (value: string) => {
     setSelectedCategory(value);
-  };
-
-  const toggleExpanded = (id: string) => {
-    setExpandedItems(prev => {
-      const newSet = new Set(prev);
-      if (newSet.has(id)) {
-        newSet.delete(id);
-      } else {
-        newSet.add(id);
-      }
-      return newSet;
-    });
+    // Don't call fetchArticles here - let the debounced effect handle it
   };
 
   if (loading && articles.length === 0) {
@@ -184,67 +173,78 @@ const Magazine: React.FC = () => {
         {totalCount} onderdelen gevonden - Pagina {currentPage} van {totalPages}
       </div>
 
-      {/* Articles List */}
-      <div className="space-y-2 mb-6">
-        {articles.map((article) => {
-          const isExpanded = expandedItems.has(article.id);
-          return (
-            <Card key={article.id} className="shadow-sm border border-gray-200">
-              <CardContent className="p-0">
-                {/* Compact row */}
-                <div 
-                  className="flex items-center justify-between p-3 cursor-pointer hover:bg-gray-50"
-                  onClick={() => toggleExpanded(article.id)}
-                >
-                  <div className="flex-1 grid grid-cols-4 gap-4 text-sm">
-                    <div className="font-medium text-gray-900">{article.part_number}</div>
-                    <div className="text-gray-700">{article.stock_quantity} stuks</div>
-                    <div className="text-gray-600">{article.Location || 'Onbekend'}</div>
-                    <div className="text-gray-600">{article.Magazine_name || 'Onbekend'}</div>
-                  </div>
-                  <div className="ml-4">
-                    {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                  </div>
+      {/* Articles Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 mb-6">
+        {articles.map((article) => (
+          <Card key={article.id} className="shadow-lg border-2 border-gray-200 hover:shadow-xl transition-shadow">
+            <CardHeader className="pb-2">
+              <div className="flex items-start justify-between">
+                <div className="flex-1">
+                  <CardTitle className="text-sm font-bold text-gray-900 mb-1">
+                    {article.part_number}
+                  </CardTitle>
+                  <h3 className="text-sm font-semibold text-gray-700 mb-2">
+                    {article.part_name}
+                  </h3>
                 </div>
-
-                {/* Expanded details */}
-                {isExpanded && (
-                  <div className="border-t border-gray-200 p-4 bg-gray-50">
-                    <div className="space-y-3">
-                      <div>
-                        <h3 className="font-semibold text-gray-900 mb-2">{article.part_name}</h3>
-                        {article.description && (
-                          <p className="text-sm text-gray-600 mb-3">{article.description}</p>
-                        )}
-                      </div>
-                      
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-                        {article.price && (
-                          <div className="flex justify-between">
-                            <span className="text-gray-500">Prijs:</span>
-                            <span className="font-semibold text-green-600">€{article.price.toFixed(2)}</span>
-                          </div>
-                        )}
-                        {article.category && (
-                          <div className="flex justify-between">
-                            <span className="text-gray-500">Categorie:</span>
-                            <span className="text-gray-700">{article.category}</span>
-                          </div>
-                        )}
-                        {article.supplier && (
-                          <div className="flex justify-between">
-                            <span className="text-gray-500">Leverancier:</span>
-                            <span className="text-gray-700">{article.supplier}</span>
-                          </div>
-                        )}
-                      </div>
-                    </div>
+                <Package className="h-5 w-5 text-gray-400" />
+              </div>
+            </CardHeader>
+            <CardContent className="pt-2">
+              {article.description && (
+                <p className="text-xs text-gray-600 mb-3 line-clamp-2">
+                  {article.description}
+                </p>
+              )}
+              <div className="space-y-2">
+                <div className="flex justify-between items-center">
+                  <span className="text-xs text-gray-500">Voorraad:</span>
+                  <span className="text-sm font-semibold text-gray-900">
+                    {article.stock_quantity} stuks
+                  </span>
+                </div>
+                {article.price && (
+                  <div className="flex justify-between items-center">
+                    <span className="text-xs text-gray-500">Prijs:</span>
+                    <span className="text-sm font-semibold text-green-600">
+                      €{article.price.toFixed(2)}
+                    </span>
                   </div>
                 )}
-              </CardContent>
-            </Card>
-          );
-        })}
+                {article.Location && (
+                  <div className="flex justify-between items-center">
+                    <span className="text-xs text-gray-500 flex items-center">
+                      <MapPin className="h-3 w-3 mr-1" />
+                      Locatie:
+                    </span>
+                    <span className="text-xs text-gray-700">{article.Location}</span>
+                  </div>
+                )}
+                {article.Magazine_name && (
+                  <div className="flex justify-between items-center">
+                    <span className="text-xs text-gray-500 flex items-center">
+                      <Building className="h-3 w-3 mr-1" />
+                      Magazijn:
+                    </span>
+                    <span className="text-xs text-gray-700">{article.Magazine_name}</span>
+                  </div>
+                )}
+                {article.category && (
+                  <div className="flex justify-between items-center">
+                    <span className="text-xs text-gray-500">Categorie:</span>
+                    <span className="text-xs text-gray-700">{article.category}</span>
+                  </div>
+                )}
+                {article.supplier && (
+                  <div className="flex justify-between items-center">
+                    <span className="text-xs text-gray-500">Leverancier:</span>
+                    <span className="text-xs text-gray-700">{article.supplier}</span>
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        ))}
       </div>
 
       {/* No Results */}
