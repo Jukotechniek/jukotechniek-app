@@ -533,14 +533,17 @@ const Dashboard = () => {
                   <ResponsiveContainer width="100%" height={220}>
                     <PieChart>
                       <Pie
-                        data={displayData.filter(t => t.profit > 0).slice(0, 5)}
-                        dataKey="profit"
+                        data={displayData.filter(t => t.profit > 0).slice(0, 5).map((t, i) => ({
+                          ...t,
+                          name: t.technicianName,
+                          value: t.profit
+                        }))}
+                        dataKey="value"
+                        nameKey="name"
                         cx="50%"
                         cy="50%"
-                        outerRadius={60}
-                        label={({ technicianName, profit }) =>
-                          `${technicianName}: ${new Intl.NumberFormat('nl-NL', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2 }).format(profit)}`
-                        }
+                        outerRadius={70}
+                        fill="#8884d8"
                       >
                         {displayData
                           .filter(t => t.profit > 0)
@@ -549,7 +552,13 @@ const Dashboard = () => {
                             <Cell key={i} fill={COLORS[i % COLORS.length]} />
                           ))}
                       </Pie>
-                      <RechartTooltip formatter={v => new Intl.NumberFormat('nl-NL', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2 }).format(Number(v))} />
+                      <RechartTooltip 
+                        formatter={(value) => [
+                          new Intl.NumberFormat('nl-NL', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2 }).format(Number(value)),
+                          'Winst'
+                        ]}
+                      />
+                      <Legend wrapperStyle={{ fontSize: '12px' }} />
                     </PieChart>
                   </ResponsiveContainer>
                 </CardContent>
