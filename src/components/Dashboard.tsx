@@ -113,7 +113,7 @@ const Dashboard = () => {
   const fetchDashboardData = async () => {
     setLoading(true);
     try {
-      // Fetch webhook hours with verified status join
+      // Fetch both webhook hours and manual work hours
       const { data: webhookHours, error: webhookError } = await supabase
         .from('webhook_hours')
         .select(`
@@ -121,6 +121,15 @@ const Dashboard = () => {
           profiles!webhook_hours_technician_id_fkey(full_name)
         `);
       if (webhookError) console.error(webhookError);
+
+      const { data: workHours, error: hoursError } = await supabase
+        .from('work_hours')
+        .select(`
+          *,
+          customers(name),
+          profiles!work_hours_technician_id_fkey(full_name)
+        `);
+      if (hoursError) console.error(hoursError);
 
       // Transform webhook hours to match work_hours format
       const transformedWebhookHours = (webhookHours || []).map(wh => ({
@@ -142,8 +151,28 @@ const Dashboard = () => {
         end_time: wh.webhook_end,
         manual_verified: wh.webhook_verified,
         description: 'Webhook uren',
-        technician_id: wh.technician_id
+        technician_id: wh.technician_id,
+        date: wh.date,
+        profiles: wh.profiles
       }));
+
+      // Combine and prioritize: use webhook hours if available, otherwise use manual hours
+      const combinedHours = [];
+      const webhookDates = new Set();
+      
+      // Add all webhook hours first and track their dates per technician
+      transformedWebhookHours.forEach(wh => {
+        combinedHours.push(wh);
+        webhookDates.add(`${wh.technician_id}_${wh.date}`);
+      });
+      
+      // Add manual hours only for dates/technicians that don't have webhook hours
+      (workHours || []).forEach(wh => {
+        const key = `${wh.technician_id}_${wh.date}`;
+        if (!webhookDates.has(key)) {
+          combinedHours.push(wh);
+        }
+      });
 
       const { data: rates, error: ratesError } = await supabase
         .from('technician_rates')
@@ -156,7 +185,7 @@ const Dashboard = () => {
         .select('*');
       if (travelRatesError) console.error(travelRatesError);
 
-      setRawWorkHours(transformedWebhookHours || []);
+      setRawWorkHours(combinedHours);
       setRawRates(rates || []);
       setTravelRates(travelRatesData || []);
     } catch (err) {
