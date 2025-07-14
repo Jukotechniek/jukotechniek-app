@@ -329,7 +329,7 @@ export type Database = {
           part_name: string
           part_number: string
           price?: number | null
-          stock_quantity?: number
+          stock_quantity: number
           supplier?: string | null
           updated_at?: string
         }

@@ -113,6 +113,15 @@ const Dashboard = () => {
   const fetchDashboardData = async () => {
     setLoading(true);
     try {
+      // Fetch both webhook hours and manual work hours
+      const { data: webhookHours, error: webhookError } = await supabase
+        .from('webhook_hours')
+        .select(`
+          *,
+          profiles!webhook_hours_technician_id_fkey(full_name)
+        `);
+      if (webhookError) console.error(webhookError);
+
       const { data: workHours, error: hoursError } = await supabase
         .from('work_hours')
         .select(`
@@ -120,7 +129,50 @@ const Dashboard = () => {
           customers(name),
           profiles!work_hours_technician_id_fkey(full_name)
         `);
-      if (hoursError) throw hoursError;
+      if (hoursError) console.error(hoursError);
+
+      // Transform webhook hours to match work_hours format
+      const transformedWebhookHours = (webhookHours || []).map(wh => ({
+        ...wh,
+        customer_id: null, // webhook doesn't have customer info
+        hours_worked: wh.hours_worked,
+        regular_hours: wh.hours_worked, // treat all webhook hours as regular for now
+        overtime_hours: 0,
+        weekend_hours: 0,
+        sunday_hours: 0,
+        is_weekend: false,
+        is_sunday: false,
+        is_manual_entry: false,
+        travel_expense_to_technician: 0,
+        travel_expense_from_client: 0,
+        created_at: wh.created_at,
+        created_by: null,
+        start_time: wh.webhook_start,
+        end_time: wh.webhook_end,
+        manual_verified: wh.webhook_verified,
+        description: 'Webhook uren',
+        technician_id: wh.technician_id,
+        date: wh.date,
+        profiles: wh.profiles
+      }));
+
+      // Combine and prioritize: use webhook hours if available, otherwise use manual hours
+      const combinedHours = [];
+      const webhookDates = new Set();
+      
+      // Add all webhook hours first and track their dates per technician
+      transformedWebhookHours.forEach(wh => {
+        combinedHours.push(wh);
+        webhookDates.add(`${wh.technician_id}_${wh.date}`);
+      });
+      
+      // Add manual hours only for dates/technicians that don't have webhook hours
+      (workHours || []).forEach(wh => {
+        const key = `${wh.technician_id}_${wh.date}`;
+        if (!webhookDates.has(key)) {
+          combinedHours.push(wh);
+        }
+      });
 
       const { data: rates, error: ratesError } = await supabase
         .from('technician_rates')
@@ -133,7 +185,7 @@ const Dashboard = () => {
         .select('*');
       if (travelRatesError) console.error(travelRatesError);
 
-      setRawWorkHours(workHours || []);
+      setRawWorkHours(combinedHours);
       setRawRates(rates || []);
       setTravelRates(travelRatesData || []);
     } catch (err) {
@@ -233,24 +285,35 @@ const Dashboard = () => {
 
       let rev = 0, cost = 0;
 
-      if (su > 0) {
-        rev += su * rate.billable * 2;
-        cost += su * rate.sunday;
-      }
-      if (wk > 0) {
-        rev += wk * rate.billable * 1.5;
-        cost += wk * rate.saturday;
-      }
-      if (ot > 0) {
-        rev += ot * rate.billable * 1.25;
-        cost += ot * rate.hourly * 1.25;
-      }
-      if (reg > 0) {
-        rev += reg * rate.billable;
-        cost += reg * rate.hourly;
+      // Only calculate revenue if hours are verified (webhook_verified = true)
+      const isVerified = entry.manual_verified === true;
+      
+      if (isVerified) {
+        if (su > 0) {
+          rev += su * rate.billable * 2;
+          cost += su * rate.sunday;
+        }
+        if (wk > 0) {
+          rev += wk * rate.billable * 1.5;
+          cost += wk * rate.saturday;
+        }
+        if (ot > 0) {
+          rev += ot * rate.billable * 1.25;
+          cost += ot * rate.hourly * 1.25;
+        }
+        if (reg > 0) {
+          rev += reg * rate.billable;
+          cost += reg * rate.hourly;
+        }
+      } else {
+        // Still calculate costs even if not verified
+        if (su > 0) cost += su * rate.sunday;
+        if (wk > 0) cost += wk * rate.saturday;
+        if (ot > 0) cost += ot * rate.hourly * 1.25;
+        if (reg > 0) cost += reg * rate.hourly;
       }
 
-      if (billedHours > actualHours) {
+      if (isVerified && billedHours > actualHours) {
         rev += (billedHours - actualHours) * rate.billable;
       }
 
@@ -258,7 +321,7 @@ const Dashboard = () => {
       const travelKey = `${customerId}_${id}`;
       const travel = travelMap.get(travelKey) || { toTech: 0, fromClient: 0 };
 
-      if (travel.fromClient > 0) {
+      if (isVerified && travel.fromClient > 0) {
         rev += travel.fromClient;
       }
       if (travel.toTech > 0) {
@@ -470,14 +533,17 @@ const Dashboard = () => {
                   <ResponsiveContainer width="100%" height={220}>
                     <PieChart>
                       <Pie
-                        data={displayData.filter(t => t.profit > 0).slice(0, 5)}
-                        dataKey="profit"
+                        data={displayData.filter(t => t.profit > 0).slice(0, 5).map((t, i) => ({
+                          ...t,
+                          name: t.technicianName,
+                          value: t.profit
+                        }))}
+                        dataKey="value"
+                        nameKey="name"
                         cx="50%"
                         cy="50%"
-                        outerRadius={60}
-                        label={({ technicianName, profit }) =>
-                          `${technicianName}: ${new Intl.NumberFormat('nl-NL', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2 }).format(profit)}`
-                        }
+                        outerRadius={70}
+                        fill="#8884d8"
                       >
                         {displayData
                           .filter(t => t.profit > 0)
@@ -486,7 +552,13 @@ const Dashboard = () => {
                             <Cell key={i} fill={COLORS[i % COLORS.length]} />
                           ))}
                       </Pie>
-                      <RechartTooltip formatter={v => new Intl.NumberFormat('nl-NL', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2 }).format(Number(v))} />
+                      <RechartTooltip 
+                        formatter={(value) => [
+                          new Intl.NumberFormat('nl-NL', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2 }).format(Number(value)),
+                          'Winst'
+                        ]}
+                      />
+                      <Legend wrapperStyle={{ fontSize: '12px' }} />
                     </PieChart>
                   </ResponsiveContainer>
                 </CardContent>
