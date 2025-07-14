@@ -15,8 +15,16 @@ import WorkSchedulePage from '@/components/WorkSchedule';
 import Magazine from '@/components/Magazine';
 
 const AppContent: React.FC = () => {
-  const { isAuthenticated, loading } = useAuth();
-  const [activeTab, setActiveTab] = useState('dashboard');
+  const { isAuthenticated, loading, user } = useAuth();
+  const [activeTab, setActiveTab] = useState(user?.role === 'admin' ? 'magazine' : 'dashboard');
+
+  // Fullscreen aan bij login, uit bij uitloggen
+  // Set default tab based on user role when authenticated
+  useEffect(() => {
+    if (isAuthenticated && user) {
+      setActiveTab(user.role === 'admin' ? 'magazine' : 'dashboard');
+    }
+  }, [isAuthenticated, user]);
 
   // Fullscreen aan bij login, uit bij uitloggen
   useEffect(() => {
