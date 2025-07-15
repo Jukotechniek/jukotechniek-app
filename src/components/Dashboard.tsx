@@ -75,7 +75,7 @@ const Dashboard = () => {
 
   useEffect(() => {
     if (!rawWorkHours.length) return;
-    let filtered = rawWorkHours;
+    let filtered = rawWorkHours.filter(e => e.manual_verified === true);
 
     if (isAdmin) {
       if (selectedTechnician !== 'all') {
@@ -107,7 +107,12 @@ const Dashboard = () => {
     }
     setTechnicianData(processTechnicianData(filtered, rawRates, travelRates));
     setWeeklyData(processWeeklyData(filtered, isAdmin ? null : user?.id));
-    if (isAdmin) setWeeklyAdminData(processWeeklyData(rawWorkHours));
+    if (isAdmin)
+      setWeeklyAdminData(
+        processWeeklyData(
+          rawWorkHours.filter(e => e.manual_verified === true)
+        )
+      );
   }, [rawWorkHours, rawRates, travelRates, selectedTechnician, selectedMonth, isAdmin, user?.id]);
 
   const fetchDashboardData = async () => {
@@ -268,6 +273,8 @@ const Dashboard = () => {
           profit: 0,
           revenue: 0,
           costs: 0,
+          travelCost: 0,
+          travelRevenue: 0,
         });
       }
       const s = techMap.get(id);
@@ -317,9 +324,11 @@ const Dashboard = () => {
 
       if (isVerified && travel.fromClient > 0) {
         rev += travel.fromClient;
+        s.travelRevenue += travel.fromClient;
       }
       if (isVerified && travel.toTech > 0) {
         cost += travel.toTech;
+        s.travelCost += travel.toTech;
       }
 
       const profit = rev - cost;
@@ -636,6 +645,10 @@ const Dashboard = () => {
                             <div className="font-semibold text-gray-800"><ZakelijkEuro value={t.costs} /></div>
                           </div>
                           <div>
+                            <div className="text-xs text-gray-400 mb-1">Reiskosten</div>
+                            <div className="font-semibold text-gray-800"><ZakelijkEuro value={t.travelCost} /></div>
+                          </div>
+                          <div>
                             <div className="text-xs text-gray-400 mb-1">Winst</div>
                             <div className={`font-bold ${t.profit >= 0 ? 'text-green-700' : 'text-red-700'}`}>
                               <ZakelijkEuro value={t.profit} />
@@ -682,6 +695,10 @@ const Dashboard = () => {
                         <div className="flex flex-col items-start">
                           <span className="text-xs text-gray-400">Kosten</span>
                           <span className="font-semibold text-gray-800"><ZakelijkEuro value={t.costs} /></span>
+                        </div>
+                        <div className="flex flex-col items-start">
+                          <span className="text-xs text-gray-400">Reiskosten</span>
+                          <span className="font-semibold text-gray-800"><ZakelijkEuro value={t.travelCost} /></span>
                         </div>
                         <div className="flex flex-col items-start">
                           <span className="text-xs text-gray-400">Winst</span>
