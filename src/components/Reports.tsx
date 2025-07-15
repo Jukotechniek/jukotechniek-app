@@ -1,12 +1,17 @@
 
-import React from 'react';
+import React, { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { PageLayout } from '@/components/ui/page-layout';
+import { sendDailyReportForAll } from '@/utils/sendDailyProjectReport';
+import { useAuth } from '@/contexts/AuthContext';
 
 const Reports = () => {
   const { toast } = useToast();
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'admin';
+  const [fromEmail, setFromEmail] = useState(() => localStorage.getItem('reportFromEmail') || 'info@jukotechniek.nl');
 
   const handleExportExcel = (reportType: string) => {
     toast({
@@ -20,6 +25,16 @@ const Reports = () => {
       title: "Import Ready",
       description: "Please select an Excel file to import work hours"
     });
+  };
+
+  const handleEmailReports = async () => {
+    const today = new Date().toISOString().split('T')[0];
+    try {
+      await sendDailyReportForAll(today, fromEmail);
+      toast({ title: 'Succes', description: 'Dagrapporten verzonden' });
+    } catch (err) {
+      toast({ title: 'Error', description: 'Rapporten versturen mislukt', variant: 'destructive' });
+    }
   };
 
   return (
@@ -130,8 +145,27 @@ const Reports = () => {
           <CardTitle className="text-lg font-semibold text-gray-900">Snelle Acties</CardTitle>
         </CardHeader>
         <CardContent>
+          {isAdmin && (
+            <div className="mb-3 flex items-center gap-2">
+              <label htmlFor="fromEmail" className="text-sm">Afzender:</label>
+              <input
+                id="fromEmail"
+                type="email"
+                value={fromEmail}
+                onChange={e => {
+                  setFromEmail(e.target.value);
+                  localStorage.setItem('reportFromEmail', e.target.value);
+                }}
+                className="border rounded px-2 py-1 text-sm"
+              />
+            </div>
+          )}
           <div className="flex flex-wrap gap-3">
-            <Button variant="outline" className="border-gray-300 text-gray-700 hover:bg-gray-50">
+            <Button
+              variant="outline"
+              className="border-gray-300 text-gray-700 hover:bg-gray-50"
+              onClick={handleEmailReports}
+            >
               📧 Email Rapporten
             </Button>
             <Button variant="outline" className="border-gray-300 text-gray-700 hover:bg-gray-50">

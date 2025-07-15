@@ -71,6 +71,8 @@ const Dashboard = () => {
   const [monthlyHours, setMonthlyHours] = useState(0);
   const [projectCount, setProjectCount] = useState(0);
   const [avgHoursPerProject, setAvgHoursPerProject] = useState(0);
+  const [projectWeekData, setProjectWeekData] = useState<{ project: string; weeks: Record<string, number> }[]>([]);
+  const [projectWeekLabels, setProjectWeekLabels] = useState<string[]>([]);
 
   useEffect(() => {
     fetchDashboardData();
@@ -209,7 +211,9 @@ const Dashboard = () => {
   };
 
   const fetchProjectMetrics = async () => {
-    const { data, error } = await supabase.from('projects').select('hours_spent');
+    const { data, error } = await supabase
+      .from('projects')
+      .select('hours_spent, title, date');
     if (error) {
       console.error('Project metrics error:', error);
       return;
@@ -218,6 +222,26 @@ const Dashboard = () => {
     const total = (data || []).reduce((s, p) => s + Number(p.hours_spent || 0), 0);
     setProjectCount(count);
     setAvgHoursPerProject(count > 0 ? total / count : 0);
+
+    // Build weekly table per project
+    const weeksSet = new Set<string>();
+    const projectMap = new Map<string, { project: string; weeks: Record<string, number> }>();
+    (data || []).forEach(p => {
+      if (!p.date) return;
+      const wk = new Date(p.date);
+      wk.setDate(wk.getDate() - wk.getDay());
+      const key = wk.toISOString().split('T')[0];
+      weeksSet.add(key);
+      const name = (p as any).title as string;
+      if (!projectMap.has(name)) {
+        projectMap.set(name, { project: name, weeks: {} });
+      }
+      const rec = projectMap.get(name)!;
+      rec.weeks[key] = (rec.weeks[key] || 0) + Number((p as any).hours_spent || 0);
+    });
+    const weeks = Array.from(weeksSet).sort().slice(-8);
+    setProjectWeekLabels(weeks);
+    setProjectWeekData(Array.from(projectMap.values()));
   };
 
   // === STACKED weeklyData (per soort uren) ===
@@ -501,6 +525,38 @@ const Dashboard = () => {
             </Card>
           )}
         </div>
+
+        {isOpdrachtgever && projectWeekData.length > 0 && (
+          <Card className="mb-4 shadow-lg border border-gray-200">
+            <CardHeader>
+              <CardTitle className="text-sm md:text-base text-red-700">Uren per Project per Week</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="overflow-x-auto">
+                <table className="min-w-full text-xs md:text-sm">
+                  <thead className="bg-gray-100">
+                    <tr>
+                      <th className="p-2 text-left">Project</th>
+                      {projectWeekLabels.map(w => (
+                        <th key={w} className="p-2 text-right">{`Week ${formatDutchDate(w)}`}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {projectWeekData.map(row => (
+                      <tr key={row.project} className="border-b last:border-none">
+                        <td className="p-2">{row.project}</td>
+                        {projectWeekLabels.map(w => (
+                          <td key={w} className="p-2 text-right">{(row.weeks[w] || 0).toFixed(1)}u</td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Grafieken */}
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-2 md:gap-8 mb-4 md:mb-8">

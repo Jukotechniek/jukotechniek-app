@@ -29,8 +29,9 @@ const WorkSchedulePage: React.FC = () => {
   const { toast } = useToast();
 
   const role = user?.role?.toLowerCase() || '';
-  const isPlanner = ['admin', 'opdrachtgever', 'administrator'].includes(role);
   const isAdmin = ['admin', 'administrator'].includes(role);
+  const isPlanner = isAdmin; // alleen admins mogen plannen
+  const isOpdrachtgever = role === 'opdrachtgever';
 
   const [technicians, setTechnicians] = useState<Technician[]>([]);
   const [selectedTech, setSelectedTech] = useState<string>('all');
@@ -59,22 +60,26 @@ const WorkSchedulePage: React.FC = () => {
   // Color palette
   const colors = ['#3b82f6', '#ec4899', '#f59e0b', '#8b5cf6', '#10b981', '#f97316'];
 
-  // Restrict non-planners to their own schedule
+  // Restricting schedule view based on role
   useEffect(() => {
-    if (!isPlanner && user?.id) {
+    if (isOpdrachtgever) {
+      setSelectedTech('all');
+    } else if (!isPlanner && user?.id) {
       setSelectedTech(user.id);
     }
-  }, [isPlanner, user]);
+  }, [isPlanner, isOpdrachtgever, user]);
 
   // Fetch technicians & assign colors
   async function fetchTechnicians() {
-    const { data } = await supabase.from('profiles').select('id, full_name');
+    const { data } = await supabase
+      .from('profiles')
+      .select('id, full_name, role');
     const list = data || [];
 
-    // 1) Raw: alle technici uit de DB, of alleen de ingelogde tech als geen planner
-    const raw = isPlanner
-      ? list
-      : list.filter(t => t.id === user?.id);
+    // 1) Raw: alle technici voor planners of opdrachtgevers, anders enkel eigen profiel
+    const raw = (isPlanner || isOpdrachtgever)
+      ? list.filter(t => t.role === 'technician')
+      : list.filter(t => t.id === user?.id && t.role === 'technician');
 
     // 2) Dedupe op id, mocht de DB duplicates bevatten
     const unique = raw.filter((t, i, arr) => arr.findIndex(x => x.id === t.id) === i);
@@ -314,8 +319,8 @@ const WorkSchedulePage: React.FC = () => {
               onMonthChange={setDisplayedMonth}
               selected={selectedTech === 'all' ? undefined : workDays}
               onDayClick={(date, modifiers) => {
+                if (!isPlanner || selectedTech === 'all') return;
                 // Ensure single click selects even for outside days
-                if (selectedTech === 'all') return;
                 if (modifiers.outside) {
                   setDisplayedMonth(date);
                 }
@@ -333,7 +338,7 @@ const WorkSchedulePage: React.FC = () => {
               classNames={{ day_selected: 'ring-2 ring-offset-2 ring-gray-500' }}
             />
 
-            {selectedTech !== 'all' && (
+            {isPlanner && selectedTech !== 'all' && (
               <div className="mt-2 flex flex-wrap gap-2">
                 <Button onClick={fillWorkDays}>Vul werkdagen</Button>
                 <Button onClick={saveWorkDays}>Opslaan werkdagen</Button>
@@ -367,14 +372,18 @@ const WorkSchedulePage: React.FC = () => {
 
         {/* Legenda */}
         <div className="mt-4 flex flex-wrap gap-4 text-sm">
-          <div className="flex items-center space-x-1">
-            <span className="w-3 h-3 bg-red-500 inline-block" />
-            <span>Werkdag</span>
-          </div>
-          <div className="flex items-center space-x-1">
-            <span className="w-3 h-3 bg-green-500 inline-block" />
-            <span>Vakantie</span>
-          </div>
+          {!isOpdrachtgever && (
+            <>
+              <div className="flex items-center space-x-1">
+                <span className="w-3 h-3 bg-red-500 inline-block" />
+                <span>Werkdag</span>
+              </div>
+              <div className="flex items-center space-x-1">
+                <span className="w-3 h-3 bg-green-500 inline-block" />
+                <span>Vakantie</span>
+              </div>
+            </>
+          )}
           {selectedTech === 'all' &&
             technicians.map(t => (
               <div key={t.id} className="flex items-center space-x-1">
