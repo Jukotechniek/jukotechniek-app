@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { PageLayout } from '@/components/ui/page-layout';
+import { sendDailyReportForAll } from '@/utils/sendDailyProjectReport';
 
 const Reports = () => {
   const { toast } = useToast();
@@ -20,6 +21,16 @@ const Reports = () => {
       title: "Import Ready",
       description: "Please select an Excel file to import work hours"
     });
+  };
+
+  const handleEmailReports = async () => {
+    const today = new Date().toISOString().split('T')[0];
+    try {
+      await sendDailyReportForAll(today);
+      toast({ title: 'Succes', description: 'Dagrapporten verzonden' });
+    } catch (err) {
+      toast({ title: 'Error', description: 'Rapporten versturen mislukt', variant: 'destructive' });
+    }
   };
 
   return (
@@ -131,7 +142,11 @@ const Reports = () => {
         </CardHeader>
         <CardContent>
           <div className="flex flex-wrap gap-3">
-            <Button variant="outline" className="border-gray-300 text-gray-700 hover:bg-gray-50">
+            <Button
+              variant="outline"
+              className="border-gray-300 text-gray-700 hover:bg-gray-50"
+              onClick={handleEmailReports}
+            >
               📧 Email Rapporten
             </Button>
             <Button variant="outline" className="border-gray-300 text-gray-700 hover:bg-gray-50">
