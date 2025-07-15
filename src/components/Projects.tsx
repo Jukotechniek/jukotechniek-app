@@ -64,7 +64,8 @@ const Projects = () => {
     customerId: '',
     date: new Date().toISOString().split('T')[0],
     status: 'in-progress' as Project['status'],
-    technicianId: ''
+    technicianId: '',
+    isPublic: false
   });
   const [selectedTech, setSelectedTech] = useState<string>('all');
   const [selectedMonth, setSelectedMonth] = useState<string>('');
@@ -252,7 +253,8 @@ const Projects = () => {
         images: p.images || [],
         hoursSpent: p.hours_spent,
         status: p.status as Project['status'],
-        createdAt: p.created_at || ''
+        createdAt: p.created_at || '',
+        isPublic: p.is_public || false
       }));
       setProjects(formatted);
     } catch (err) {
@@ -285,7 +287,10 @@ const Projects = () => {
     .map(([id, name]) => ({ id, name }));
 
   const filteredProjects = projects.filter(p => {
-    if (!isAdmin && p.technicianId !== user?.id) return false;
+    // Show public projects to everyone, or own projects, or admin sees all
+    const canSeeProject = p.isPublic || p.technicianId === user?.id || isAdmin;
+    if (!canSeeProject) return false;
+    
     if (isAdmin && selectedTech !== 'all' && p.technicianId !== selectedTech) return false;
     if (selectedMonth) {
       const [y, m] = selectedMonth.split('-').map(n => parseInt(n, 10));
@@ -380,6 +385,7 @@ const Projects = () => {
         date: newProject.date,
         hours_spent: newProject.hoursSpent !== '' ? parseFloat(newProject.hoursSpent) : 0,
         status: newProject.status,
+        is_public: newProject.isPublic,
         images: []
       }]).select().single();
       if (error) {
@@ -411,7 +417,8 @@ const Projects = () => {
       customerId: '',
       date: new Date().toISOString().split('T')[0],
       status: 'in-progress',
-      technicianId: ''
+      technicianId: '',
+      isPublic: false
     });
     setSelectedImages([]);
     setShowAddForm(false);
@@ -431,7 +438,8 @@ const Projects = () => {
       customerId: project.customerId,
       date: project.date,
       status: project.status,
-      technicianId: project.technicianId
+      technicianId: project.technicianId,
+      isPublic: project.isPublic || false
     });
     setShowAddForm(true);
   };

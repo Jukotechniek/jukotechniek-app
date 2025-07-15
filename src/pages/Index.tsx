@@ -16,13 +16,38 @@ import Magazine from '@/components/Magazine';
 
 const AppContent: React.FC = () => {
   const { isAuthenticated, loading, user } = useAuth();
-  const [activeTab, setActiveTab] = useState(user?.role === 'admin' ? 'magazine' : 'dashboard');
+  
+  // Initialize activeTab from localStorage or default based on role
+  const getInitialTab = () => {
+    const savedTab = localStorage.getItem('activeTab');
+    if (savedTab && user) {
+      // Validate saved tab is allowed for current user role
+      const allowedTabs = user.role === 'admin' 
+        ? ['dashboard', 'hours', 'projects', 'magazine', 'schedule', 'customers', 'billing', 'verification', 'users', 'reports', 'chatbot', 'analytics']
+        : user.role === 'opdrachtgever'
+        ? ['dashboard', 'projects', 'schedule', 'chatbot']
+        : ['dashboard', 'hours', 'projects', 'magazine', 'schedule', 'users', 'chatbot'];
+      
+      if (allowedTabs.includes(savedTab)) {
+        return savedTab;
+      }
+    }
+    return user?.role === 'admin' ? 'magazine' : 'dashboard';
+  };
+  
+  const [activeTab, setActiveTab] = useState(getInitialTab());
 
-  // Fullscreen aan bij login, uit bij uitloggen
+  // Save activeTab to localStorage when it changes
+  const handleTabChange = (tab: string) => {
+    setActiveTab(tab);
+    localStorage.setItem('activeTab', tab);
+  };
+
   // Set default tab based on user role when authenticated
   useEffect(() => {
     if (isAuthenticated && user) {
-      setActiveTab(user.role === 'admin' ? 'magazine' : 'dashboard');
+      const initialTab = getInitialTab();
+      setActiveTab(initialTab);
     }
   }, [isAuthenticated, user]);
 
@@ -88,6 +113,8 @@ const AppContent: React.FC = () => {
         return <Magazine />;
       case 'chatbot':
         return <AIChatbot />;
+      case 'analytics':
+        return <Analytics />;
       default:
         return <Dashboard />;
     }
@@ -95,7 +122,7 @@ const AppContent: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <Navigation activeTab={activeTab} onTabChange={setActiveTab} />
+      <Navigation activeTab={activeTab} onTabChange={handleTabChange} />
       {renderContent()}
     </div>
   );

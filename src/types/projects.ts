@@ -13,6 +13,7 @@ export interface Project {
   status: 'in-progress' | 'completed' | 'needs-review';
   createdAt: string;
   updatedAt?: string;
+  isPublic?: boolean;
 }
 
 export interface ProjectImage {
