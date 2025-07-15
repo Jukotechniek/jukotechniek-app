@@ -56,6 +56,7 @@ const Badge = ({ children, color = "bg-gray-100", text = "text-gray-800" }) => (
 const Dashboard = () => {
   const { user } = useAuth();
   const isAdmin = user?.role === 'admin';
+  const isOpdrachtgever = user?.role === 'opdrachtgever';
 
   const [rawWorkHours, setRawWorkHours] = useState([]);
   const [rawRates, setRawRates] = useState([]);
@@ -68,9 +69,12 @@ const Dashboard = () => {
 
   const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7));
   const [monthlyHours, setMonthlyHours] = useState(0);
+  const [projectCount, setProjectCount] = useState(0);
+  const [avgHoursPerProject, setAvgHoursPerProject] = useState(0);
 
   useEffect(() => {
     fetchDashboardData();
+    if (isOpdrachtgever) fetchProjectMetrics();
   }, []);
 
   useEffect(() => {
@@ -114,6 +118,10 @@ const Dashboard = () => {
         )
       );
   }, [rawWorkHours, rawRates, travelRates, selectedTechnician, selectedMonth, isAdmin, user?.id]);
+
+  useEffect(() => {
+    if (isOpdrachtgever) fetchProjectMetrics();
+  }, [isOpdrachtgever]);
 
   const fetchDashboardData = async () => {
     setLoading(true);
@@ -198,6 +206,18 @@ const Dashboard = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const fetchProjectMetrics = async () => {
+    const { data, error } = await supabase.from('projects').select('hours_spent');
+    if (error) {
+      console.error('Project metrics error:', error);
+      return;
+    }
+    const count = data?.length || 0;
+    const total = (data || []).reduce((s, p) => s + Number(p.hours_spent || 0), 0);
+    setProjectCount(count);
+    setAvgHoursPerProject(count > 0 ? total / count : 0);
   };
 
   // === STACKED weeklyData (per soort uren) ===
@@ -421,13 +441,15 @@ const Dashboard = () => {
         </header>
 
         {/* Key Metrics */}
-        <div className={`grid grid-cols-2 gap-2 md:grid-cols-2 lg:grid-cols-${isAdmin ? '4' : '3'} md:gap-6 mb-4 md:mb-8`}>
-          <Card className="shadow-lg border-2 border-gray-200 bg-white/90 hover:bg-gray-50 transition-all">
-            <CardContent className="px-2 py-3 md:px-4 md:py-6">
-              <p className="text-xs md:text-sm text-gray-600">Totale uren</p>
-              <p className="text-2xl md:text-3xl font-bold text-gray-800"><ZakelijkUren value={totalHours} /></p>
-            </CardContent>
-          </Card>
+        <div className={`grid grid-cols-2 gap-2 md:grid-cols-2 lg:grid-cols-${isAdmin ? '4' : isOpdrachtgever ? '2' : '3'} md:gap-6 mb-4 md:mb-8`}>
+          {!isOpdrachtgever && (
+            <Card className="shadow-lg border-2 border-gray-200 bg-white/90 hover:bg-gray-50 transition-all">
+              <CardContent className="px-2 py-3 md:px-4 md:py-6">
+                <p className="text-xs md:text-sm text-gray-600">Totale uren</p>
+                <p className="text-2xl md:text-3xl font-bold text-gray-800"><ZakelijkUren value={totalHours} /></p>
+              </CardContent>
+            </Card>
+          )}
           {isAdmin && (
             <Card className="shadow-lg border-2 border-gray-200 bg-white/90 hover:bg-gray-50 transition-all">
               <CardContent className="px-2 py-3 md:px-4 md:py-6">
@@ -444,13 +466,31 @@ const Dashboard = () => {
               </CardContent>
             </Card>
           )}
-          <Card className="shadow-lg border-2 border-gray-200 bg-white/90 hover:bg-gray-50 transition-all">
-            <CardContent className="px-2 py-3 md:px-4 md:py-6">
-              <p className="text-xs md:text-sm text-gray-600">Gem. uren/dag</p>
-              <p className="text-2xl md:text-3xl font-bold text-gray-800"><ZakelijkUren value={avgHoursPerDay} /></p>
-            </CardContent>
-          </Card>
-          {!isAdmin && (
+          {!isOpdrachtgever && (
+            <Card className="shadow-lg border-2 border-gray-200 bg-white/90 hover:bg-gray-50 transition-all">
+              <CardContent className="px-2 py-3 md:px-4 md:py-6">
+                <p className="text-xs md:text-sm text-gray-600">Gem. uren/dag</p>
+                <p className="text-2xl md:text-3xl font-bold text-gray-800"><ZakelijkUren value={avgHoursPerDay} /></p>
+              </CardContent>
+            </Card>
+          )}
+          {isOpdrachtgever && (
+            <>
+              <Card className="shadow-lg border-2 border-gray-200 bg-white/90 hover:bg-gray-50 transition-all">
+                <CardContent className="px-2 py-3 md:px-4 md:py-6">
+                  <p className="text-xs md:text-sm text-gray-600">Totaal projecten</p>
+                  <p className="text-2xl md:text-3xl font-bold text-gray-800">{projectCount}</p>
+                </CardContent>
+              </Card>
+              <Card className="shadow-lg border-2 border-gray-200 bg-white/90 hover:bg-gray-50 transition-all">
+                <CardContent className="px-2 py-3 md:px-4 md:py-6">
+                  <p className="text-xs md:text-sm text-gray-600">Gem. uren/project</p>
+                  <p className="text-2xl md:text-3xl font-bold text-gray-800"><ZakelijkUren value={avgHoursPerProject} /></p>
+                </CardContent>
+              </Card>
+            </>
+          )}
+          {!isAdmin && !isOpdrachtgever && (
             <Card className="shadow-lg border-2 border-gray-200 bg-white/90 hover:bg-gray-50 transition-all">
               <CardContent className="px-2 py-3 md:px-4 md:py-6">
                 <p className="text-xs md:text-sm text-gray-600">
