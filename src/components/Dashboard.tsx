@@ -268,6 +268,7 @@ const Dashboard = () => {
           profit: 0,
           revenue: 0,
           costs: 0,
+          travelCosts: 0,
         });
       }
       const s = techMap.get(id);
@@ -285,9 +286,9 @@ const Dashboard = () => {
 
       let rev = 0, cost = 0;
 
-      // Only calculate revenue if hours are verified (webhook_verified = true)
+      // Only calculate revenue and costs if hours are verified
       const isVerified = entry.manual_verified === true;
-      
+
       if (isVerified) {
         if (su > 0) {
           rev += su * rate.billable * 2;
@@ -305,12 +306,6 @@ const Dashboard = () => {
           rev += reg * rate.billable;
           cost += reg * rate.hourly;
         }
-      } else {
-        // Still calculate costs even if not verified
-        if (su > 0) cost += su * rate.sunday;
-        if (wk > 0) cost += wk * rate.saturday;
-        if (ot > 0) cost += ot * rate.hourly * 1.25;
-        if (reg > 0) cost += reg * rate.hourly;
       }
 
       if (isVerified && billedHours > actualHours) {
@@ -324,17 +319,18 @@ const Dashboard = () => {
       if (isVerified && travel.fromClient > 0) {
         rev += travel.fromClient;
       }
-      if (travel.toTech > 0) {
+      if (isVerified && travel.toTech > 0) {
         cost += travel.toTech;
+        s.travelCosts += travel.toTech;
       }
 
       const profit = rev - cost;
-      const hrs = actualHours;
+      const hrs = isVerified ? actualHours : 0;
       s.totalHours += hrs;
-      s.regularHours += reg;
-      s.overtimeHours += ot;
-      s.weekendHours += wk;
-      s.sundayHours += su;
+      s.regularHours += isVerified ? reg : 0;
+      s.overtimeHours += isVerified ? ot : 0;
+      s.weekendHours += isVerified ? wk : 0;
+      s.sundayHours += isVerified ? su : 0;
       s.profit += profit;
       s.revenue += rev;
       s.costs += cost;
@@ -638,14 +634,18 @@ const Dashboard = () => {
                             <div className="font-semibold text-gray-800"><ZakelijkEuro value={t.revenue} /></div>
                           </div>
                           <div>
-                            <div className="text-xs text-gray-400 mb-1">Kosten</div>
-                            <div className="font-semibold text-gray-800"><ZakelijkEuro value={t.costs} /></div>
+                          <div className="text-xs text-gray-400 mb-1">Kosten</div>
+                          <div className="font-semibold text-gray-800"><ZakelijkEuro value={t.costs} /></div>
+                        </div>
+                        <div>
+                          <div className="text-xs text-gray-400 mb-1">Reiskosten</div>
+                          <div className="font-semibold text-gray-800"><ZakelijkEuro value={t.travelCosts} /></div>
+                        </div>
+                        <div>
+                          <div className="text-xs text-gray-400 mb-1">Winst</div>
+                          <div className={`font-bold ${t.profit >= 0 ? 'text-green-700' : 'text-red-700'}`}>
+                            <ZakelijkEuro value={t.profit} />
                           </div>
-                          <div>
-                            <div className="text-xs text-gray-400 mb-1">Winst</div>
-                            <div className={`font-bold ${t.profit >= 0 ? 'text-green-700' : 'text-red-700'}`}>
-                              <ZakelijkEuro value={t.profit} />
-                            </div>
                           </div>
                           <div>
                             <div className="text-xs text-gray-400 mb-1">Margin %</div>
@@ -688,6 +688,10 @@ const Dashboard = () => {
                         <div className="flex flex-col items-start">
                           <span className="text-xs text-gray-400">Kosten</span>
                           <span className="font-semibold text-gray-800"><ZakelijkEuro value={t.costs} /></span>
+                        </div>
+                        <div className="flex flex-col items-start">
+                          <span className="text-xs text-gray-400">Reiskosten</span>
+                          <span className="font-semibold text-gray-800"><ZakelijkEuro value={t.travelCosts} /></span>
                         </div>
                         <div className="flex flex-col items-start">
                           <span className="text-xs text-gray-400">Winst</span>
