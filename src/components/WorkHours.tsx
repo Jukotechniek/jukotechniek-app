@@ -49,6 +49,9 @@ const WorkHours = () => {
     description: ''
   });
 
+  const dateRef = React.useRef<HTMLInputElement>(null)
+  const editDateRef = React.useRef<HTMLInputElement>(null)
+
   const isAdmin = user?.role === 'admin';
   const [selectedTech, setSelectedTech] = useState<string>('all');
   const [selectedMonth, setSelectedMonth] = useState<string>(new Date().toISOString().slice(0, 7));
@@ -447,7 +450,9 @@ const WorkHours = () => {
                   <Input
                     id="date"
                     type="date"
+                    ref={dateRef}
                     value={newEntry.date}
+                    onFocus={() => dateRef.current?.showPicker?.()}
                     onChange={e => setNewEntry({ ...newEntry, date: e.target.value })}
                     required
                     className="focus:ring-red-500 focus:border-red-500"
@@ -563,7 +568,9 @@ const WorkHours = () => {
                         {editingEntry?.id === entry.id ? (
                           <Input
                             type="date"
+                            ref={editDateRef}
                             value={editingEntry.date}
+                            onFocus={() => editDateRef.current?.showPicker?.()}
                             onChange={e => setEditingEntry({ ...editingEntry, date: e.target.value })}
                             className="h-8"
                           />
