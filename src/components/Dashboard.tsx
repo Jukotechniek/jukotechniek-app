@@ -285,9 +285,9 @@ const Dashboard = () => {
 
       let rev = 0, cost = 0;
 
-      // Only calculate revenue if hours are verified (webhook_verified = true)
+      // Only calculate revenue and costs if hours are verified
       const isVerified = entry.manual_verified === true;
-      
+
       if (isVerified) {
         if (su > 0) {
           rev += su * rate.billable * 2;
@@ -305,12 +305,6 @@ const Dashboard = () => {
           rev += reg * rate.billable;
           cost += reg * rate.hourly;
         }
-      } else {
-        // Still calculate costs even if not verified
-        if (su > 0) cost += su * rate.sunday;
-        if (wk > 0) cost += wk * rate.saturday;
-        if (ot > 0) cost += ot * rate.hourly * 1.25;
-        if (reg > 0) cost += reg * rate.hourly;
       }
 
       if (isVerified && billedHours > actualHours) {
@@ -324,7 +318,7 @@ const Dashboard = () => {
       if (isVerified && travel.fromClient > 0) {
         rev += travel.fromClient;
       }
-      if (travel.toTech > 0) {
+      if (isVerified && travel.toTech > 0) {
         cost += travel.toTech;
       }
 
