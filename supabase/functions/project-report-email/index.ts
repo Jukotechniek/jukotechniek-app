@@ -14,8 +14,8 @@ serve(async (req) => {
   }
 
   try {
-    const { date, email } = await req.json();
-    console.log('Project report email', { date, email });
+    const { date, email, from } = await req.json();
+    console.log('Project report email', { date, email, from });
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
@@ -30,6 +30,7 @@ serve(async (req) => {
     await supabase.from('project_report_logs').insert({
       date,
       email,
+      from,
       project_count: projects?.length || 0,
     });
 
