@@ -425,6 +425,7 @@ export type Database = {
           hours_spent: number
           id: string
           images: string[] | null
+          is_public: boolean | null
           status: string | null
           technician_id: string | null
           title: string
@@ -438,6 +439,7 @@ export type Database = {
           hours_spent: number
           id?: string
           images?: string[] | null
+          is_public?: boolean | null
           status?: string | null
           technician_id?: string | null
           title: string
@@ -451,6 +453,7 @@ export type Database = {
           hours_spent?: number
           id?: string
           images?: string[] | null
+          is_public?: boolean | null
           status?: string | null
           technician_id?: string | null
           title?: string

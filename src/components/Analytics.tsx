@@ -74,17 +74,21 @@ const Analytics: React.FC = () => {
       const startStr = format(start, 'yyyy-MM-dd');
       const endStr = format(end, 'yyyy-MM-dd');
 
-      // Fetch work hours with technician rates
+      // Fetch work hours with profiles
       const { data: workHours } = await supabase
         .from('work_hours')
         .select(`
           *,
-          profiles!work_hours_technician_id_fkey(id, full_name),
-          technician_rates(hourly_rate, billable_rate, saturday_rate, sunday_rate)
+          profiles!work_hours_technician_id_fkey(id, full_name)
         `)
         .gte('date', startStr)
         .lte('date', endStr)
         .order('date');
+
+      // Fetch technician rates separately
+      const { data: technicianRates } = await supabase
+        .from('technician_rates')
+        .select('*');
 
       // Fetch webhook hours for comparison
       const { data: webhookHours } = await supabase
@@ -128,7 +132,7 @@ const Analytics: React.FC = () => {
         const hoursToUse = webhookData ? webhookData.hours_worked : hour.hours_worked;
         
         // Calculate rates
-        const rates = hour.technician_rates;
+        const rates = technicianRates?.find(r => r.technician_id === techId);
         const hourlyRate = rates?.hourly_rate || 25;
         const billableRate = rates?.billable_rate || 45;
         const saturdayRate = rates?.saturday_rate || hourlyRate * 1.25;

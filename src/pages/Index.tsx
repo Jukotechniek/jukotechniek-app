@@ -13,6 +13,7 @@ import Reports from '@/components/Reports';
 import AIChatbot from '@/components/AIChatbot';
 import WorkSchedulePage from '@/components/WorkSchedule';
 import Magazine from '@/components/Magazine';
+import Analytics from '@/components/Analytics';
 
 const AppContent: React.FC = () => {
   const { isAuthenticated, loading, user } = useAuth();

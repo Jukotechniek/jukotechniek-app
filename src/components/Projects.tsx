@@ -367,7 +367,8 @@ const Projects = () => {
           hours_spent: newProject.hoursSpent !== '' ? parseFloat(newProject.hoursSpent) : 0,
           status: newProject.status,
           customer_id: newProject.customerId,
-          technician_id: technicianIdToSave
+          technician_id: technicianIdToSave,
+          is_public: newProject.isPublic
         })
         .eq('id', editingProject.id);
       if (error) {
@@ -623,7 +624,8 @@ const Projects = () => {
                 customerId: '',
                 date: new Date().toISOString().split('T')[0],
                 status: 'in-progress',
-                technicianId: ''
+                technicianId: '',
+                isPublic: false
               });
             }}
             className="bg-red-600 text-white hover:bg-red-700"
@@ -754,6 +756,18 @@ const Projects = () => {
                     value={newProject.description}
                     onChange={e => setNewProject({ ...newProject, description: e.target.value })}
                   />
+                </div>
+                <div className="flex items-center space-x-2">
+                  <input
+                    id="isPublic"
+                    type="checkbox"
+                    checked={newProject.isPublic}
+                    onChange={e => setNewProject({ ...newProject, isPublic: e.target.checked })}
+                    className="rounded border-gray-300"
+                  />
+                  <Label htmlFor="isPublic" className="text-sm">
+                    Project openbaar maken (zichtbaar voor iedereen)
+                  </Label>
                 </div>
                 <div>
                   <Label>Project Afbeeldingen (max 5)</Label>
