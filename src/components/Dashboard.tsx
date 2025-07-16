@@ -75,7 +75,9 @@ const Dashboard = () => {
 
   useEffect(() => {
     if (!rawWorkHours.length) return;
-    let filtered = rawWorkHours;
+    // Only include verified hours for all calculations
+    const verifiedHours = rawWorkHours.filter(e => e.manual_verified === true);
+    let filtered = verifiedHours;
 
     if (isAdmin) {
       if (selectedTechnician !== 'all') {
@@ -107,7 +109,7 @@ const Dashboard = () => {
     }
     setTechnicianData(processTechnicianData(filtered, rawRates, travelRates));
     setWeeklyData(processWeeklyData(filtered, isAdmin ? null : user?.id));
-    if (isAdmin) setWeeklyAdminData(processWeeklyData(rawWorkHours));
+    if (isAdmin) setWeeklyAdminData(processWeeklyData(verifiedHours));
   }, [rawWorkHours, rawRates, travelRates, selectedTechnician, selectedMonth, isAdmin, user?.id]);
 
   const fetchDashboardData = async () => {
