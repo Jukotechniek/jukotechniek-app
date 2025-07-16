@@ -8,6 +8,7 @@ import { useToast } from '@/hooks/use-toast';
 import { User } from '@/types/auth';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { Customer } from '@/types/customers';
 
 const UserManagement = () => {
   const { toast } = useToast();
@@ -32,6 +33,7 @@ const UserManagement = () => {
     password: ''
   });
   const [resetPassword, setResetPassword] = useState('');
+  const [customers, setCustomers] = useState<Customer[]>([]);
 
   // Update form when currentUser changes
   useEffect(() => {
@@ -98,6 +100,15 @@ const UserManagement = () => {
       setLoading(false);
     }
   }, [currentUser]);
+
+  // Fetch customers for customer select
+  useEffect(() => {
+    async function fetchCustomers() {
+      const { data, error } = await supabase.from('customers').select('*').order('name');
+      if (!error) setCustomers(data || []);
+    }
+    fetchCustomers();
+  }, []);
 
   const handleUpdateCurrentUser = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -271,7 +282,8 @@ const UserManagement = () => {
         .update({
           username: editingUser.username,
           full_name: editingUser.fullName,
-          role: editingUser.role
+          role: editingUser.role,
+          customer: editingUser.role === 'opdrachtgever' ? editingUser.customer || null : null
         })
         .eq('id', editingUser.id);
 
@@ -643,15 +655,30 @@ const UserManagement = () => {
                           </td>
                           <td className="py-3">
                             {editingUser?.id === user.id ? (
-                              <select
-                                value={editingUser.role}
-                                onChange={(e) => setEditingUser({ ...editingUser, role: e.target.value as 'admin' | 'technician' | 'opdrachtgever' })}
-                                className="h-8 px-2 border border-gray-300 rounded text-sm"
-                              >
-                                <option value="technician">Monteur</option>
-                                <option value="admin">Admin</option>
-                                <option value="opdrachtgever">Opdrachtgever</option>
-                              </select>
+                              <>
+                                <select
+                                  value={editingUser.role}
+                                  onChange={(e) => setEditingUser({ ...editingUser, role: e.target.value as 'admin' | 'technician' | 'opdrachtgever' })}
+                                  className="h-8 px-2 border border-gray-300 rounded text-sm"
+                                >
+                                  <option value="technician">Monteur</option>
+                                  <option value="admin">Admin</option>
+                                  <option value="opdrachtgever">Opdrachtgever</option>
+                                </select>
+                                {/* Customer select for opdrachtgever */}
+                                {editingUser.role === 'opdrachtgever' && (
+                                  <select
+                                    value={editingUser.customer || ''}
+                                    onChange={e => setEditingUser({ ...editingUser, customer: e.target.value })}
+                                    className="h-8 px-2 border border-gray-300 rounded text-sm mt-2"
+                                  >
+                                    <option value="">Selecteer klant</option>
+                                    {customers.map(c => (
+                                      <option key={c.id} value={c.id}>{c.name}</option>
+                                    ))}
+                                  </select>
+                                )}
+                              </>
                             ) : (
                               <span className={`px-2 py-1 rounded-full text-xs font-medium ${
                                 user.role === 'admin'

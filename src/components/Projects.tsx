@@ -231,7 +231,7 @@ const Projects = () => {
         .order('name');
       const { data: profilesData } = await supabase
         .from('profiles')
-        .select('id, full_name')
+        .select('id, full_name, customer')
         .order('full_name', { ascending: true });
       const { data: projectData } = await supabase
         .from('projects')
@@ -287,13 +287,13 @@ const Projects = () => {
   const isOpdrachtgever = user?.role === 'opdrachtgever';
   const isAdminOrOpdrachtgever = isAdmin || isOpdrachtgever;
 
-  // For opdrachtgever, set their own customerId automatically
+  // For opdrachtgever, set their own customerId automatically from profile
   useEffect(() => {
-    if (isOpdrachtgever && user?.id) {
-      setNewProject(prev => ({ ...prev, customerId: user.id }));
+    if (isOpdrachtgever && user?.customer) {
+      setNewProject(prev => ({ ...prev, customerId: user.customer }));
     }
     // eslint-disable-next-line
-  }, [isOpdrachtgever, user?.id, showAddForm]);
+  }, [isOpdrachtgever, user?.customer, showAddForm]);
 
   const technicians = Array.from(
     new Map(projects.map(p => [p.technicianId, p.technicianName])).entries()

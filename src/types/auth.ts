@@ -6,6 +6,7 @@ export interface User {
   role: 'admin' | 'technician' | 'opdrachtgever';
   fullName: string;
   createdAt: string;
+  customer?: string | null;
 }
 
 export interface AuthState {
