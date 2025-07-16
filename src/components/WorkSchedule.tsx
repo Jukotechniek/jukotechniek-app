@@ -311,6 +311,18 @@ const WorkSchedulePage: React.FC = () => {
                 onMonthChange={setDisplayedMonth}
                 components={{ Day: CustomDay }}
               />
+              {/* Legenda for opdrachtgever */}
+              <div className="mt-6">
+                <h3 className="text-sm font-semibold mb-2">Legenda</h3>
+                <div className="flex flex-wrap gap-4">
+                  {technicians.map(t => (
+                    <div key={t.id} className="flex items-center gap-2">
+                      <span className="inline-block w-4 h-4 rounded-full border" style={{ backgroundColor: techColors[t.id] || '#888' }}></span>
+                      <span className="text-sm text-gray-700">{t.full_name}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
             </CardContent>
           </Card>
         ) : (

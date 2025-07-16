@@ -14,12 +14,15 @@ import {
   Legend,
   AreaChart,
   Area,
+  LineChart,
+  Line,
 } from 'recharts';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { TechnicianSummary } from '@/types/workHours';
 import { formatDutchDate } from '@/utils/overtimeCalculations';
 import TechnicianFilter from './TechnicianFilter';
+import { Project } from '@/types/projects';
 
 const COLORS = ['#2563eb', '#dc2626', '#991b1b', '#fbbf24', '#8b5cf6', '#059669'];
 
@@ -56,6 +59,7 @@ const Badge = ({ children, color = "bg-gray-100", text = "text-gray-800" }) => (
 const Dashboard = () => {
   const { user } = useAuth();
   const isAdmin = user?.role === 'admin';
+  const isOpdrachtgever = user?.role === 'opdrachtgever';
 
   const [rawWorkHours, setRawWorkHours] = useState([]);
   const [rawRates, setRawRates] = useState([]);
@@ -68,6 +72,42 @@ const Dashboard = () => {
 
   const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7));
   const [monthlyHours, setMonthlyHours] = useState(0);
+
+  // --- Project stats for opdrachtgever ---
+  const [projectStats, setProjectStats] = useState<{ perWeek: any[]; perStatus: any[]; counts: Record<string, number> }>({ perWeek: [], perStatus: [], counts: { 'completed': 0, 'in-progress': 0, 'needs-review': 0 } });
+  useEffect(() => {
+    if (!isOpdrachtgever || !user?.customer) return;
+    async function fetchProjectStats() {
+      let query = supabase
+        .from('projects')
+        .select('id, date, status')
+        .eq('customer_id', user.customer);
+      if (selectedMonth) {
+        const [y, m] = selectedMonth.split('-').map(Number);
+        const monthStart = new Date(y, m - 1, 1);
+        const monthEnd = new Date(y, m, 0, 23, 59, 59, 999);
+        query = query.gte('date', monthStart.toISOString().slice(0, 10)).lte('date', monthEnd.toISOString().slice(0, 10));
+      }
+      const { data: projects, error } = await query;
+      if (error) return;
+      // Group by week
+      const weekMap = new Map<string, number>();
+      const statusMap = { 'completed': 0, 'in-progress': 0, 'needs-review': 0 };
+      (projects || []).forEach((p: any) => {
+        const d = new Date(p.date);
+        const ws = new Date(d);
+        ws.setDate(d.getDate() - d.getDay());
+        const weekKey = ws.toISOString().slice(0, 10);
+        weekMap.set(weekKey, (weekMap.get(weekKey) || 0) + 1);
+        statusMap[p.status] = (statusMap[p.status] || 0) + 1;
+      });
+      // Prepare for recharts
+      const perWeek = Array.from(weekMap.entries()).map(([week, count]) => ({ week, count })).sort((a, b) => a.week.localeCompare(b.week));
+      const perStatus = Object.entries(statusMap).map(([status, value]) => ({ status, value }));
+      setProjectStats({ perWeek, perStatus, counts: statusMap });
+    }
+    fetchProjectStats();
+  }, [isOpdrachtgever, user?.customer, selectedMonth]);
 
   useEffect(() => {
     fetchDashboardData();
@@ -367,6 +407,13 @@ const Dashboard = () => {
   const maxHours = Math.max(...displayData.map(t => t.totalHours));
   const maxProfit = Math.max(...displayData.map(t => t.profit));
 
+  // Dutch status labels for opdrachtgever
+  const STATUS_LABELS_NL: Record<string, string> = {
+    'in-progress': 'Bezig',
+    'completed': 'Afgerond',
+    'needs-review': 'Ter review',
+  };
+
   if (loading) {
     return (
       <div className="p-6 bg-gray-50 min-h-screen flex items-center justify-center">
@@ -421,171 +468,158 @@ const Dashboard = () => {
 
         {/* Key Metrics */}
         <div className={`grid grid-cols-2 gap-2 md:grid-cols-2 lg:grid-cols-${isAdmin ? '4' : '3'} md:gap-6 mb-4 md:mb-8`}>
-          <Card className="shadow-lg border-2 border-gray-200 bg-white/90 hover:bg-gray-50 transition-all">
-            <CardContent className="px-2 py-3 md:px-4 md:py-6">
-              <p className="text-xs md:text-sm text-gray-600">Totale uren</p>
-              <p className="text-2xl md:text-3xl font-bold text-gray-800"><ZakelijkUren value={totalHours} /></p>
-            </CardContent>
-          </Card>
-          {isAdmin && (
-            <Card className="shadow-lg border-2 border-gray-200 bg-white/90 hover:bg-gray-50 transition-all">
-              <CardContent className="px-2 py-3 md:px-4 md:py-6">
-                <p className="text-xs md:text-sm text-gray-600">Totale omzet</p>
-                <p className="text-2xl md:text-3xl font-bold text-gray-800"><ZakelijkEuro value={technicianData.reduce((s, t) => s + t.revenue, 0)} /></p>
-              </CardContent>
-            </Card>
-          )}
-          {isAdmin && (
-            <Card className="shadow-lg border-2 border-gray-200 bg-white/90 hover:bg-gray-50 transition-all">
-              <CardContent className="px-2 py-3 md:px-4 md:py-6">
-                <p className="text-xs md:text-sm text-gray-600">Totale winst</p>
-                <p className="text-2xl md:text-3xl font-bold text-gray-800"><ZakelijkEuro value={technicianData.reduce((s, t) => s + t.profit, 0)} /></p>
-              </CardContent>
-            </Card>
-          )}
-          <Card className="shadow-lg border-2 border-gray-200 bg-white/90 hover:bg-gray-50 transition-all">
-            <CardContent className="px-2 py-3 md:px-4 md:py-6">
-              <p className="text-xs md:text-sm text-gray-600">Gem. uren/dag</p>
-              <p className="text-2xl md:text-3xl font-bold text-gray-800"><ZakelijkUren value={avgHoursPerDay} /></p>
-            </CardContent>
-          </Card>
-          {!isAdmin && (
-            <Card className="shadow-lg border-2 border-gray-200 bg-white/90 hover:bg-gray-50 transition-all">
-              <CardContent className="px-2 py-3 md:px-4 md:py-6">
-                <p className="text-xs md:text-sm text-gray-600">
-                  {selectedMonth ? `Uren in ${selectedMonth}` : 'Uren totaal'}
-                </p>
-                <p className="text-2xl md:text-3xl font-bold text-gray-800"><ZakelijkUren value={monthlyHours} /></p>
-              </CardContent>
-            </Card>
+          {/* Only show hours cards for admin/technician, not opdrachtgever */}
+          {(!isOpdrachtgever) && (
+            <>
+              <Card className="shadow-lg border-2 border-gray-200 bg-white/90 hover:bg-gray-50 transition-all">
+                <CardContent className="px-2 py-3 md:px-4 md:py-6">
+                  <p className="text-xs md:text-sm text-gray-600">Totale uren</p>
+                  <p className="text-2xl md:text-3xl font-bold text-gray-800"><ZakelijkUren value={totalHours} /></p>
+                </CardContent>
+              </Card>
+              {isAdmin && (
+                <Card className="shadow-lg border-2 border-gray-200 bg-white/90 hover:bg-gray-50 transition-all">
+                  <CardContent className="px-2 py-3 md:px-4 md:py-6">
+                    <p className="text-xs md:text-sm text-gray-600">Totale omzet</p>
+                    <p className="text-2xl md:text-3xl font-bold text-gray-800"><ZakelijkEuro value={technicianData.reduce((s, t) => s + t.revenue, 0)} /></p>
+                  </CardContent>
+                </Card>
+              )}
+              {isAdmin && (
+                <Card className="shadow-lg border-2 border-gray-200 bg-white/90 hover:bg-gray-50 transition-all">
+                  <CardContent className="px-2 py-3 md:px-4 md:py-6">
+                    <p className="text-xs md:text-sm text-gray-600">Totale winst</p>
+                    <p className="text-2xl md:text-3xl font-bold text-gray-800"><ZakelijkEuro value={technicianData.reduce((s, t) => s + t.profit, 0)} /></p>
+                  </CardContent>
+                </Card>
+              )}
+              <Card className="shadow-lg border-2 border-gray-200 bg-white/90 hover:bg-gray-50 transition-all">
+                <CardContent className="px-2 py-3 md:px-4 md:py-6">
+                  <p className="text-xs md:text-sm text-gray-600">Gem. uren/dag</p>
+                  <p className="text-2xl md:text-3xl font-bold text-gray-800"><ZakelijkUren value={avgHoursPerDay} /></p>
+                </CardContent>
+              </Card>
+              {!isAdmin && (
+                <Card className="shadow-lg border-2 border-gray-200 bg-white/90 hover:bg-gray-50 transition-all">
+                  <CardContent className="px-2 py-3 md:px-4 md:py-6">
+                    <p className="text-xs md:text-sm text-gray-600">
+                      {selectedMonth ? `Uren in ${selectedMonth}` : 'Uren totaal'}
+                    </p>
+                    <p className="text-2xl md:text-3xl font-bold text-gray-800"><ZakelijkUren value={monthlyHours} /></p>
+                  </CardContent>
+                </Card>
+              )}
+            </>
           )}
         </div>
 
         {/* Grafieken */}
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-2 md:gap-8 mb-4 md:mb-8">
-          {/* --- WEEK (admin: stacked, monteur: normaal) --- */}
-          <Card className="shadow-lg bg-white/80 border border-red-200">
-            <CardHeader className="px-2 py-3 md:px-4 md:py-4">
-              <CardTitle className="text-sm md:text-base text-red-700">
-                {isAdmin ? 'Wekelijkse uren per monteur(s)' : 'Jouw gewerkte uren per week'}
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="p-1 md:p-4">
-              <ResponsiveContainer width="100%" height={220}>
-                <BarChart data={weeklyData}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="week" fontSize={11} />
-                  <YAxis fontSize={11} />
-                  <RechartTooltip />
-                  <Legend />
-                  {isAdmin ? (
-                    <>
-                     <Bar dataKey="regularHours" name="Normaal 100%" stackId="a" fill="#1e3a8a" />
-                     <Bar dataKey="overtimeHours" name="Overtime 125%" stackId="a" fill="#2563eb" />
-                     <Bar dataKey="weekendHours" name="Weekend 150%" stackId="a" fill="#60a5fa" />
-                     <Bar dataKey="sundayHours" name="Sunday 200%" stackId="a" fill="#93c5fd" />
-
-
-                    </>
-                  ) : (
-                    <Bar dataKey="allHours" name="Totaal uren" fill="#dc2626" />
-                  )}
-                </BarChart>
-              </ResponsiveContainer>
-            </CardContent>
-          </Card>
-
-          {/* --- REST unchanged --- */}
-          {isAdmin && (
+          {/* Opdrachtgever project status cards at the top, charts below */}
+          {isOpdrachtgever && (
             <>
-              <Card className="shadow-lg bg-white/80 border border-red-200">
-                <CardHeader className="px-2 py-3 md:px-4 md:py-4">
-                  <CardTitle className="text-sm md:text-base text-blue-700">Wekelijkse uren (trend)</CardTitle>
-                </CardHeader>
-                <CardContent className="p-1 md:p-4">
-                 <ResponsiveContainer width="100%" height={220}>
-  <AreaChart data={weeklyAdminData}>
-    <defs>
-      <linearGradient id="colorArea" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="5%" stopColor="#2563eb" stopOpacity={0.7} />
-        <stop offset="95%" stopColor="#2563eb" stopOpacity={0.15} />
-      </linearGradient>
-    </defs>
-    <XAxis dataKey="week" fontSize={11} />
-    <YAxis fontSize={11} />
-    <CartesianGrid strokeDasharray="3 3" />
-    <RechartTooltip />
-    <Area
-      type="monotone"
-      dataKey="allHours"     
-      stroke="#2563eb"
-      fill="url(#colorArea)"
-      name="Totaal uren"
-    />
-       </AreaChart>
-      </ResponsiveContainer>
-
-                </CardContent>
-              </Card>
-              <Card className="shadow-lg bg-white/80 border border-yellow-200">
-                <CardHeader className="px-2 py-3 md:px-4 md:py-4">
-                  <CardTitle className="text-sm md:text-base text-yellow-600">Winstverdeling</CardTitle>
-                </CardHeader>
-                <CardContent className="p-1 md:p-4">
-                  <ResponsiveContainer width="100%" height={220}>
-                    <PieChart>
-                      <Pie
-                        data={displayData.filter(t => t.profit > 0).slice(0, 5).map((t, i) => ({
-                          ...t,
-                          name: t.technicianName,
-                          value: t.profit
-                        }))}
-                        dataKey="value"
-                        nameKey="name"
-                        cx="50%"
-                        cy="50%"
-                        outerRadius={70}
-                        fill="#8884d8"
-                      >
-                        {displayData
-                          .filter(t => t.profit > 0)
-                          .slice(0, 5)
-                          .map((e, i) => (
-                            <Cell key={i} fill={COLORS[i % COLORS.length]} />
-                          ))}
-                      </Pie>
-                      <RechartTooltip 
-                        formatter={(value) => [
-                          new Intl.NumberFormat('nl-NL', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2 }).format(Number(value)),
-                          'Winst'
-                        ]}
-                      />
-                      <Legend wrapperStyle={{ fontSize: '12px' }} />
-                    </PieChart>
-                  </ResponsiveContainer>
-                </CardContent>
-              </Card>
-              <Card className="shadow-lg bg-white/80 border border-green-200">
-                <CardHeader className="px-2 py-3 md:px-4 md:py-4">
-                  <CardTitle className="text-sm md:text-base text-green-700">Overtime per monteur (100%, 125%, 150%, 200%)</CardTitle>
-                </CardHeader>
-                <CardContent className="p-1 md:p-4">
-                  <ResponsiveContainer width="100%" height={220}>
-                    <BarChart data={technicianData}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="technicianName" fontSize={11} />
-                      <YAxis fontSize={11} />
-                      <RechartTooltip formatter={v => `${Number(v).toFixed(2)}u`} />
-                      <Legend />
-                      <Bar dataKey="regularHours" fill="#1e3a8a" name="Normaal 100%" stackId="a" />
-                      <Bar dataKey="overtimeHours" fill="#2563eb" name="Overtime 125%" stackId="a" />
-                      <Bar dataKey="weekendHours" fill="#60a5fa" name="Weekend 150%" stackId="a" />
-                      <Bar dataKey="sundayHours" fill="#93c5fd" name="Sunday 200%" stackId="a" />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </CardContent>
-              </Card>
+              {/* Status cards row */}
+              <div className="flex flex-col md:flex-row justify-center items-center gap-2 md:gap-6 mb-6 mt-2 w-full">
+                <Card className="shadow border border-gray-200 bg-white/95 transition-all w-full md:w-44">
+                  <CardContent className="px-2 py-2 md:px-3 md:py-4 flex flex-col items-center">
+                    <span className="text-xs md:text-sm text-gray-600">Afgerond</span>
+                    <span className="text-xl md:text-2xl font-bold text-green-700">{projectStats.counts['completed']}</span>
+                  </CardContent>
+                </Card>
+                <Card className="shadow border border-gray-200 bg-white/95 transition-all w-full md:w-44">
+                  <CardContent className="px-2 py-2 md:px-3 md:py-4 flex flex-col items-center">
+                    <span className="text-xs md:text-sm text-gray-600">Bezig</span>
+                    <span className="text-xl md:text-2xl font-bold text-blue-700">{projectStats.counts['in-progress']}</span>
+                  </CardContent>
+                </Card>
+                <Card className="shadow border border-gray-200 bg-white/95 transition-all w-full md:w-44">
+                  <CardContent className="px-2 py-2 md:px-3 md:py-4 flex flex-col items-center">
+                    <span className="text-xs md:text-sm text-gray-600">Ter review</span>
+                    <span className="text-xl md:text-2xl font-bold text-yellow-600">{projectStats.counts['needs-review']}</span>
+                  </CardContent>
+                </Card>
+              </div>
+              {/* Charts row below cards, always below, never beside */}
+              <div className="w-full">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
+                  <Card className="shadow border border-blue-200 bg-white/90 transition-all w-full">
+                    <CardHeader className="px-2 py-2 md:px-3 md:py-2">
+                      <CardTitle className="text-xs md:text-sm text-blue-700">Projecten per week</CardTitle>
+                    </CardHeader>
+                    <CardContent className="p-1 md:p-2 flex-1 w-full h-48 md:h-56 flex items-center justify-center">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <LineChart data={projectStats.perWeek} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                          <CartesianGrid strokeDasharray="3 3" />
+                          <XAxis dataKey="week" fontSize={10} />
+                          <YAxis fontSize={10} allowDecimals={false} />
+                          <RechartTooltip />
+                          <Legend />
+                          <Line type="monotone" dataKey="count" name="Aantal projecten" stroke="#2563eb" strokeWidth={2} dot={{ r: 3 }} />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </CardContent>
+                  </Card>
+                  <Card className="shadow border border-green-200 bg-white/90 transition-all w-full">
+                    <CardHeader className="px-2 py-2 md:px-3 md:py-2">
+                      <CardTitle className="text-xs md:text-sm text-green-700">Projectstatus verdeling</CardTitle>
+                    </CardHeader>
+                    <CardContent className="p-1 md:p-2 flex-1 w-full h-48 md:h-56 flex items-center justify-center">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <PieChart>
+                          <Pie
+                            data={projectStats.perStatus}
+                            dataKey="value"
+                            nameKey="status"
+                            cx="50%"
+                            cy="50%"
+                            outerRadius={50}
+                            fill="#8884d8"
+                            label={({ status, value }) => `${STATUS_LABELS_NL[status] || status}: ${value}`}
+                          >
+                            {projectStats.perStatus.map((entry, i) => (
+                              <Cell key={i} fill={COLORS[i % COLORS.length]} />
+                            ))}
+                          </Pie>
+                          <RechartTooltip formatter={(value, name, props) => [`${value}`, STATUS_LABELS_NL[props.payload.status] || props.payload.status]} />
+                          <Legend formatter={status => STATUS_LABELS_NL[status] || status} wrapperStyle={{ fontSize: '11px' }} />
+                        </PieChart>
+                      </ResponsiveContainer>
+                    </CardContent>
+                  </Card>
+                </div>
+              </div>
             </>
+          )}
+          {/* Only show hours charts for admin/technician, not opdrachtgever */}
+          {(!isOpdrachtgever) && (
+            <Card className="shadow-lg bg-white/80 border border-red-200">
+              <CardHeader className="px-2 py-3 md:px-4 md:py-4">
+                <CardTitle className="text-sm md:text-base text-red-700">
+                  {isAdmin ? 'Wekelijkse uren per monteur(s)' : 'Jouw gewerkte uren per week'}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-1 md:p-4">
+                <ResponsiveContainer width="100%" height={220}>
+                  <BarChart data={weeklyData}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="week" fontSize={11} />
+                    <YAxis fontSize={11} />
+                    <RechartTooltip />
+                    <Legend />
+                    {isAdmin ? (
+                      <>
+                        <Bar dataKey="regularHours" name="Normaal 100%" stackId="a" fill="#1e3a8a" />
+                        <Bar dataKey="overtimeHours" name="Overtime 125%" stackId="a" fill="#2563eb" />
+                        <Bar dataKey="weekendHours" name="Weekend 150%" stackId="a" fill="#60a5fa" />
+                        <Bar dataKey="sundayHours" name="Sunday 200%" stackId="a" fill="#93c5fd" />
+                      </>
+                    ) : (
+                      <Bar dataKey="allHours" name="Totaal uren" fill="#dc2626" />
+                    )}
+                  </BarChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
           )}
         </div>
 
