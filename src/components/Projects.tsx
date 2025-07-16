@@ -636,6 +636,45 @@ const Projects = () => {
     </Tooltip>
   );
 
+  // Directly send day report to n8n webhook
+  const sendDayReportDirect = async () => {
+    if (!webhookUrl) {
+      toast({ title: 'Fout', description: 'Geen webhook URL ingesteld', variant: 'destructive' });
+      return;
+    }
+    // Fetch projects for the selected date from Supabase
+    let projects = [];
+    try {
+      const { data, error } = await supabase
+        .from('projects')
+        .select('id, title, description, hours_spent, images, technician_id, customer_id, date')
+        .eq('date', emailDate);
+      if (error) throw error;
+      projects = data;
+    } catch (err) {
+      toast({ title: 'Fout', description: 'Kon projecten niet ophalen', variant: 'destructive' });
+      return;
+    }
+    // Post directly to n8n webhook
+    const resp = await fetch(webhookUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        date: emailDate,
+        recipient: recipientEmail,
+        projects
+      })
+    });
+    let data;
+    try { data = await resp.json(); } catch { data = {}; }
+    if (resp.ok) {
+      toast({ title: 'Succes', description: 'Dagrapport verstuurd', variant: 'default' });
+      setShowEmailDialog(false);
+    } else {
+      toast({ title: 'Fout', description: data.error || 'Kon email niet versturen', variant: 'destructive' });
+    }
+  };
+
   return (
     <div className="p-6 bg-gray-50 min-h-screen">
       <div className="mx-auto max-w-7xl">
@@ -994,25 +1033,7 @@ const Projects = () => {
             </div>
           </div>
           <DialogFooter>
-            <Button onClick={async () => {
-              // Call the edge function with the selected date, recipient, and webhookUrl
-              if (!webhookUrl) {
-                toast({ title: 'Fout', description: 'Geen webhook URL ingesteld', variant: 'destructive' });
-                return;
-              }
-              const resp = await fetch('/functions/v1/email-day-report', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ date: emailDate, recipient: recipientEmail, webhookUrl })
-              });
-              const data = await resp.json();
-              if (data.success) {
-                toast({ title: 'Succes', description: 'Dagrapport verstuurd', variant: 'success' });
-                setShowEmailDialog(false);
-              } else {
-                toast({ title: 'Fout', description: data.error || 'Kon email niet versturen', variant: 'destructive' });
-              }
-            }} className="bg-blue-600 text-white">Stuur Dagrapport</Button>
+            <Button onClick={sendDayReportDirect} className="bg-blue-600 text-white">Stuur Dagrapport</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

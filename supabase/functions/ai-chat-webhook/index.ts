@@ -1,11 +1,10 @@
 
-/// <reference lib="deno.ns" />
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.50.0';
+import { serve } from "https://deno.land/std/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.50.0";
 
 const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
+  "Access-Control-Allow-Origin": "*",
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
@@ -21,8 +20,11 @@ serve(async (req) => {
     console.log('AI Chat Webhook called:', { message, userId, context });
 
     // Initialize Supabase client
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const supabaseUrl = req.headers.get('x-supabase-url') || (globalThis as any).SUPABASE_URL;
+    const supabaseServiceKey = req.headers.get('x-supabase-service-role-key') || (globalThis as any).SUPABASE_SERVICE_ROLE_KEY;
+    if (!supabaseUrl || !supabaseServiceKey) {
+      throw new Error('Supabase credentials are missing');
+    }
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     // For now, provide a simple response about JukoTechniek work hours system
