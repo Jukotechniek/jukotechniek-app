@@ -313,11 +313,7 @@ const WorkSchedulePage: React.FC = () => {
               month={displayedMonth}
               onMonthChange={setDisplayedMonth}
               selected={selectedTech === 'all' ? undefined : workDays}
-              onSelect={dates => {
-                if (selectedTech === 'all') return;
-                setWorkDays(dates as Date[]);
-              }}
-              onDayClick={(date) => {
+              onDayClick={date => {
                 if (selectedTech === 'all') return;
                 const dateStr = date.toDateString();
                 const isSelected = workDays.some(d => d.toDateString() === dateStr);

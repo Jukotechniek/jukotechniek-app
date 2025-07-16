@@ -22,6 +22,8 @@ import {
   ChevronDown
 } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { format } from 'date-fns';
 
 interface Customer { id: string; name: string; }
 interface Technician { id: string; name: string; }
@@ -328,6 +330,12 @@ const Projects = () => {
     });
     // eslint-disable-next-line
   }, [projectsByStatus['in-progress'].length, projectsByStatus['needs-review'].length, projectsByStatus['completed'].length]);
+
+  const [showEmailDialog, setShowEmailDialog] = useState(false);
+  const [emailDate, setEmailDate] = useState(() => format(new Date(), 'yyyy-MM-dd'));
+  const [recipientEmail, setRecipientEmail] = useState(''); // Admin can set this
+  const [webhookUrl, setWebhookUrl] = useState(''); // Admin can set this
+  const [showEmailConfig, setShowEmailConfig] = useState(false);
 
   if (loading) {
     return (
@@ -636,26 +644,34 @@ const Projects = () => {
             <h1 className="mb-2 text-3xl font-bold text-gray-900">{isAdmin ? 'Alle Projecten' : 'Mijn Projecten'}</h1>
             <p className="text-gray-600">{isAdmin ? 'Bekijk alle monteur projecten' : 'Volg je dagelijkse projecten en werk'}</p>
           </div>
-          <Button
-            onClick={() => {
-              setShowAddForm(!showAddForm);
-              setEditingProject(null);
-              setNewProject({
-                title: '',
-                description: '',
-                hoursSpent: '',
-                customerId: '',
-                date: new Date().toISOString().split('T')[0],
-                status: 'in-progress',
-                technicianId: '',
-                isPublic: false
-              });
-            }}
-            className="bg-red-600 text-white hover:bg-red-700"
-          >
-            <Plus className="mr-2 h-4 w-4" />
-            {showAddForm ? 'Annuleren' : 'Project Toevoegen'}
-          </Button>
+          <div className="flex gap-2">
+            {isAdmin && (
+              <Button onClick={() => setShowEmailConfig(true)} variant="outline" className="border-red-600 text-red-600 hover:bg-red-50">Email Instellen</Button>
+            )}
+            {isAdmin && (
+              <Button onClick={() => setShowEmailDialog(true)} className="bg-blue-600 text-white hover:bg-blue-700">Email dagrapport</Button>
+            )}
+            <Button
+              onClick={() => {
+                setShowAddForm(!showAddForm);
+                setEditingProject(null);
+                setNewProject({
+                  title: '',
+                  description: '',
+                  hoursSpent: '',
+                  customerId: '',
+                  date: new Date().toISOString().split('T')[0],
+                  status: 'in-progress',
+                  technicianId: '',
+                  isPublic: false
+                });
+              }}
+              className="bg-red-600 text-white hover:bg-red-700"
+            >
+              <Plus className="mr-2 h-4 w-4" />
+              {showAddForm ? 'Annuleren' : 'Project Toevoegen'}
+            </Button>
+          </div>
         </div>
 
         {(isAdmin) && (
@@ -913,6 +929,93 @@ const Projects = () => {
           />
         </div>
       )}
+      {/* Email Config Dialog */}
+      <Dialog open={showEmailConfig} onOpenChange={setShowEmailConfig}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Email Ontvanger Instellen</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2">
+            <Label htmlFor="recipientEmail">Ontvanger Email</Label>
+            <Input
+              id="recipientEmail"
+              value={recipientEmail}
+              onChange={e => setRecipientEmail(e.target.value)}
+              placeholder="voorbeeld@email.nl"
+              type="email"
+            />
+            <Label htmlFor="webhookUrl">n8n Webhook URL</Label>
+            <Input
+              id="webhookUrl"
+              value={webhookUrl}
+              onChange={e => setWebhookUrl(e.target.value)}
+              placeholder="https://jouw-n8n-endpoint"
+              type="url"
+            />
+            <p className="text-xs text-gray-500">Plak hier de n8n webhook link waar het dagrapport naartoe gestuurd wordt.</p>
+          </div>
+          <DialogFooter>
+            <Button onClick={() => setShowEmailConfig(false)} className="bg-red-600 text-white">Opslaan</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      {/* Email Day Report Dialog */}
+      <Dialog open={showEmailDialog} onOpenChange={setShowEmailDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Email Dagrapport</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="emailDate">Selecteer dag</Label>
+              <Input
+                id="emailDate"
+                type="date"
+                value={emailDate}
+                onChange={e => setEmailDate(e.target.value)}
+                className="w-full"
+              />
+            </div>
+            <div>
+              <Label>Monteurs</Label>
+              <ul className="list-disc ml-6">
+                {techniciansList.map(t => (
+                  <li key={t.id}>{t.name}</li>
+                ))}
+              </ul>
+            </div>
+            <div>
+              <Label>Ontvanger</Label>
+              <p className="text-sm text-gray-700">{recipientEmail || 'Geen email ingesteld'}</p>
+            </div>
+            <div>
+              <Label>n8n Webhook</Label>
+              <p className="text-xs text-gray-500 break-all">{webhookUrl || 'Geen webhook ingesteld'}</p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button onClick={async () => {
+              // Call the edge function with the selected date, recipient, and webhookUrl
+              if (!webhookUrl) {
+                toast({ title: 'Fout', description: 'Geen webhook URL ingesteld', variant: 'destructive' });
+                return;
+              }
+              const resp = await fetch('/functions/v1/email-day-report', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ date: emailDate, recipient: recipientEmail, webhookUrl })
+              });
+              const data = await resp.json();
+              if (data.success) {
+                toast({ title: 'Succes', description: 'Dagrapport verstuurd', variant: 'success' });
+                setShowEmailDialog(false);
+              } else {
+                toast({ title: 'Fout', description: data.error || 'Kon email niet versturen', variant: 'destructive' });
+              }
+            }} className="bg-blue-600 text-white">Stuur Dagrapport</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
