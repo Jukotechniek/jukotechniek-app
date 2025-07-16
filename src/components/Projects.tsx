@@ -24,6 +24,7 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { format } from 'date-fns';
+import TechnicianFilter from './TechnicianFilter';
 
 interface Customer { id: string; name: string; }
 interface Technician { id: string; name: string; }
@@ -281,7 +282,18 @@ const Projects = () => {
     // eslint-disable-next-line
   }, [customers, showAddForm]);
 
-  const isAdmin = user?.role === 'admin' || user?.role === 'opdrachtgever';
+  // Determine admin and opdrachtgever roles separately
+  const isAdmin = user?.role === 'admin';
+  const isOpdrachtgever = user?.role === 'opdrachtgever';
+  const isAdminOrOpdrachtgever = isAdmin || isOpdrachtgever;
+
+  // For opdrachtgever, set their own customerId automatically
+  useEffect(() => {
+    if (isOpdrachtgever && user?.id) {
+      setNewProject(prev => ({ ...prev, customerId: user.id }));
+    }
+    // eslint-disable-next-line
+  }, [isOpdrachtgever, user?.id, showAddForm]);
 
   const technicians = Array.from(
     new Map(projects.map(p => [p.technicianId, p.technicianName])).entries()
@@ -290,7 +302,7 @@ const Projects = () => {
 
   const filteredProjects = projects.filter(p => {
     // Show for all mechanics if technicianId is null, for the assigned mechanic, or for admin/opdrachtgever
-    if (isAdmin) {
+    if (isAdminOrOpdrachtgever) {
       if (selectedTech !== 'all' && p.technicianId !== selectedTech) return false;
       if (selectedMonth) {
         const [y, m] = selectedMonth.split('-').map(n => parseInt(n, 10));
@@ -337,6 +349,16 @@ const Projects = () => {
   const [webhookUrl, setWebhookUrl] = useState(''); // Admin can set this
   const [showEmailConfig, setShowEmailConfig] = useState(false);
 
+  // Set default month filter to current month on mount
+  useEffect(() => {
+    if (!selectedMonth) {
+      const now = new Date();
+      const monthStr = now.toISOString().slice(0, 7);
+      setSelectedMonth(monthStr);
+    }
+    // eslint-disable-next-line
+  }, []);
+
   if (loading) {
     return (
       <div className="p-6 bg-gray-50 min-h-screen">
@@ -364,8 +386,8 @@ const Projects = () => {
     if (
       !newProject.title ||
       !newProject.date ||
-      !newProject.customerId ||
-      (isAdmin && !newProject.technicianId) ||
+      (!isOpdrachtgever && !newProject.customerId) ||
+      ((isAdmin || isOpdrachtgever) && !newProject.technicianId) ||
       (newProject.status === 'completed' && !newProject.hoursSpent)
     ) {
       toast({ title: "Fout", description: "Vul alle verplichte velden in", variant: "destructive" });
@@ -683,12 +705,12 @@ const Projects = () => {
             <h1 className="mb-2 text-3xl font-bold text-gray-900">{isAdmin ? 'Alle Projecten' : 'Mijn Projecten'}</h1>
             <p className="text-gray-600">{isAdmin ? 'Bekijk alle monteur projecten' : 'Volg je dagelijkse projecten en werk'}</p>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-col md:flex-row gap-2 w-full md:w-auto">
             {isAdmin && (
-              <Button onClick={() => setShowEmailConfig(true)} variant="outline" className="border-red-600 text-red-600 hover:bg-red-50">Email Instellen</Button>
+              <Button onClick={() => setShowEmailConfig(true)} variant="outline" className="border-red-600 text-red-600 hover:bg-red-50 w-full md:w-auto">Email Instellen</Button>
             )}
-            {isAdmin && (
-              <Button onClick={() => setShowEmailDialog(true)} className="bg-blue-600 text-white hover:bg-blue-700">Email dagrapport</Button>
+            {isAdminOrOpdrachtgever && (
+              <Button onClick={() => setShowEmailDialog(true)} className="bg-blue-600 text-white hover:bg-blue-700 w-full md:w-auto">Email dagrapport</Button>
             )}
             <Button
               onClick={() => {
@@ -705,7 +727,7 @@ const Projects = () => {
                   isPublic: false
                 });
               }}
-              className="bg-red-600 text-white hover:bg-red-700"
+              className="bg-red-600 text-white hover:bg-red-700 w-full md:w-auto"
             >
               <Plus className="mr-2 h-4 w-4" />
               {showAddForm ? 'Annuleren' : 'Project Toevoegen'}
@@ -713,25 +735,35 @@ const Projects = () => {
           </div>
         </div>
 
-        {(isAdmin) && (
-          <div className="mb-6 flex items-center space-x-4">
-            <select
-              value={selectedTech}
-              onChange={e => setSelectedTech(e.target.value)}
-              className="rounded border p-2"
-            >
-              <option value="all">Alle monteurs</option>
-              {technicians.map(t => (
-                <option key={t.id} value={t.id}>{t.name}</option>
-              ))}
-            </select>
-            <Input
-              type="month"
-              value={selectedMonth}
-              onChange={e => setSelectedMonth(e.target.value)}
-              className="rounded border p-2"
-            />
-            <Button onClick={() => setSelectedMonth('')} className="bg-red-600 text-white">Alles</Button>
+        {/* FILTER BAR */}
+        {(isAdminOrOpdrachtgever) && (
+          <div className="mb-6 flex flex-col md:flex-row md:items-center md:space-x-6 space-y-2 md:space-y-0">
+            <div>
+              <TechnicianFilter
+                technicians={technicians}
+                selectedTechnician={selectedTech}
+                onTechnicianChange={setSelectedTech}
+              />
+            </div>
+            <div className="flex items-center space-x-2">
+              <label htmlFor="monthPicker" className="text-gray-600 whitespace-nowrap text-xs md:text-base">
+                Selecteer maand:
+              </label>
+              <input
+                id="monthPicker"
+                type="month"
+                value={selectedMonth}
+                onChange={e => setSelectedMonth(e.target.value)}
+                className="border rounded px-1 py-1 text-xs md:text-base focus:ring-2 focus:ring-red-500"
+              />
+              <button
+                type="button"
+                onClick={() => setSelectedMonth('')}
+                className="px-2 py-1 text-xs md:px-3 md:py-1 bg-red-600 text-white rounded hover:bg-red-700 transition"
+              >
+                Alles weergeven
+              </button>
+            </div>
           </div>
         )}
 
@@ -753,22 +785,29 @@ const Projects = () => {
                     onChange={e => setNewProject({ ...newProject, title: e.target.value })}
                   />
                 </div>
-                <div>
-                  <Label htmlFor="customer">Klant *</Label>
-                  <select
-                    id="customer"
-                    required
-                    value={newProject.customerId}
-                    onChange={e => setNewProject({ ...newProject, customerId: e.target.value })}
-                    className="w-full rounded border p-2"
-                  >
-                    <option value="">Selecteer Klant</option>
-                    {customers.map(c => (
-                      <option key={c.id} value={c.id}>{c.name}</option>
-                    ))}
-                  </select>
-                </div>
+                {/* Customer select: only for admin and technician, not opdrachtgever */}
                 {isAdmin && (
+                  <div>
+                    <Label htmlFor="customer">Klant *</Label>
+                    <select
+                      id="customer"
+                      required
+                      value={newProject.customerId}
+                      onChange={e => setNewProject({ ...newProject, customerId: e.target.value })}
+                      className="w-full rounded border p-2"
+                    >
+                      <option value="">Selecteer Klant</option>
+                      {customers.map(c => (
+                        <option key={c.id} value={c.id}>{c.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+                {isOpdrachtgever && (
+                  <input type="hidden" value={newProject.customerId} />
+                )}
+                {/* Mechanic select: show for admin and opdrachtgever, not for technicians */}
+                {(isAdmin || isOpdrachtgever) && (
                   <div>
                     <Label htmlFor="technician">Monteur *</Label>
                     <select
@@ -968,36 +1007,38 @@ const Projects = () => {
           />
         </div>
       )}
-      {/* Email Config Dialog */}
-      <Dialog open={showEmailConfig} onOpenChange={setShowEmailConfig}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Email Ontvanger Instellen</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-2">
-            <Label htmlFor="recipientEmail">Ontvanger Email</Label>
-            <Input
-              id="recipientEmail"
-              value={recipientEmail}
-              onChange={e => setRecipientEmail(e.target.value)}
-              placeholder="voorbeeld@email.nl"
-              type="email"
-            />
-            <Label htmlFor="webhookUrl">n8n Webhook URL</Label>
-            <Input
-              id="webhookUrl"
-              value={webhookUrl}
-              onChange={e => setWebhookUrl(e.target.value)}
-              placeholder="https://jouw-n8n-endpoint"
-              type="url"
-            />
-            <p className="text-xs text-gray-500">Plak hier de n8n webhook link waar het dagrapport naartoe gestuurd wordt.</p>
-          </div>
-          <DialogFooter>
-            <Button onClick={() => setShowEmailConfig(false)} className="bg-red-600 text-white">Opslaan</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {/* Email Config Dialog (only for admin) */}
+      {isAdmin && (
+        <Dialog open={showEmailConfig} onOpenChange={setShowEmailConfig}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Email Ontvanger Instellen</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-2">
+              <Label htmlFor="recipientEmail">Ontvanger Email</Label>
+              <Input
+                id="recipientEmail"
+                value={recipientEmail}
+                onChange={e => setRecipientEmail(e.target.value)}
+                placeholder="voorbeeld@email.nl"
+                type="email"
+              />
+              <Label htmlFor="webhookUrl">n8n Webhook URL</Label>
+              <Input
+                id="webhookUrl"
+                value={webhookUrl}
+                onChange={e => setWebhookUrl(e.target.value)}
+                placeholder="https://jouw-n8n-endpoint"
+                type="url"
+              />
+              <p className="text-xs text-gray-500">Plak hier de n8n webhook link waar het dagrapport naartoe gestuurd wordt.</p>
+            </div>
+            <DialogFooter>
+              <Button onClick={() => setShowEmailConfig(false)} className="bg-red-600 text-white">Opslaan</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
       {/* Email Day Report Dialog */}
       <Dialog open={showEmailDialog} onOpenChange={setShowEmailDialog}>
         <DialogContent>
