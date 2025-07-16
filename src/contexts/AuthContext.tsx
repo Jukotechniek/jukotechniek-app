@@ -74,7 +74,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 role: (profile.role === 'admin' || profile.role === 'technician' || profile.role === 'opdrachtgever') ? profile.role : 'technician',
                 fullName: profile.full_name || session.user.user_metadata?.full_name || session.user.email || '',
                 createdAt: profile.created_at || session.user.created_at || new Date().toISOString(),
-                customer: profile.customer || null
+                // @ts-expect-error: 'customer' may not exist on profile type
+                customer: (profile as any).customer || null
               };
 
               // Only update if still authenticated
