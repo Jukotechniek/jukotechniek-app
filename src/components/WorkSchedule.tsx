@@ -29,9 +29,8 @@ const WorkSchedulePage: React.FC = () => {
   const { toast } = useToast();
 
   const role = user?.role?.toLowerCase() || '';
+  const isPlanner = ['admin', 'opdrachtgever', 'administrator'].includes(role);
   const isAdmin = ['admin', 'administrator'].includes(role);
-  const isPlanner = isAdmin; // alleen admins mogen plannen
-  const isOpdrachtgever = role === 'opdrachtgever';
 
   const [technicians, setTechnicians] = useState<Technician[]>([]);
   const [selectedTech, setSelectedTech] = useState<string>('all');
@@ -60,22 +59,20 @@ const WorkSchedulePage: React.FC = () => {
   // Color palette
   const colors = ['#3b82f6', '#ec4899', '#f59e0b', '#8b5cf6', '#10b981', '#f97316'];
 
-  // Restricting schedule view based on role
+  // Restrict non-planners to their own schedule
   useEffect(() => {
-    if (isOpdrachtgever) {
-      setSelectedTech('all');
-    } else if (!isPlanner && user?.id) {
+    if (!isPlanner && user?.id) {
       setSelectedTech(user.id);
     }
-  }, [isPlanner, isOpdrachtgever, user]);
+  }, [isPlanner, user]);
 
   // Fetch technicians & assign colors
   async function fetchTechnicians() {
     const { data } = await supabase.from('profiles').select('id, full_name');
     const list = data || [];
 
-    // 1) Raw: alle technici voor planners of opdrachtgevers, anders enkel eigen profiel
-    const raw = (isPlanner || isOpdrachtgever)
+    // 1) Raw: alle technici uit de DB, of alleen de ingelogde tech als geen planner
+    const raw = isPlanner
       ? list
       : list.filter(t => t.id === user?.id);
 
@@ -316,12 +313,13 @@ const WorkSchedulePage: React.FC = () => {
               month={displayedMonth}
               onMonthChange={setDisplayedMonth}
               selected={selectedTech === 'all' ? undefined : workDays}
-              onDayClick={(date, modifiers) => {
-                if (!isPlanner || selectedTech === 'all') return;
-                // Ensure single click selects even for outside days
-                if (modifiers.outside) {
-                  setDisplayedMonth(date);
-                }
+              onSelect={dates => {
+                if (selectedTech === 'all') return;
+                setWorkDays(dates as Date[]);
+              }}
+              onDayClick={(date) => {
+                // Mobile single-click to toggle work day
+                if (selectedTech === 'all') return;
                 const dateStr = date.toDateString();
                 const isSelected = workDays.some(d => d.toDateString() === dateStr);
                 if (isSelected) {
@@ -336,7 +334,7 @@ const WorkSchedulePage: React.FC = () => {
               classNames={{ day_selected: 'ring-2 ring-offset-2 ring-gray-500' }}
             />
 
-            {isPlanner && selectedTech !== 'all' && (
+            {selectedTech !== 'all' && (
               <div className="mt-2 flex flex-wrap gap-2">
                 <Button onClick={fillWorkDays}>Vul werkdagen</Button>
                 <Button onClick={saveWorkDays}>Opslaan werkdagen</Button>

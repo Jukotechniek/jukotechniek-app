@@ -36,8 +36,6 @@ export interface TechnicianSummary {
   profit: number;
   revenue: number;
   costs: number;
-  travelCost: number;
-  travelRevenue: number;
 }
 
 export interface OvertimeCalculation {

@@ -216,13 +216,7 @@ const HourComparisonComponent: React.FC = () => {
           title: "Success",
           description: `Webhook uren geverifieerd voor ${comp.technicianName}`,
         });
-        setAllComparisons(prev =>
-          prev.map(c =>
-            c.technicianId === comp.technicianId && c.date === comp.date
-              ? { ...c, verified: true }
-              : c
-          )
-        );
+        fetchComparisons();
       } catch (err) {
         console.error('Failed to verify webhook hours:', err);
         toast({ title: "Error", description: `Failed to verify webhook hours: ${err?.message || err}`, variant: "destructive" });
@@ -243,13 +237,7 @@ const HourComparisonComponent: React.FC = () => {
           title: "Success",
           description: `Handmatige uren geverifieerd voor ${comp.technicianName}`,
         });
-        setAllComparisons(prev =>
-          prev.map(c =>
-            c.technicianId === comp.technicianId && c.date === comp.date
-              ? { ...c, verified: true }
-              : c
-          )
-        );
+        fetchComparisons();
       } catch (err) {
         console.error('Failed to verify manual hours:', err);
         toast({ title: "Error", description: `Failed to verify manual hours: ${err?.message || err}`, variant: "destructive" });
@@ -273,13 +261,7 @@ const HourComparisonComponent: React.FC = () => {
           title: "Success",
           description: `Webhook uren onverifieerd voor ${comp.technicianName}`,
         });
-        setAllComparisons(prev =>
-          prev.map(c =>
-            c.technicianId === comp.technicianId && c.date === comp.date
-              ? { ...c, verified: false }
-              : c
-          )
-        );
+        fetchComparisons();
       } catch (err) {
         console.error('Failed to unverify webhook hours:', err);
         toast({ title: "Error", description: `Failed to unverify webhook hours: ${err?.message || err}`, variant: "destructive" });
@@ -297,13 +279,7 @@ const HourComparisonComponent: React.FC = () => {
           title: "Success",
           description: `Handmatige uren onverifieerd voor ${comp.technicianName}`,
         });
-        setAllComparisons(prev =>
-          prev.map(c =>
-            c.technicianId === comp.technicianId && c.date === comp.date
-              ? { ...c, verified: false }
-              : c
-          )
-        );
+        fetchComparisons();
       } catch (err) {
         console.error('Failed to unverify manual hours:', err);
         toast({ title: "Error", description: `Failed to unverify manual hours: ${err?.message || err}`, variant: "destructive" });

@@ -56,7 +56,6 @@ const Badge = ({ children, color = "bg-gray-100", text = "text-gray-800" }) => (
 const Dashboard = () => {
   const { user } = useAuth();
   const isAdmin = user?.role === 'admin';
-  const isOpdrachtgever = user?.role === 'opdrachtgever';
 
   const [rawWorkHours, setRawWorkHours] = useState([]);
   const [rawRates, setRawRates] = useState([]);
@@ -69,17 +68,14 @@ const Dashboard = () => {
 
   const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7));
   const [monthlyHours, setMonthlyHours] = useState(0);
-  const [projectCount, setProjectCount] = useState(0);
-  const [avgHoursPerProject, setAvgHoursPerProject] = useState(0);
 
   useEffect(() => {
     fetchDashboardData();
-    if (isOpdrachtgever) fetchProjectMetrics();
   }, []);
 
   useEffect(() => {
     if (!rawWorkHours.length) return;
-    let filtered = rawWorkHours.filter(e => e.manual_verified === true);
+    let filtered = rawWorkHours;
 
     if (isAdmin) {
       if (selectedTechnician !== 'all') {
@@ -111,17 +107,8 @@ const Dashboard = () => {
     }
     setTechnicianData(processTechnicianData(filtered, rawRates, travelRates));
     setWeeklyData(processWeeklyData(filtered, isAdmin ? null : user?.id));
-    if (isAdmin)
-      setWeeklyAdminData(
-        processWeeklyData(
-          rawWorkHours.filter(e => e.manual_verified === true)
-        )
-      );
+    if (isAdmin) setWeeklyAdminData(processWeeklyData(rawWorkHours));
   }, [rawWorkHours, rawRates, travelRates, selectedTechnician, selectedMonth, isAdmin, user?.id]);
-
-  useEffect(() => {
-    if (isOpdrachtgever) fetchProjectMetrics();
-  }, [isOpdrachtgever]);
 
   const fetchDashboardData = async () => {
     setLoading(true);
@@ -208,18 +195,6 @@ const Dashboard = () => {
     }
   };
 
-  const fetchProjectMetrics = async () => {
-    const { data, error } = await supabase.from('projects').select('hours_spent');
-    if (error) {
-      console.error('Project metrics error:', error);
-      return;
-    }
-    const count = data?.length || 0;
-    const total = (data || []).reduce((s, p) => s + Number(p.hours_spent || 0), 0);
-    setProjectCount(count);
-    setAvgHoursPerProject(count > 0 ? total / count : 0);
-  };
-
   // === STACKED weeklyData (per soort uren) ===
   const processWeeklyData = (workHours, filterUserId = null) => {
     const weekMap = new Map();
@@ -293,8 +268,6 @@ const Dashboard = () => {
           profit: 0,
           revenue: 0,
           costs: 0,
-          travelCost: 0,
-          travelRevenue: 0,
         });
       }
       const s = techMap.get(id);
@@ -312,9 +285,9 @@ const Dashboard = () => {
 
       let rev = 0, cost = 0;
 
-      // Only calculate revenue and costs if hours are verified
+      // Only calculate revenue if hours are verified (webhook_verified = true)
       const isVerified = entry.manual_verified === true;
-
+      
       if (isVerified) {
         if (su > 0) {
           rev += su * rate.billable * 2;
@@ -332,6 +305,12 @@ const Dashboard = () => {
           rev += reg * rate.billable;
           cost += reg * rate.hourly;
         }
+      } else {
+        // Still calculate costs even if not verified
+        if (su > 0) cost += su * rate.sunday;
+        if (wk > 0) cost += wk * rate.saturday;
+        if (ot > 0) cost += ot * rate.hourly * 1.25;
+        if (reg > 0) cost += reg * rate.hourly;
       }
 
       if (isVerified && billedHours > actualHours) {
@@ -344,11 +323,9 @@ const Dashboard = () => {
 
       if (isVerified && travel.fromClient > 0) {
         rev += travel.fromClient;
-        s.travelRevenue += travel.fromClient;
       }
-      if (isVerified && travel.toTech > 0) {
+      if (travel.toTech > 0) {
         cost += travel.toTech;
-        s.travelCost += travel.toTech;
       }
 
       const profit = rev - cost;
@@ -441,15 +418,13 @@ const Dashboard = () => {
         </header>
 
         {/* Key Metrics */}
-        <div className={`grid grid-cols-2 gap-2 md:grid-cols-2 lg:grid-cols-${isAdmin ? '4' : isOpdrachtgever ? '2' : '3'} md:gap-6 mb-4 md:mb-8`}>
-          {!isOpdrachtgever && (
-            <Card className="shadow-lg border-2 border-gray-200 bg-white/90 hover:bg-gray-50 transition-all">
-              <CardContent className="px-2 py-3 md:px-4 md:py-6">
-                <p className="text-xs md:text-sm text-gray-600">Totale uren</p>
-                <p className="text-2xl md:text-3xl font-bold text-gray-800"><ZakelijkUren value={totalHours} /></p>
-              </CardContent>
-            </Card>
-          )}
+        <div className={`grid grid-cols-2 gap-2 md:grid-cols-2 lg:grid-cols-${isAdmin ? '4' : '3'} md:gap-6 mb-4 md:mb-8`}>
+          <Card className="shadow-lg border-2 border-gray-200 bg-white/90 hover:bg-gray-50 transition-all">
+            <CardContent className="px-2 py-3 md:px-4 md:py-6">
+              <p className="text-xs md:text-sm text-gray-600">Totale uren</p>
+              <p className="text-2xl md:text-3xl font-bold text-gray-800"><ZakelijkUren value={totalHours} /></p>
+            </CardContent>
+          </Card>
           {isAdmin && (
             <Card className="shadow-lg border-2 border-gray-200 bg-white/90 hover:bg-gray-50 transition-all">
               <CardContent className="px-2 py-3 md:px-4 md:py-6">
@@ -466,31 +441,13 @@ const Dashboard = () => {
               </CardContent>
             </Card>
           )}
-          {!isOpdrachtgever && (
-            <Card className="shadow-lg border-2 border-gray-200 bg-white/90 hover:bg-gray-50 transition-all">
-              <CardContent className="px-2 py-3 md:px-4 md:py-6">
-                <p className="text-xs md:text-sm text-gray-600">Gem. uren/dag</p>
-                <p className="text-2xl md:text-3xl font-bold text-gray-800"><ZakelijkUren value={avgHoursPerDay} /></p>
-              </CardContent>
-            </Card>
-          )}
-          {isOpdrachtgever && (
-            <>
-              <Card className="shadow-lg border-2 border-gray-200 bg-white/90 hover:bg-gray-50 transition-all">
-                <CardContent className="px-2 py-3 md:px-4 md:py-6">
-                  <p className="text-xs md:text-sm text-gray-600">Totaal projecten</p>
-                  <p className="text-2xl md:text-3xl font-bold text-gray-800">{projectCount}</p>
-                </CardContent>
-              </Card>
-              <Card className="shadow-lg border-2 border-gray-200 bg-white/90 hover:bg-gray-50 transition-all">
-                <CardContent className="px-2 py-3 md:px-4 md:py-6">
-                  <p className="text-xs md:text-sm text-gray-600">Gem. uren/project</p>
-                  <p className="text-2xl md:text-3xl font-bold text-gray-800"><ZakelijkUren value={avgHoursPerProject} /></p>
-                </CardContent>
-              </Card>
-            </>
-          )}
-          {!isAdmin && !isOpdrachtgever && (
+          <Card className="shadow-lg border-2 border-gray-200 bg-white/90 hover:bg-gray-50 transition-all">
+            <CardContent className="px-2 py-3 md:px-4 md:py-6">
+              <p className="text-xs md:text-sm text-gray-600">Gem. uren/dag</p>
+              <p className="text-2xl md:text-3xl font-bold text-gray-800"><ZakelijkUren value={avgHoursPerDay} /></p>
+            </CardContent>
+          </Card>
+          {!isAdmin && (
             <Card className="shadow-lg border-2 border-gray-200 bg-white/90 hover:bg-gray-50 transition-all">
               <CardContent className="px-2 py-3 md:px-4 md:py-6">
                 <p className="text-xs md:text-sm text-gray-600">
@@ -685,10 +642,6 @@ const Dashboard = () => {
                             <div className="font-semibold text-gray-800"><ZakelijkEuro value={t.costs} /></div>
                           </div>
                           <div>
-                            <div className="text-xs text-gray-400 mb-1">Reiskosten</div>
-                            <div className="font-semibold text-gray-800"><ZakelijkEuro value={t.travelCost} /></div>
-                          </div>
-                          <div>
                             <div className="text-xs text-gray-400 mb-1">Winst</div>
                             <div className={`font-bold ${t.profit >= 0 ? 'text-green-700' : 'text-red-700'}`}>
                               <ZakelijkEuro value={t.profit} />
@@ -735,10 +688,6 @@ const Dashboard = () => {
                         <div className="flex flex-col items-start">
                           <span className="text-xs text-gray-400">Kosten</span>
                           <span className="font-semibold text-gray-800"><ZakelijkEuro value={t.costs} /></span>
-                        </div>
-                        <div className="flex flex-col items-start">
-                          <span className="text-xs text-gray-400">Reiskosten</span>
-                          <span className="font-semibold text-gray-800"><ZakelijkEuro value={t.travelCost} /></span>
                         </div>
                         <div className="flex flex-col items-start">
                           <span className="text-xs text-gray-400">Winst</span>

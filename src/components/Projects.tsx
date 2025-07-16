@@ -270,7 +270,6 @@ const Projects = () => {
 
   useEffect(() => {
     if (
-      !isOpdrachtgever &&
       customers.length === 1 &&
       (!newProject.customerId || !customers.some(c => c.id === newProject.customerId)) &&
       showAddForm
@@ -281,8 +280,6 @@ const Projects = () => {
   }, [customers, showAddForm]);
 
   const isAdmin = user?.role === 'admin' || user?.role === 'opdrachtgever';
-  const isSiteAdmin = user?.role === 'admin';
-  const isOpdrachtgever = user?.role === 'opdrachtgever';
 
   const technicians = Array.from(
     new Map(projects.map(p => [p.technicianId, p.technicianName])).entries()
@@ -339,7 +336,7 @@ const Projects = () => {
     if (
       !newProject.title ||
       !newProject.date ||
-      (!isOpdrachtgever && !newProject.customerId) ||
+      !newProject.customerId ||
       (isAdmin && !newProject.technicianId) ||
       (newProject.status === 'completed' && !newProject.hoursSpent)
     ) {
@@ -369,7 +366,7 @@ const Projects = () => {
           date: newProject.date,
           hours_spent: newProject.hoursSpent !== '' ? parseFloat(newProject.hoursSpent) : 0,
           status: newProject.status,
-          customer_id: newProject.customerId || null,
+          customer_id: newProject.customerId,
           technician_id: technicianIdToSave,
           is_public: newProject.isPublic
         })
@@ -383,7 +380,7 @@ const Projects = () => {
     } else {
       const { data, error } = await supabase.from('projects').insert([{
         technician_id: technicianIdToSave,
-        customer_id: newProject.customerId || null,
+        customer_id: newProject.customerId,
         title: newProject.title,
         description: newProject.description,
         date: newProject.date,
@@ -504,30 +501,6 @@ const Projects = () => {
     setDetailsOpen(true);
   };
 
-  const handleSendDailyReport = async () => {
-    const today = new Date().toISOString().split('T')[0];
-    const todaysProjects = projects.filter(p => p.date === today);
-    if (todaysProjects.length === 0) {
-      toast({ title: 'Geen projecten', description: 'Er zijn vandaag geen projecten.' });
-      return;
-    }
-    const withUrls = await Promise.all(todaysProjects.map(async p => {
-      const urls = await getSignedUrls(p.images);
-      return { ...p, urls };
-    }));
-    let body = `Projecten van ${today}\n\n`;
-    withUrls.forEach(p => {
-      body += `${p.title} - ${p.technicianName} (${p.hoursSpent}u)\n`;
-      if (p.description) body += `${p.description}\n`;
-      if (p.urls.length) {
-        p.urls.forEach(u => { body += `${u}\n`; });
-      }
-      body += '\n';
-    });
-    const mailto = `mailto:?subject=Projecten%20${today}&body=${encodeURIComponent(body)}`;
-    window.location.href = mailto;
-  };
-
   // PROJECTCARD inclusief tooltip op hover én statusknoppen
   const renderProjectCard = (project: Project) => (
     <Tooltip key={project.id}>
@@ -640,36 +613,29 @@ const Projects = () => {
             <h1 className="mb-2 text-3xl font-bold text-gray-900">{isAdmin ? 'Alle Projecten' : 'Mijn Projecten'}</h1>
             <p className="text-gray-600">{isAdmin ? 'Bekijk alle monteur projecten' : 'Volg je dagelijkse projecten en werk'}</p>
           </div>
-          <div className="flex flex-wrap gap-2">
-            <Button
-              onClick={() => {
-                setShowAddForm(!showAddForm);
-                setEditingProject(null);
-                setNewProject({
-                  title: '',
-                  description: '',
-                  hoursSpent: '',
-                  customerId: '',
-                  date: new Date().toISOString().split('T')[0],
-                  status: 'in-progress',
-                  technicianId: '',
-                  isPublic: false
-                });
-              }}
-              className="bg-red-600 text-white hover:bg-red-700"
-            >
-              <Plus className="mr-2 h-4 w-4" />
-              {showAddForm ? 'Annuleren' : 'Project Toevoegen'}
-            </Button>
-            {isAdmin && (
-              <Button onClick={handleSendDailyReport} className="bg-blue-600 text-white hover:bg-blue-700">
-                Dagrapport
-              </Button>
-            )}
-          </div>
+          <Button
+            onClick={() => {
+              setShowAddForm(!showAddForm);
+              setEditingProject(null);
+              setNewProject({
+                title: '',
+                description: '',
+                hoursSpent: '',
+                customerId: '',
+                date: new Date().toISOString().split('T')[0],
+                status: 'in-progress',
+                technicianId: '',
+                isPublic: false
+              });
+            }}
+            className="bg-red-600 text-white hover:bg-red-700"
+          >
+            <Plus className="mr-2 h-4 w-4" />
+            {showAddForm ? 'Annuleren' : 'Project Toevoegen'}
+          </Button>
         </div>
 
-        {isSiteAdmin && (
+        {isAdmin && (
           <div className="mb-6 flex items-center space-x-4">
             <select
               value={selectedTech}
@@ -709,23 +675,21 @@ const Projects = () => {
                     onChange={e => setNewProject({ ...newProject, title: e.target.value })}
                   />
                 </div>
-                {!isOpdrachtgever && (
-                  <div>
-                    <Label htmlFor="customer">Klant *</Label>
-                    <select
-                      id="customer"
-                      required
-                      value={newProject.customerId}
-                      onChange={e => setNewProject({ ...newProject, customerId: e.target.value })}
-                      className="w-full rounded border p-2"
-                    >
-                      <option value="">Selecteer Klant</option>
-                      {customers.map(c => (
-                        <option key={c.id} value={c.id}>{c.name}</option>
-                      ))}
-                    </select>
-                  </div>
-                )}
+                <div>
+                  <Label htmlFor="customer">Klant *</Label>
+                  <select
+                    id="customer"
+                    required
+                    value={newProject.customerId}
+                    onChange={e => setNewProject({ ...newProject, customerId: e.target.value })}
+                    className="w-full rounded border p-2"
+                  >
+                    <option value="">Selecteer Klant</option>
+                    {customers.map(c => (
+                      <option key={c.id} value={c.id}>{c.name}</option>
+                    ))}
+                  </select>
+                </div>
                 {isAdmin && (
                   <div>
                     <Label htmlFor="technician">Monteur *</Label>

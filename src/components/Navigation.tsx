@@ -11,8 +11,7 @@ import {
   FileText,
   Bot,
   Menu,
-  BookOpen,
-  Mail
+  BookOpen
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -21,8 +20,6 @@ import {
   DropdownMenuItem
 } from '@/components/ui/dropdown-menu';
 import { Button } from '@/components/ui/button';
-import { useToast } from '@/hooks/use-toast';
-import { sendDailyReportForAll } from '@/utils/sendDailyProjectReport';
 
 interface NavigationProps {
   activeTab: string;
@@ -31,19 +28,8 @@ interface NavigationProps {
 
 const Navigation: React.FC<NavigationProps> = ({ activeTab, onTabChange }) => {
   const { user, logout } = useAuth();
-  const { toast } = useToast();
   const isAdmin = user?.role === 'admin';
   const isOpdrachtgever = user?.role === 'opdrachtgever';
-
-  const sendReports = async () => {
-    const today = new Date().toISOString().split('T')[0];
-    try {
-      await sendDailyReportForAll(today);
-      toast({ title: 'Succes', description: 'Dagrapporten verzonden' });
-    } catch (err) {
-      toast({ title: 'Error', description: 'Rapporten versturen mislukt', variant: 'destructive' });
-    }
-  };
 
   const adminTabs = [
     { id: 'dashboard', label: 'Dashboard', icon: BarChart3 },
@@ -159,12 +145,6 @@ const Navigation: React.FC<NavigationProps> = ({ activeTab, onTabChange }) => {
                     </DropdownMenuItem>
                   );
                 })}
-                {isAdmin && (
-                  <DropdownMenuItem onSelect={sendReports}>
-                    <Mail className="mr-2 h-4 w-4" />
-                    Email Dagrapporten
-                  </DropdownMenuItem>
-                )}
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
@@ -205,12 +185,6 @@ const Navigation: React.FC<NavigationProps> = ({ activeTab, onTabChange }) => {
                     </DropdownMenuItem>
                   );
                 })}
-                {isAdmin && (
-                  <DropdownMenuItem onSelect={sendReports}>
-                    <Mail className="mr-2 h-4 w-4" />
-                    Email Dagrapporten
-                  </DropdownMenuItem>
-                )}
                 <DropdownMenuItem
                   onSelect={logout}
                   className="text-red-600 font-semibold border-t mt-2"

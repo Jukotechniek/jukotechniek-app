@@ -11,46 +11,12 @@ function Calendar({
   className,
   classNames,
   showOutsideDays = true,
-  onDayClick,
   ...props
 }: CalendarProps) {
-  const handleDayClick = React.useCallback(
-    (day: Date, modifiers: any, e: React.MouseEvent) => {
-      if (modifiers.outside && props.onMonthChange) {
-        props.onMonthChange(day);
-      }
-      if (modifiers.outside && props.onSelect) {
-        if (props.mode === "single") {
-          props.onSelect(day as any, day, modifiers, e);
-        } else if (props.mode === "multiple") {
-          const current = Array.isArray(props.selected) ? props.selected : [];
-          const exists = current.some(d => d && d.toDateString() === day.toDateString());
-          const next = exists
-            ? current.filter(d => d && d.toDateString() !== day.toDateString())
-            : [...current, day];
-          props.onSelect(next as any, day, modifiers, e);
-        } else if (props.mode === "range") {
-          const range = props.selected as any;
-          if (!range || (range.from && range.to)) {
-            props.onSelect({ from: day, to: undefined } as any, day, modifiers, e);
-          } else if (range.from && !range.to) {
-            if (day < range.from) {
-              props.onSelect({ from: day, to: range.from } as any, day, modifiers, e);
-            } else {
-              props.onSelect({ from: range.from, to: day } as any, day, modifiers, e);
-            }
-          }
-        }
-      }
-      onDayClick?.(day, modifiers, e);
-    },
-    [onDayClick, props]
-  );
   return (
     <DayPicker
       showOutsideDays={showOutsideDays}
       className={cn("p-3", className)}
-      onDayClick={handleDayClick}
       classNames={{
         months: "flex flex-col sm:flex-row space-y-4 sm:space-x-4 sm:space-y-0",
         month: "space-y-4",
