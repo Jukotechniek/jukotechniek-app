@@ -23,6 +23,7 @@ import { TechnicianSummary } from '@/types/workHours';
 import { formatDutchDate } from '@/utils/overtimeCalculations';
 import TechnicianFilter from './TechnicianFilter';
 import { Project } from '@/types/projects';
+import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '@/components/ui/tooltip';
 
 const COLORS = ['#2563eb', '#dc2626', '#991b1b', '#fbbf24', '#8b5cf6', '#059669'];
 
@@ -392,6 +393,9 @@ const Dashboard = () => {
     return Array.from(techMap.values()).sort((a, b) => b.totalHours - a.totalHours);
   };
 
+  // --- Custom omzet calculation for admin ---
+  // REMOVE calculateAdminOmzet function and use technicianData.reduce for omzet
+
   // --------------- UI / Layout ---------------
   const totalHours = technicianData.reduce((s, t) => s + t.totalHours, 0);
   const totalDays = technicianData.reduce((s, t) => s + t.daysWorked, 0);
@@ -477,11 +481,13 @@ const Dashboard = () => {
                   <p className="text-2xl md:text-3xl font-bold text-gray-800"><ZakelijkUren value={totalHours} /></p>
                 </CardContent>
               </Card>
-              {isAdmin && (
+              {isAdmin && technicianData.reduce((s, t) => s + t.revenue, 0) > 0 && (
                 <Card className="shadow-lg border-2 border-gray-200 bg-white/90 hover:bg-gray-50 transition-all">
                   <CardContent className="px-2 py-3 md:px-4 md:py-6">
                     <p className="text-xs md:text-sm text-gray-600">Totale omzet</p>
-                    <p className="text-2xl md:text-3xl font-bold text-gray-800"><ZakelijkEuro value={technicianData.reduce((s, t) => s + t.revenue, 0)} /></p>
+                    <p className="text-2xl md:text-3xl font-bold text-gray-800">
+                      <ZakelijkEuro value={technicianData.reduce((s, t) => s + t.revenue, 0)} />
+                    </p>
                   </CardContent>
                 </Card>
               )}
@@ -519,7 +525,7 @@ const Dashboard = () => {
           {isOpdrachtgever && (
             <>
               {/* Status cards row */}
-              <div className="flex flex-col md:flex-row justify-center items-center gap-2 md:gap-6 mb-6 mt-2 w-full">
+              <div className="flex flex-col md:flex-row justify-center items-center gap-2 md:gap-6 mb-8 mt-2 w-full">
                 <Card className="shadow border border-gray-200 bg-white/95 transition-all w-full md:w-44">
                   <CardContent className="px-2 py-2 md:px-3 md:py-4 flex flex-col items-center">
                     <span className="text-xs md:text-sm text-gray-600">Afgerond</span>
@@ -540,8 +546,8 @@ const Dashboard = () => {
                 </Card>
               </div>
               {/* Charts row below cards, always below, never beside */}
-              <div className="w-full">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
+              <div className="w-full flex flex-col items-center gap-4 mb-8">
+                <div className="w-full md:w-2/3 lg:w-1/2">
                   <Card className="shadow border border-blue-200 bg-white/90 transition-all w-full">
                     <CardHeader className="px-2 py-2 md:px-3 md:py-2">
                       <CardTitle className="text-xs md:text-sm text-blue-700">Projecten per week</CardTitle>
@@ -559,6 +565,8 @@ const Dashboard = () => {
                       </ResponsiveContainer>
                     </CardContent>
                   </Card>
+                </div>
+                <div className="w-full md:w-2/3 lg:w-1/2">
                   <Card className="shadow border border-green-200 bg-white/90 transition-all w-full">
                     <CardHeader className="px-2 py-2 md:px-3 md:py-2">
                       <CardTitle className="text-xs md:text-sm text-green-700">Projectstatus verdeling</CardTitle>
@@ -625,129 +633,149 @@ const Dashboard = () => {
 
         {/* Admin: Performance cards/table */}
         {isAdmin && (
-          <Card className="mb-6 md:mb-10 shadow-xl border-2 border-gray-100 bg-white/95">
-            <CardHeader>
-              <CardTitle className="text-sm md:text-base text-red-700">Monteur Prestatie Overzicht</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="hidden md:grid grid-cols-1 gap-6">
-                <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
-                  {displayData.map((t, i) => {
-                    const margin = t.revenue > 0 ? ((t.profit / t.revenue) * 100).toFixed(1) : '0';
-                    return (
-                      <div
-                        key={t.technicianId}
-                        className={`
-                          flex flex-col bg-gradient-to-br from-white via-gray-50 to-gray-100
-                          rounded-2xl shadow-2xl border-2 border-gray-200
-                          hover:scale-[1.01] hover:shadow-gray-300
-                          transition p-5 relative
-                        `}
+          <>
+            {/* Analytics Summary Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Totale Winst</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold text-green-600">€{technicianData.reduce((s, t) => s + t.profit, 0).toFixed(2)}</div>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Totale Omzet</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold text-blue-600">€{technicianData.reduce((s, t) => s + t.revenue, 0).toFixed(2)}</div>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Totale Kosten</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold text-red-600">€{technicianData.reduce((s, t) => s + t.costs, 0).toFixed(2)}</div>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Totale Uren</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold text-gray-600">{technicianData.reduce((s, t) => s + t.totalHours, 0).toFixed(1)}</div>
+                </CardContent>
+              </Card>
+            </div>
+            {/* Analytics Charts */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+              {/* Profit per Technician */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Winst per Monteur</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <ResponsiveContainer width="100%" height={300}>
+                    <BarChart data={technicianData}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="technicianName" tick={{ fontSize: 12 }} />
+                      <YAxis tick={{ fontSize: 12 }} />
+                      <Bar dataKey="profit" fill="#ef4444" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </CardContent>
+              </Card>
+              {/* Hours Distribution */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Urenverdeling</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <ResponsiveContainer width="100%" height={300}>
+                    <PieChart>
+                      <Pie
+                        data={technicianData}
+                        cx="50%"
+                        cy="50%"
+                        outerRadius={80}
+                        dataKey="totalHours"
+                        label={({ technicianName, value }) => `${technicianName}: ${value.toFixed(1)}h`}
                       >
-                        <div className="flex items-center mb-2">
-                          <div className="flex items-center justify-center w-12 h-12 bg-gray-100 rounded-full text-red-700 text-xl font-bold mr-3 shadow">
-                            {getInitials(t.technicianName)}
-                          </div>
-                          <div className="flex-1">
-                            <span className="block font-semibold text-lg text-gray-900">{t.technicianName}</span>
-                            <Badge color="bg-gray-100" text="text-gray-700"><ZakelijkDagen value={t.daysWorked} /> dagen</Badge>
-                          </div>
-                          {t.totalHours === maxHours && (
-                            <Badge color="bg-green-50" text="text-green-700">Top uren</Badge>
-                          )}
-                          {t.profit === maxProfit && (
-                            <Badge color="bg-yellow-50" text="text-yellow-700">Top winst</Badge>
-                          )}
-                        </div>
-                        <ProgressBar value={t.totalHours} max={maxHours} color="#dc2626" />
-                        <div className="grid grid-cols-2 gap-3 mt-1 mb-3">
-                          <div>
-                            <div className="text-xs text-gray-400 mb-1">Totaal uren</div>
-                            <div className="font-bold"><ZakelijkUren value={t.totalHours} /></div>
-                          </div>
-                          <div>
-                            <div className="text-xs text-gray-400 mb-1">Laatste Werkdag</div>
-                            <div>{new Date(t.lastWorked).toLocaleDateString('nl-NL')}</div>
-                          </div>
-                          <div>
-                            <div className="text-xs text-gray-400 mb-1">Omzet</div>
-                            <div className="font-semibold text-gray-800"><ZakelijkEuro value={t.revenue} /></div>
-                          </div>
-                          <div>
-                            <div className="text-xs text-gray-400 mb-1">Kosten</div>
-                            <div className="font-semibold text-gray-800"><ZakelijkEuro value={t.costs} /></div>
-                          </div>
-                          <div>
-                            <div className="text-xs text-gray-400 mb-1">Winst</div>
-                            <div className={`font-bold ${t.profit >= 0 ? 'text-green-700' : 'text-red-700'}`}>
-                              <ZakelijkEuro value={t.profit} />
-                            </div>
-                          </div>
-                          <div>
-                            <div className="text-xs text-gray-400 mb-1">Margin %</div>
-                            <div className={`font-bold ${parseFloat(margin) >= 0 ? 'text-green-700' : 'text-red-700'}`}>
-                              {margin}%
-                            </div>
-                          </div>
-                        </div>
+                        {technicianData.map((_, index) => (
+                          <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                        ))}
+                      </Pie>
+                    </PieChart>
+                  </ResponsiveContainer>
+                </CardContent>
+              </Card>
+            </div>
+            {/* Detailed Analytics per Technician */}
+            <div className="space-y-6 mb-8">
+              {technicianData.map((tech, index) => (
+                <Card key={tech.technicianId}>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      {getInitials(tech.technicianName)} - Gedetailleerde Analytics
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
+                      <div className="text-center">
+                        <div className="text-sm text-gray-500">Totale Uren</div>
+                        <div className="text-lg font-bold">{tech.totalHours.toFixed(1)}</div>
                       </div>
-                    );
-                  })}
-                </div>
-              </div>
-              {/* Mobiel: cards */}
-              <div className="space-y-2 md:hidden">
-                {displayData.map((t, i) => {
-                  const margin = t.revenue > 0 ? ((t.profit / t.revenue) * 100).toFixed(1) : '0';
-                  return (
-                    <div
-                      key={t.technicianId}
-                      className={`
-                        rounded-2xl shadow-md border p-3 bg-gradient-to-r
-                        from-gray-50 via-white to-gray-50 flex flex-col gap-1
-                        ${i % 2 === 0 ? 'border-l-4 border-red-600' : 'border-l-4 border-yellow-300'}
-                      `}
-                    >
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className="font-bold text-base text-gray-900">{t.technicianName}</span>
-                        <Badge color="bg-gray-100" text="text-gray-700"><ZakelijkDagen value={t.daysWorked} /> dagen</Badge>
+                      <div className="text-center">
+                        <div className="text-sm text-gray-500">Weekdag Uren</div>
+                        <div className="text-lg font-bold">{tech.regularHours.toFixed(1)}</div>
                       </div>
-                      <div className="flex flex-wrap gap-x-4 gap-y-1">
-                        <div className="flex flex-col items-start">
-                          <span className="text-xs text-gray-400">Totaal uren</span>
-                          <span className="font-semibold"><ZakelijkUren value={t.totalHours} /></span>
-                        </div>
-                        <div className="flex flex-col items-start">
-                          <span className="text-xs text-gray-400">Omzet</span>
-                          <span className="font-semibold text-gray-800"><ZakelijkEuro value={t.revenue} /></span>
-                        </div>
-                        <div className="flex flex-col items-start">
-                          <span className="text-xs text-gray-400">Kosten</span>
-                          <span className="font-semibold text-gray-800"><ZakelijkEuro value={t.costs} /></span>
-                        </div>
-                        <div className="flex flex-col items-start">
-                          <span className="text-xs text-gray-400">Winst</span>
-                          <span className={`font-bold ${t.profit >= 0 ? 'text-green-700' : 'text-red-700'}`}>
-                            <ZakelijkEuro value={t.profit} />
-                          </span>
-                        </div>
-                        <div className="flex flex-col items-start">
-                          <span className="text-xs text-gray-400">Margin %</span>
-                          <span className={`font-bold ${parseFloat(margin) >= 0 ? 'text-green-700' : 'text-red-700'}`}>
-                            {margin}%
-                          </span>
-                        </div>
-                        <div className="flex flex-col items-start">
-                          <span className="text-xs text-gray-400">Laatste Werkdag</span>
-                          <span className="font-semibold">{new Date(t.lastWorked).toLocaleDateString('nl-NL')}</span>
-                        </div>
+                      <div className="text-center">
+                        <div className="text-sm text-gray-500">Overwerk</div>
+                        <div className="text-lg font-bold text-orange-600">{tech.overtimeHours.toFixed(1)}</div>
+                      </div>
+                      <div className="text-center">
+                        <div className="text-sm text-gray-500">Zaterdag</div>
+                        <div className="text-lg font-bold text-blue-600">{tech.weekendHours.toFixed(1)}</div>
+                      </div>
+                      <div className="text-center">
+                        <div className="text-sm text-gray-500">Zondag</div>
+                        <div className="text-lg font-bold text-purple-600">{tech.sundayHours.toFixed(1)}</div>
                       </div>
                     </div>
-                  );
-                })}
-              </div>
-            </CardContent>
-          </Card>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                      <div className="text-center p-4 bg-green-50 rounded-lg">
+                        <div className="text-sm text-gray-500">Winst</div>
+                        <div className="text-xl font-bold text-green-600">€{tech.profit.toFixed(2)}</div>
+                      </div>
+                      <div className="text-center p-4 bg-blue-50 rounded-lg">
+                        <div className="text-sm text-gray-500">Omzet</div>
+                        <div className="text-xl font-bold text-blue-600">€{tech.revenue.toFixed(2)}</div>
+                      </div>
+                      <div className="text-center p-4 bg-red-50 rounded-lg">
+                        <div className="text-sm text-gray-500">Kosten</div>
+                        <div className="text-xl font-bold text-red-600">€{tech.costs.toFixed(2)}</div>
+                      </div>
+                    </div>
+                    {/* Daily profit chart - only if tech.dailyStats exists */}
+                    {tech.dailyStats && (
+                      <div className="h-64">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <LineChart data={tech.dailyStats}>
+                            <CartesianGrid strokeDasharray="3 3" />
+                            <XAxis dataKey="date" tick={{ fontSize: 10 }} />
+                            <YAxis tick={{ fontSize: 12 }} />
+                            <Line type="monotone" dataKey="profit" stroke={COLORS[index % COLORS.length]} strokeWidth={2} />
+                          </LineChart>
+                        </ResponsiveContainer>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </>
         )}
       </div>
     </div>
