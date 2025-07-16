@@ -142,8 +142,9 @@ const WorkSchedulePage: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    if (selectedTech) fetchSchedule(selectedTech);
-  }, [selectedTech]);
+    if (selectedTech && role) fetchSchedule(selectedTech);
+  }, [selectedTech, role]);
+  
 
   // Vacation days for selected tech
   const currentVacDays = selectedTech === 'all' ? [] : vacSchedules[selectedTech] || [];
