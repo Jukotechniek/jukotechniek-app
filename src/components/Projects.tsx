@@ -243,7 +243,7 @@ const Projects = () => {
       );
       const formatted = (projectData || []).map(p => ({
         id: p.id,
-        technicianId: p.technician_id || '',
+        technicianId: p.technician_id, // no fallback to ''
         technicianName: p.profiles?.full_name || '',
         customerId: p.customer_id || '',
         customerName: p.customers?.name || '',
@@ -287,17 +287,27 @@ const Projects = () => {
     .map(([id, name]) => ({ id, name }));
 
   const filteredProjects = projects.filter(p => {
-    // Show public projects to everyone, or own projects, or admin sees all
-    const canSeeProject = p.isPublic || p.technicianId === user?.id || isAdmin;
-    if (!canSeeProject) return false;
-    
-    if (isAdmin && selectedTech !== 'all' && p.technicianId !== selectedTech) return false;
-    if (selectedMonth) {
-      const [y, m] = selectedMonth.split('-').map(n => parseInt(n, 10));
-      const d = new Date(p.date);
-      if (d.getFullYear() !== y || d.getMonth() + 1 !== m) return false;
+    // Show for all mechanics if technicianId is null, for the assigned mechanic, or for admin/opdrachtgever
+    if (isAdmin) {
+      if (selectedTech !== 'all' && p.technicianId !== selectedTech) return false;
+      if (selectedMonth) {
+        const [y, m] = selectedMonth.split('-').map(n => parseInt(n, 10));
+        const d = new Date(p.date);
+        if (d.getFullYear() !== y || d.getMonth() + 1 !== m) return false;
+      }
+      return true;
+    } else {
+      // For mechanics: show if assigned to them OR if technicianId is null (Alle monteurs)
+      if (p.technicianId === user?.id || p.technicianId === null) {
+        if (selectedMonth) {
+          const [y, m] = selectedMonth.split('-').map(n => parseInt(n, 10));
+          const d = new Date(p.date);
+          if (d.getFullYear() !== y || d.getMonth() + 1 !== m) return false;
+        }
+        return true;
+      }
+      return false;
     }
-    return true;
   });
 
   const projectsByStatus: Record<Project['status'], Project[]> = {
@@ -308,6 +318,16 @@ const Projects = () => {
   filteredProjects.forEach(p => {
     projectsByStatus[p.status].push(p);
   });
+
+  // Set all status sections collapsed by default, only open if there are projects in that status
+  useEffect(() => {
+    setCollapsed({
+      'in-progress': projectsByStatus['in-progress'].length > 0 ? false : true,
+      'needs-review': projectsByStatus['needs-review'].length > 0 ? false : true,
+      'completed': projectsByStatus['completed'].length > 0 ? false : true,
+    });
+    // eslint-disable-next-line
+  }, [projectsByStatus['in-progress'].length, projectsByStatus['needs-review'].length, projectsByStatus['completed'].length]);
 
   if (loading) {
     return (
@@ -351,8 +371,9 @@ const Projects = () => {
       }
     }
 
+    // Map 'all' to null for DB
     const technicianIdToSave = isAdmin
-      ? newProject.technicianId
+      ? (newProject.technicianId === 'all' ? null : newProject.technicianId)
       : user?.id;
 
     let projectId: string | null = null;
@@ -368,7 +389,6 @@ const Projects = () => {
           status: newProject.status,
           customer_id: newProject.customerId,
           technician_id: technicianIdToSave,
-          is_public: newProject.isPublic
         })
         .eq('id', editingProject.id);
       if (error) {
@@ -386,7 +406,6 @@ const Projects = () => {
         date: newProject.date,
         hours_spent: newProject.hoursSpent !== '' ? parseFloat(newProject.hoursSpent) : 0,
         status: newProject.status,
-        is_public: newProject.isPublic,
         images: []
       }]).select().single();
       if (error) {
@@ -427,8 +446,9 @@ const Projects = () => {
   };
 
   const handleEdit = (project: Project) => {
-    if (!isAdmin && project.technicianId !== user?.id) {
-      toast({ title: "Fout", description: "Je kunt alleen je eigen projecten bewerken", variant: "destructive" });
+    // Allow edit if admin, assigned mechanic, or 'Alle monteurs' (null)
+    if (!isAdmin && project.technicianId !== user?.id && project.technicianId !== null) {
+      toast({ title: "Fout", description: "Je kunt alleen je eigen projecten of 'Alle monteurs' projecten bewerken", variant: "destructive" });
       return;
     }
     setEditingProject(project);
@@ -493,7 +513,7 @@ const Projects = () => {
   };
 
   const canStatusChange = (project: Project) =>
-    isAdmin || project.technicianId === user?.id;
+    isAdmin || project.technicianId === user?.id || project.technicianId === null;
 
   // --- Details modal open/close ---
   const openDetails = (project: Project) => {
@@ -507,13 +527,16 @@ const Projects = () => {
       <TooltipTrigger asChild>
         <Card
           className="bg-white hover:shadow-lg transition-shadow duration-200 cursor-pointer"
-          onClick={() => openDetails(project)}
+          onClick={() => handleEdit(project)}
         >
           <CardHeader>
             <div className="flex justify-between items-start">
               <div>
-                <CardTitle className="text-lg font-semibold text-gray-900">
+                <CardTitle className="text-lg font-semibold text-gray-900 flex items-center gap-2">
                   {project.title}
+                  {project.technicianId === null && (
+                    <span className="ml-2 px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 text-xs font-semibold border border-blue-300">Alle monteurs</span>
+                  )}
                 </CardTitle>
                 {isAdmin && <p className="text-sm text-gray-600">{project.technicianName}</p>}
                 <p className="text-sm text-gray-600">{project.customerName}</p>
@@ -528,17 +551,18 @@ const Projects = () => {
                 </p>
                 <p className="text-lg font-semibold text-red-600">{project.hoursSpent ? project.hoursSpent + 'u' : ''}</p>
                 <div className="flex space-x-1 mt-2">
+                  {(isAdmin || project.technicianId === user?.id || project.technicianId === null) && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={e => { e.stopPropagation(); handleEdit(project); }}
+                      className="h-8 w-8 p-0"
+                    >
+                      <Edit2 className="h-4 w-4" />
+                    </Button>
+                  )}
                   {(isAdmin || project.technicianId === user?.id) && (
-                    <>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={e => { e.stopPropagation(); handleEdit(project); }}
-                        className="h-8 w-8 p-0"
-                      >
-                        <Edit2 className="h-4 w-4" />
-                      </Button>
-                      <Button
+                    <Button
                         size="sm"
                         variant="outline"
                         onClick={e => { e.stopPropagation(); handleDelete(project.id, project); }}
@@ -546,7 +570,6 @@ const Projects = () => {
                       >
                         <Trash2 className="h-4 w-4" />
                       </Button>
-                    </>
                   )}
                 </div>
               </div>
@@ -635,7 +658,7 @@ const Projects = () => {
           </Button>
         </div>
 
-        {isAdmin && (
+        {(isAdmin) && (
           <div className="mb-6 flex items-center space-x-4">
             <select
               value={selectedTech}
@@ -701,6 +724,7 @@ const Projects = () => {
                       className="w-full rounded border p-2"
                     >
                       <option value="">Selecteer Monteur</option>
+                      <option value="all">Alle monteurs</option>
                       {techniciansList.map(t => (
                         <option key={t.id} value={t.id}>{t.name}</option>
                       ))}
@@ -757,55 +781,6 @@ const Projects = () => {
                     onChange={e => setNewProject({ ...newProject, description: e.target.value })}
                   />
                 </div>
-                <div className="flex items-center space-x-2">
-                  <input
-                    id="isPublic"
-                    type="checkbox"
-                    checked={newProject.isPublic}
-                    onChange={e => setNewProject({ ...newProject, isPublic: e.target.checked })}
-                    className="rounded border-gray-300"
-                  />
-                  <Label htmlFor="isPublic" className="text-sm">
-                    Project openbaar maken (zichtbaar voor iedereen)
-                  </Label>
-                </div>
-                <div>
-                  <Label>Project Afbeeldingen (max 5)</Label>
-                  <div className="rounded border-2 border-dashed p-4 text-center">
-                    <Camera className="mx-auto mb-2 h-12 w-12 text-gray-400" />
-                    <input
-                      id="image-upload"
-                      type="file"
-                      multiple
-                      accept="image/*"
-                      disabled={selectedImages.length >= 5}
-                      onChange={handleImageUpload}
-                      className="hidden"
-                    />
-                    <label htmlFor="image-upload" className="cursor-pointer text-red-600 hover:text-red-700">
-                      Klik om afbeeldingen te uploaden
-                    </label>
-                    {selectedImages.length > 0 && (
-                      <div className="mt-4 grid grid-cols-2 gap-4">
-                        {selectedImages.map((img, i) => (
-                          <div key={i} className="relative">
-                            <img
-                              src={URL.createObjectURL(img)}
-                              alt={`Voorbeeld ${i + 1}`}
-                              className="h-24 w-full rounded object-cover"
-                            />
-                            <button
-                              onClick={() => removeImage(i)}
-                              className="absolute -top-2 -right-2 rounded-full bg-red-600 p-1 text-white"
-                            >
-                              <X size={16} />
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </div>
                 <Button type="submit" className="bg-red-600 hover:bg-red-700 text-white">
                   <Save className="mr-2 h-4 w-4" />
                   {editingProject ? 'Opslaan' : 'Toevoegen'}
@@ -820,9 +795,13 @@ const Projects = () => {
             <div key={status}>
               <h2
                 onClick={() => setCollapsed(prev => ({ ...prev, [status]: !prev[status] }))}
-                className="mb-4 flex cursor-pointer items-center select-none text-xl font-semibold text-gray-900"
+                className="mb-4 flex cursor-pointer items-center select-none text-xl font-semibold text-gray-900 gap-2"
               >
-                {getStatusText(status)} ({projectsByStatus[status].length})
+                {getStatusText(status)}
+                <span className={`inline-flex items-center justify-center rounded-full text-xs font-bold px-2 py-0.5 ${projectsByStatus[status].length > 0 ? 'bg-blue-600 text-white' : 'bg-gray-300 text-gray-600'}`}
+                  style={{ minWidth: 28 }}>
+                  {projectsByStatus[status].length}
+                </span>
                 <ChevronDown
                   className={`ml-2 h-4 w-4 transition-transform ${collapsed[status] ? '-rotate-90' : ''}`}
                 />
