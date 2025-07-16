@@ -318,7 +318,6 @@ const WorkSchedulePage: React.FC = () => {
                 setWorkDays(dates as Date[]);
               }}
               onDayClick={(date) => {
-                // Mobile single-click to toggle work day
                 if (selectedTech === 'all') return;
                 const dateStr = date.toDateString();
                 const isSelected = workDays.some(d => d.toDateString() === dateStr);
@@ -328,9 +327,9 @@ const WorkSchedulePage: React.FC = () => {
                   setWorkDays(prev => [...prev, date]);
                 }
               }}
+              components={selectedTech === 'all' ? { Day: CustomDay } : {}}
               modifiers={modifiers}
               modifiersClassNames={classes}
-              components={selectedTech === 'all' ? { Day: CustomDay } : {}}
               classNames={{ day_selected: 'ring-2 ring-offset-2 ring-gray-500' }}
             />
 
