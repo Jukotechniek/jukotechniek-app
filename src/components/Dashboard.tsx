@@ -148,6 +148,7 @@ const Dashboard = () => {
         return d.getFullYear() === year && d.getMonth() + 1 === month;
       });
     }
+    // For admin, always use verifiedHours for all analytics and charts
     setTechnicianData(processTechnicianData(filtered, rawRates, travelRates));
     setWeeklyData(processWeeklyData(filtered, isAdmin ? null : user?.id));
     if (isAdmin) setWeeklyAdminData(processWeeklyData(verifiedHours));
