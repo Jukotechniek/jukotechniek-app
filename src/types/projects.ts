@@ -14,6 +14,7 @@ export interface Project {
   createdAt: string;
   updatedAt?: string;
   isPublic?: boolean;
+  createdBy?: string | null;
 }
 
 export interface ProjectImage {

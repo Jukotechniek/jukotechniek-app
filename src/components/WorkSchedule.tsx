@@ -59,12 +59,15 @@ const WorkSchedulePage: React.FC = () => {
   // Color palette
   const colors = ['#3b82f6', '#ec4899', '#f59e0b', '#8b5cf6', '#10b981', '#f97316'];
 
-  // Restrict non-planners to their own schedule
+  // For opdrachtgever: always show all mechanics, no editing or vacation features
   useEffect(() => {
-    if (!isPlanner && user?.id) {
+    if (role === 'opdrachtgever') {
+      setSelectedTech('all');
+    } else if (!isPlanner && user?.id) {
       setSelectedTech(user.id);
     }
-  }, [isPlanner, user]);
+    // For admin/planner, do not override selectedTech
+  }, [role, isPlanner, user]);
 
   // Fetch technicians & assign colors
   async function fetchTechnicians() {
@@ -290,136 +293,175 @@ const WorkSchedulePage: React.FC = () => {
     ...techColors,
   };
 
+  // In the render, only show the calendar for opdrachtgever, no filters or buttons
   return (
     <div className="p-6 bg-gray-50 min-h-screen">
-      <div className="max-w-3xl mx-auto space-y-6">
-
-        {isPlanner && (
-          <TechnicianFilter
-            technicians={technicians.map(t => ({ id: t.id, name: t.full_name }))}
-            selectedTechnician={selectedTech}
-            onTechnicianChange={setSelectedTech}
-          />
-        )}
-
-        {/* Agenda */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Agenda</CardTitle>
-          </CardHeader>
-          <CardContent className="overflow-visible">
-            <Calendar
-              mode="multiple"
-              month={displayedMonth}
-              onMonthChange={setDisplayedMonth}
-              selected={selectedTech === 'all' ? undefined : workDays}
-              onDayClick={date => {
-                if (selectedTech === 'all') return;
-                const dateStr = date.toDateString();
-                const isSelected = workDays.some(d => d.toDateString() === dateStr);
-                if (isSelected) {
-                  setWorkDays(prev => prev.filter(d => d.toDateString() !== dateStr));
-                } else {
-                  setWorkDays(prev => [...prev, date]);
-                }
-              }}
-              components={selectedTech === 'all' ? { Day: CustomDay } : {}}
-              modifiers={modifiers}
-              modifiersClassNames={classes}
-              classNames={{ day_selected: 'ring-2 ring-offset-2 ring-gray-500' }}
-            />
-
-            {selectedTech !== 'all' && (
-              <div className="mt-2 flex flex-wrap gap-2">
-                <Button onClick={fillWorkDays}>Vul werkdagen</Button>
-                <Button onClick={saveWorkDays}>Opslaan werkdagen</Button>
-                <Button variant="destructive" onClick={deleteWorkDays}>
-                  Verwijder werkdagen
-                </Button>
-                <Dialog open={isVacDialogOpen} onOpenChange={setVacDialogOpen}>
-                  <DialogTrigger asChild>
-                    <Button variant="outline">Vakantie toevoegen</Button>
-                  </DialogTrigger>
-                  <DialogContent className="space-y-4">
-                    <h3 className="text-lg font-medium">Vakantie aanvragen</h3>
-                    <Calendar mode="range" selected={vacationRange} onSelect={setVacationRange} />
-                    <div className="flex justify-end gap-2">
-                      <Button variant="outline" onClick={() => setVacDialogOpen(false)}>
-                        Sluiten
-                      </Button>
-                      <Button
-                        onClick={addVacation}
-                        disabled={!(vacationRange?.from && vacationRange.to)}
-                      >
-                        Sla vakantie op
-                      </Button>
-                    </div>
-                  </DialogContent>
-                </Dialog>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Legenda */}
-        <div className="mt-4 flex flex-wrap gap-4 text-sm">
-          <div className="flex items-center space-x-1">
-            <span className="w-3 h-3 bg-red-500 inline-block" />
-            <span>Werkdag</span>
-          </div>
-          <div className="flex items-center space-x-1">
-            <span className="w-3 h-3 bg-green-500 inline-block" />
-            <span>Vakantie</span>
-          </div>
-          {selectedTech === 'all' &&
-            technicians.map(t => (
-              <div key={t.id} className="flex items-center space-x-1">
-                <span
-                  className="w-3 h-3 inline-block"
-                  style={{ backgroundColor: techColors[t.id] }}
+      <div className="mx-auto max-w-4xl">
+        <h1 className="text-2xl font-bold mb-4 text-gray-900">Agenda</h1>
+        {role === 'opdrachtgever' ? (
+          <Card className="mb-6 bg-white">
+            <CardHeader>
+              <CardTitle className="text-lg font-semibold text-gray-900">Overzicht alle monteurs</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <Calendar
+                mode="default"
+                month={displayedMonth}
+                onMonthChange={setDisplayedMonth}
+                components={{ Day: CustomDay }}
+              />
+            </CardContent>
+          </Card>
+        ) : (
+          // Restore the full planning UI for admin/planner
+          <div className="max-w-3xl mx-auto space-y-6">
+            {/* Technician filter and planning features here (existing code) */}
+            <div className="mb-4">
+              <TechnicianFilter
+                technicians={technicians.map(t => ({ id: t.id, name: t.full_name }))}
+                selectedTechnician={selectedTech}
+                onTechnicianChange={setSelectedTech}
+              />
+            </div>
+            {/* Agenda */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Agenda</CardTitle>
+              </CardHeader>
+              <CardContent className="overflow-visible">
+                <Calendar
+                  mode="multiple"
+                  month={displayedMonth}
+                  onMonthChange={setDisplayedMonth}
+                  selected={selectedTech === 'all' ? undefined : workDays}
+                  onDayClick={date => {
+                    if (selectedTech === 'all') return;
+                    const dateStr = date.toDateString();
+                    const isSelected = workDays.some(d => d.toDateString() === dateStr);
+                    if (isSelected) {
+                      setWorkDays(prev => prev.filter(d => d.toDateString() !== dateStr));
+                    } else {
+                      setWorkDays(prev => [...prev, date]);
+                    }
+                  }}
+                  components={selectedTech === 'all' ? { Day: CustomDay } : {}}
+                  modifiers={modifiers}
+                  modifiersClassNames={classes}
+                  classNames={{ day_selected: 'ring-2 ring-offset-2 ring-gray-500' }}
                 />
-                <span>{t.full_name}</span>
+
+                {selectedTech !== 'all' && (
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <Button onClick={fillWorkDays}>Vul werkdagen</Button>
+                    <Button onClick={saveWorkDays}>Opslaan werkdagen</Button>
+                    <Button variant="destructive" onClick={deleteWorkDays}>
+                      Verwijder werkdagen
+                    </Button>
+                    <Dialog open={isVacDialogOpen} onOpenChange={setVacDialogOpen}>
+                      <DialogTrigger asChild>
+                        <Button variant="outline">Vakantie toevoegen</Button>
+                      </DialogTrigger>
+                      <DialogContent className="space-y-4">
+                        <h3 className="text-lg font-medium">Vakantie aanvragen</h3>
+                        <Calendar mode="range" selected={vacationRange} onSelect={setVacationRange} />
+                        <div className="flex justify-end gap-2">
+                          <Button variant="outline" onClick={() => setVacDialogOpen(false)}>
+                            Sluiten
+                          </Button>
+                          <Button
+                            onClick={addVacation}
+                            disabled={!(vacationRange?.from && vacationRange.to)}
+                          >
+                            Sla vakantie op
+                          </Button>
+                        </div>
+                      </DialogContent>
+                    </Dialog>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Legenda */}
+            <div className="mt-4 flex flex-wrap gap-4 text-sm">
+              <div className="flex items-center space-x-1">
+                <span className="w-3 h-3 bg-red-500 inline-block" />
+                <span>Werkdag</span>
               </div>
-            ))}
-        </div>
+              <div className="flex items-center space-x-1">
+                <span className="w-3 h-3 bg-green-500 inline-block" />
+                <span>Vakantie</span>
+              </div>
+              {selectedTech === 'all' &&
+                technicians.map(t => (
+                  <div key={t.id} className="flex items-center space-x-1">
+                    <span
+                      className="w-3 h-3 inline-block"
+                      style={{ backgroundColor: techColors[t.id] }}
+                    />
+                    <span>{t.full_name}</span>
+                  </div>
+                ))}
+            </div>
 
-        {/* Aanvragen */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Aanvragen</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <Tabs value={requestTab} onValueChange={v => setRequestTab(v as RequestTab)}>
-              <TabsList>
-                <TabsTrigger value="pending">In Afwachting</TabsTrigger>
-                <TabsTrigger value="approved">Goedgekeurd</TabsTrigger>
-                <TabsTrigger value="denied">Afgekeurd</TabsTrigger>
-              </TabsList>
+            {/* Aanvragen */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Aanvragen</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <Tabs value={requestTab} onValueChange={v => setRequestTab(v as RequestTab)}>
+                  <TabsList>
+                    <TabsTrigger value="pending">In Afwachting</TabsTrigger>
+                    <TabsTrigger value="approved">Goedgekeurd</TabsTrigger>
+                    <TabsTrigger value="denied">Afgekeurd</TabsTrigger>
+                  </TabsList>
 
-              <TabsContent value="pending">
-                {requests
-                  .filter(r => r.status === 'pending')
-                  .map(r => (
-                    <div key={r.id} className="flex justify-between items-center mb-2">
-                      <span>
-                        {r.technicianName} {r.startDate} – {r.endDate}
-                      </span>
-                      <div className="space-x-2">
-                        {isAdmin && (
-                          <>
-                            <Button size="sm" onClick={() => updateStatus(r.id, 'approved')}>
-                              Akkoord
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => updateStatus(r.id, 'denied')}
-                            >
-                              Weiger
-                            </Button>
-                          </>
-                        )}
-                        {(isAdmin || r.technicianId === user?.id) && (
+                  <TabsContent value="pending">
+                    {requests
+                      .filter(r => r.status === 'pending')
+                      .map(r => (
+                        <div key={r.id} className="flex justify-between items-center mb-2">
+                          <span>
+                            {r.technicianName} {r.startDate} – {r.endDate}
+                          </span>
+                          <div className="space-x-2">
+                            {isAdmin && (
+                              <>
+                                <Button size="sm" onClick={() => updateStatus(r.id, 'approved')}>
+                                  Akkoord
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => updateStatus(r.id, 'denied')}
+                                >
+                                  Weiger
+                                </Button>
+                              </>
+                            )}
+                            {(isAdmin || r.technicianId === user?.id) && (
+                              <Button
+                                size="sm"
+                                variant="destructive"
+                                onClick={() => deleteVacation(r.id)}
+                              >
+                                Verwijder
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                  </TabsContent>
+
+                  <TabsContent value="approved">
+                    {requests
+                      .filter(r => r.status === 'approved')
+                      .map(r => (
+                        <div key={r.id} className="flex justify-between items-center mb-2">
+                          <span>
+                            {r.technicianName} {r.startDate} – {r.endDate}
+                          </span>
                           <Button
                             size="sm"
                             variant="destructive"
@@ -427,52 +469,33 @@ const WorkSchedulePage: React.FC = () => {
                           >
                             Verwijder
                           </Button>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-              </TabsContent>
+                        </div>
+                      ))}
+                  </TabsContent>
 
-              <TabsContent value="approved">
-                {requests
-                  .filter(r => r.status === 'approved')
-                  .map(r => (
-                    <div key={r.id} className="flex justify-between items-center mb-2">
-                      <span>
-                        {r.technicianName} {r.startDate} – {r.endDate}
-                      </span>
-                      <Button
-                        size="sm"
-                        variant="destructive"
-                        onClick={() => deleteVacation(r.id)}
-                      >
-                        Verwijder
-                      </Button>
-                    </div>
-                  ))}
-              </TabsContent>
-
-              <TabsContent value="denied">
-                {requests
-                  .filter(r => r.status === 'denied')
-                  .map(r => (
-                    <div key={r.id} className="flex justify-between items-center mb-2">
-                      <span>
-                        {r.technicianName} {r.startDate} – {r.endDate}
-                      </span>
-                      <Button
-                        size="sm"
-                        variant="destructive"
-                        onClick={() => deleteVacation(r.id)}
-                      >
-                        Verwijder
-                      </Button>
-                    </div>
-                  ))}
-              </TabsContent>
-            </Tabs>
-          </CardContent>
-        </Card>
+                  <TabsContent value="denied">
+                    {requests
+                      .filter(r => r.status === 'denied')
+                      .map(r => (
+                        <div key={r.id} className="flex justify-between items-center mb-2">
+                          <span>
+                            {r.technicianName} {r.startDate} – {r.endDate}
+                          </span>
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            onClick={() => deleteVacation(r.id)}
+                          >
+                            Verwijder
+                          </Button>
+                        </div>
+                      ))}
+                  </TabsContent>
+                </Tabs>
+              </CardContent>
+            </Card>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -239,12 +239,15 @@ const Projects = () => {
         .order('date', { ascending: false });
       setCustomers(customerData || []);
       setTechniciansList(
-        (profilesData || []).map(t => ({
-          id: t.id,
-          name: t.full_name
-        }))
+        Array.isArray(profilesData)
+          ? profilesData.map((t: any) => ({
+              id: t.id,
+              name: t.full_name
+            }))
+          : []
       );
-      const formatted = (projectData || []).map(p => ({
+      const formatted = Array.isArray(projectData)
+        ? projectData.map((p: any) => ({
         id: p.id,
         technicianId: p.technician_id, // no fallback to ''
         technicianName: p.profiles?.full_name || '',
@@ -257,8 +260,8 @@ const Projects = () => {
         hoursSpent: p.hours_spent,
         status: p.status as Project['status'],
         createdAt: p.created_at || '',
-        isPublic: p.is_public || false
-      }));
+        isPublic: p.is_public ?? false
+      })) : [];
       setProjects(formatted);
     } catch (err) {
       console.error('Error fetching projects:', err);
