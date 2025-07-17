@@ -531,91 +531,13 @@ const Dashboard = () => {
           )}
         </div>
 
-        {/* Grafieken */}
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-2 md:gap-8 mb-4 md:mb-8">
-          {/* Opdrachtgever project status cards at the top, charts below */}
-          {isOpdrachtgever && (
-            <>
-              {/* Status cards row */}
-              <div className="flex flex-col md:flex-row justify-center items-center gap-2 md:gap-6 mb-8 mt-2 w-full">
-                <Card className="shadow border border-gray-200 bg-white/95 transition-all w-full md:w-44">
-                  <CardContent className="px-2 py-2 md:px-3 md:py-4 flex flex-col items-center">
-                    <span className="text-xs md:text-sm text-gray-600">Afgerond</span>
-                    <span className="text-xl md:text-2xl font-bold text-green-700">{projectStats.counts['completed']}</span>
-                  </CardContent>
-                </Card>
-                <Card className="shadow border border-gray-200 bg-white/95 transition-all w-full md:w-44">
-                  <CardContent className="px-2 py-2 md:px-3 md:py-4 flex flex-col items-center">
-                    <span className="text-xs md:text-sm text-gray-600">Bezig</span>
-                    <span className="text-xl md:text-2xl font-bold text-blue-700">{projectStats.counts['in-progress']}</span>
-                  </CardContent>
-                </Card>
-                <Card className="shadow border border-gray-200 bg-white/95 transition-all w-full md:w-44">
-                  <CardContent className="px-2 py-2 md:px-3 md:py-4 flex flex-col items-center">
-                    <span className="text-xs md:text-sm text-gray-600">Ter review</span>
-                    <span className="text-xl md:text-2xl font-bold text-yellow-600">{projectStats.counts['needs-review']}</span>
-                  </CardContent>
-                </Card>
-              </div>
-              {/* Charts row below cards, always below, never beside */}
-              <div className="w-full flex flex-col items-center gap-4 mb-8">
-                <div className="w-full md:w-2/3 lg:w-1/2">
-                  <Card className="shadow border border-blue-200 bg-white/90 transition-all w-full">
-                    <CardHeader className="px-2 py-2 md:px-3 md:py-2">
-                      <CardTitle className="text-xs md:text-sm text-blue-700">Projecten per week</CardTitle>
-                    </CardHeader>
-                    <CardContent className="p-1 md:p-2 flex-1 w-full h-48 md:h-56 flex items-center justify-center">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <LineChart data={projectStats.perWeek} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-                          <CartesianGrid strokeDasharray="3 3" />
-                          <XAxis dataKey="week" fontSize={10} />
-                          <YAxis fontSize={10} allowDecimals={false} />
-                          <RechartTooltip />
-                          <Legend />
-                          <Line type="monotone" dataKey="count" name="Aantal projecten" stroke="#2563eb" strokeWidth={2} dot={{ r: 3 }} />
-                        </LineChart>
-                      </ResponsiveContainer>
-                    </CardContent>
-                  </Card>
-                </div>
-                <div className="w-full md:w-2/3 lg:w-1/2">
-                  <Card className="shadow border border-green-200 bg-white/90 transition-all w-full">
-                    <CardHeader className="px-2 py-2 md:px-3 md:py-2">
-                      <CardTitle className="text-xs md:text-sm text-green-700">Projectstatus verdeling</CardTitle>
-                    </CardHeader>
-                    <CardContent className="p-1 md:p-2 flex-1 w-full h-48 md:h-56 flex items-center justify-center">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <PieChart>
-                          <Pie
-                            data={projectStats.perStatus}
-                            dataKey="value"
-                            nameKey="status"
-                            cx="50%"
-                            cy="50%"
-                            outerRadius={50}
-                            fill="#8884d8"
-                            label={({ status, value }) => `${STATUS_LABELS_NL[status] || status}: ${value}`}
-                          >
-                            {projectStats.perStatus.map((entry, i) => (
-                              <Cell key={i} fill={COLORS[i % COLORS.length]} />
-                            ))}
-                          </Pie>
-                          <RechartTooltip formatter={(value, name, props) => [`${value}`, STATUS_LABELS_NL[props.payload.status] || props.payload.status]} />
-                          <Legend formatter={status => STATUS_LABELS_NL[status] || status} wrapperStyle={{ fontSize: '11px' }} />
-                        </PieChart>
-                      </ResponsiveContainer>
-                    </CardContent>
-                  </Card>
-                </div>
-              </div>
-            </>
-          )}
-          {/* Only show hours charts for admin/technician, not opdrachtgever */}
-          {(!isOpdrachtgever) && (
+        {/* Charts for non-admin users */}
+        {!isAdmin && !isOpdrachtgever && (
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-2 md:gap-8 mb-4 md:mb-8">
             <Card className="shadow-lg bg-white/80 border border-red-200">
               <CardHeader className="px-2 py-3 md:px-4 md:py-4">
                 <CardTitle className="text-sm md:text-base text-red-700">
-                  {isAdmin ? 'Wekelijkse uren per monteur(s)' : 'Jouw gewerkte uren per week'}
+                  Jouw gewerkte uren per week
                 </CardTitle>
               </CardHeader>
               <CardContent className="p-1 md:p-4">
@@ -626,22 +548,87 @@ const Dashboard = () => {
                     <YAxis fontSize={11} />
                     <RechartTooltip />
                     <Legend />
-                    {isAdmin ? (
-                      <>
-                        <Bar dataKey="regularHours" name="Normaal 100%" stackId="a" fill="#1e3a8a" />
-                        <Bar dataKey="overtimeHours" name="Overtime 125%" stackId="a" fill="#2563eb" />
-                        <Bar dataKey="weekendHours" name="Weekend 150%" stackId="a" fill="#60a5fa" />
-                        <Bar dataKey="sundayHours" name="Sunday 200%" stackId="a" fill="#93c5fd" />
-                      </>
-                    ) : (
-                      <Bar dataKey="allHours" name="Totaal uren" fill="#dc2626" />
-                    )}
+                    <Bar dataKey="allHours" name="Totaal uren" fill="#dc2626" />
                   </BarChart>
                 </ResponsiveContainer>
               </CardContent>
             </Card>
-          )}
-        </div>
+          </div>
+        )}
+
+        {/* Opdrachtgever Charts */}
+        {isOpdrachtgever && (
+          <>
+            {/* Status cards row */}
+            <div className="flex flex-col md:flex-row justify-center items-center gap-2 md:gap-6 mb-8 mt-2 w-full">
+              <Card className="shadow border border-gray-200 bg-white/95 transition-all w-full md:w-44">
+                <CardContent className="px-2 py-2 md:px-3 md:py-4 flex flex-col items-center">
+                  <span className="text-xs md:text-sm text-gray-600">Afgerond</span>
+                  <span className="text-xl md:text-2xl font-bold text-green-700">{projectStats.counts['completed']}</span>
+                </CardContent>
+              </Card>
+              <Card className="shadow border border-gray-200 bg-white/95 transition-all w-full md:w-44">
+                <CardContent className="px-2 py-2 md:px-3 md:py-4 flex flex-col items-center">
+                  <span className="text-xs md:text-sm text-gray-600">Bezig</span>
+                  <span className="text-xl md:text-2xl font-bold text-blue-700">{projectStats.counts['in-progress']}</span>
+                </CardContent>
+              </Card>
+              <Card className="shadow border border-gray-200 bg-white/95 transition-all w-full md:w-44">
+                <CardContent className="px-2 py-2 md:px-3 md:py-4 flex flex-col items-center">
+                  <span className="text-xs md:text-sm text-gray-600">Ter review</span>
+                  <span className="text-xl md:text-2xl font-bold text-yellow-600">{projectStats.counts['needs-review']}</span>
+                </CardContent>
+              </Card>
+            </div>
+            {/* Charts row below cards */}
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-2 md:gap-8 mb-4 md:mb-8">
+              <Card className="shadow border border-blue-200 bg-white/90 transition-all">
+                <CardHeader className="px-2 py-2 md:px-3 md:py-2">
+                  <CardTitle className="text-xs md:text-sm text-blue-700">Projecten per week</CardTitle>
+                </CardHeader>
+                <CardContent className="p-1 md:p-2 flex-1 h-48 md:h-56 flex items-center justify-center">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={projectStats.perWeek} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="week" fontSize={10} />
+                      <YAxis fontSize={10} allowDecimals={false} />
+                      <RechartTooltip />
+                      <Legend />
+                      <Line type="monotone" dataKey="count" name="Aantal projecten" stroke="#2563eb" strokeWidth={2} dot={{ r: 3 }} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </CardContent>
+              </Card>
+              <Card className="shadow border border-green-200 bg-white/90 transition-all">
+                <CardHeader className="px-2 py-2 md:px-3 md:py-2">
+                  <CardTitle className="text-xs md:text-sm text-green-700">Projectstatus verdeling</CardTitle>
+                </CardHeader>
+                <CardContent className="p-1 md:p-2 flex-1 h-48 md:h-56 flex items-center justify-center">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={projectStats.perStatus}
+                        dataKey="value"
+                        nameKey="status"
+                        cx="50%"
+                        cy="50%"
+                        outerRadius={50}
+                        fill="#8884d8"
+                        label={({ status, value }) => `${STATUS_LABELS_NL[status] || status}: ${value}`}
+                      >
+                        {projectStats.perStatus.map((entry, i) => (
+                          <Cell key={i} fill={COLORS[i % COLORS.length]} />
+                        ))}
+                      </Pie>
+                      <RechartTooltip formatter={(value, name, props) => [`${value}`, STATUS_LABELS_NL[props.payload.status] || props.payload.status]} />
+                      <Legend formatter={status => STATUS_LABELS_NL[status] || status} wrapperStyle={{ fontSize: '11px' }} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </CardContent>
+              </Card>
+            </div>
+          </>
+        )}
 
         {/* Admin: 4 Charts Layout */}
         {isAdmin && (
