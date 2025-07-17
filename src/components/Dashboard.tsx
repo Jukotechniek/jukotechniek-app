@@ -136,7 +136,12 @@ const Dashboard = () => {
         `);
       if (hoursError) console.error(hoursError);
 
-      // Transform webhook hours to match work_hours format
+      // Normalize manual hours and webhook hours
+      const sanitizedManualHours = (workHours || []).map(wh => ({
+        ...wh,
+        manual_verified: Boolean(wh.manual_verified),
+      }));
+
       const transformedWebhookHours = (webhookHours || []).map(wh => ({
         ...wh,
         customer_id: null, // webhook doesn't have customer info
@@ -154,30 +159,33 @@ const Dashboard = () => {
         created_by: null,
         start_time: wh.webhook_start,
         end_time: wh.webhook_end,
-        manual_verified: wh.webhook_verified,
+        manual_verified: Boolean(wh.webhook_verified),
+        webhook_verified: Boolean(wh.webhook_verified),
         description: 'Webhook uren',
         technician_id: wh.technician_id,
         date: wh.date,
         profiles: wh.profiles
       }));
 
-      // Combine and prioritize: use webhook hours if available, otherwise use manual hours
-      const combinedHours = [];
-      const webhookDates = new Set();
-      
-      // Add all webhook hours first and track their dates per technician
-      transformedWebhookHours.forEach(wh => {
-        combinedHours.push(wh);
-        webhookDates.add(`${wh.technician_id}_${wh.date}`);
-      });
-      
-      // Add manual hours only for dates/technicians that don't have webhook hours
-      (workHours || []).forEach(wh => {
+      // Combine hours where verified entries take precedence
+      const combinedMap = new Map<string, any>();
+
+      // Start with manual hours
+      sanitizedManualHours.forEach(wh => {
         const key = `${wh.technician_id}_${wh.date}`;
-        if (!webhookDates.has(key)) {
-          combinedHours.push(wh);
+        combinedMap.set(key, wh);
+      });
+
+      // Merge webhook hours, only overriding when verified or no manual entry
+      transformedWebhookHours.forEach(wh => {
+        const key = `${wh.technician_id}_${wh.date}`;
+        const existing = combinedMap.get(key);
+        if (!existing || wh.webhook_verified || !existing.manual_verified) {
+          combinedMap.set(key, wh);
         }
       });
+
+      const combinedHours = Array.from(combinedMap.values());
 
       const { data: rates, error: ratesError } = await supabase
         .from('technician_rates')
