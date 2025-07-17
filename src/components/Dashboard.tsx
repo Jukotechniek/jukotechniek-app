@@ -75,7 +75,7 @@ const Dashboard = () => {
 
   useEffect(() => {
     if (!rawWorkHours.length) return;
-    let filtered = rawWorkHours.filter(e => e.manual_verified === true);
+    let filtered = rawWorkHours.filter(e => Boolean(e.manual_verified));
 
     if (isAdmin) {
       if (selectedTechnician !== 'all') {
@@ -110,7 +110,7 @@ const Dashboard = () => {
     if (isAdmin)
       setWeeklyAdminData(
         processWeeklyData(
-          rawWorkHours.filter(e => e.manual_verified === true)
+          rawWorkHours.filter(e => Boolean(e.manual_verified))
         )
       );
   }, [rawWorkHours, rawRates, travelRates, selectedTechnician, selectedMonth, isAdmin, user?.id]);
@@ -154,7 +154,7 @@ const Dashboard = () => {
         created_by: null,
         start_time: wh.webhook_start,
         end_time: wh.webhook_end,
-        manual_verified: wh.webhook_verified,
+        manual_verified: Boolean(wh.webhook_verified),
         description: 'Webhook uren',
         technician_id: wh.technician_id,
         date: wh.date,
@@ -174,12 +174,16 @@ const Dashboard = () => {
       transformedWebhookHours.forEach(wh => {
         const key = `${wh.technician_id}_${wh.date}`;
         const existing = combinedMap.get(key);
-        if (!existing || wh.webhook_verified || !existing.manual_verified) {
+        if (!existing || Boolean(wh.webhook_verified) || !Boolean(existing.manual_verified)) {
           combinedMap.set(key, wh);
         }
       });
 
-      const combinedHours = Array.from(combinedMap.values());
+      const combinedHours = Array.from(combinedMap.values()).map(e => ({
+        ...e,
+        manual_verified: Boolean(e.manual_verified),
+        webhook_verified: Boolean(e.webhook_verified)
+      }));
 
       const { data: rates, error: ratesError } = await supabase
         .from('technician_rates')
@@ -295,7 +299,7 @@ const Dashboard = () => {
       let rev = 0, cost = 0;
 
       // Only calculate revenue and costs if hours are verified
-      const isVerified = entry.manual_verified === true;
+      const isVerified = Boolean(entry.manual_verified);
 
       if (isVerified) {
         if (su > 0) {
