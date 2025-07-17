@@ -161,23 +161,25 @@ const Dashboard = () => {
         profiles: wh.profiles
       }));
 
-      // Combine and prioritize: use webhook hours if available, otherwise use manual hours
-      const combinedHours = [];
-      const webhookDates = new Set();
-      
-      // Add all webhook hours first and track their dates per technician
-      transformedWebhookHours.forEach(wh => {
-        combinedHours.push(wh);
-        webhookDates.add(`${wh.technician_id}_${wh.date}`);
-      });
-      
-      // Add manual hours only for dates/technicians that don't have webhook hours
+      // Combine hours where verified entries take precedence
+      const combinedMap = new Map<string, any>();
+
+      // Start with manual hours
       (workHours || []).forEach(wh => {
         const key = `${wh.technician_id}_${wh.date}`;
-        if (!webhookDates.has(key)) {
-          combinedHours.push(wh);
+        combinedMap.set(key, wh);
+      });
+
+      // Merge webhook hours, only overriding when verified or no manual entry
+      transformedWebhookHours.forEach(wh => {
+        const key = `${wh.technician_id}_${wh.date}`;
+        const existing = combinedMap.get(key);
+        if (!existing || wh.webhook_verified || !existing.manual_verified) {
+          combinedMap.set(key, wh);
         }
       });
+
+      const combinedHours = Array.from(combinedMap.values());
 
       const { data: rates, error: ratesError } = await supabase
         .from('technician_rates')
