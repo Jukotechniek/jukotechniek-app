@@ -75,7 +75,7 @@ const Dashboard = () => {
 
   useEffect(() => {
     if (!rawWorkHours.length) return;
-    let filtered = rawWorkHours.filter(e => e.manual_verified === true);
+    let filtered = rawWorkHours.filter(e => Boolean(e.manual_verified));
 
     if (isAdmin) {
       if (selectedTechnician !== 'all') {
@@ -110,7 +110,7 @@ const Dashboard = () => {
     if (isAdmin)
       setWeeklyAdminData(
         processWeeklyData(
-          rawWorkHours.filter(e => e.manual_verified === true)
+          rawWorkHours.filter(e => Boolean(e.manual_verified))
         )
       );
   }, [rawWorkHours, rawRates, travelRates, selectedTechnician, selectedMonth, isAdmin, user?.id]);
