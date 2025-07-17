@@ -268,7 +268,7 @@ const Dashboard = () => {
     return Array.from(weekMap.values()).slice(-8);
   };
 
-  // --- bestaande functies ---
+  // --- Updated processTechnicianData with webhook vs manual hours logic ---
   const processTechnicianData = (workHours, rates, travelRates) => {
     const techMap = new Map();
     const rateMap = new Map();
@@ -316,65 +316,76 @@ const Dashboard = () => {
       }
       const s = techMap.get(id);
 
+      // For webhook hours: revenue based on webhook hours, costs based on manual hours
+      // For manual hours: both revenue and costs based on manual hours
+      const isWebhookEntry = !entry.is_manual_entry;
+      const isVerified = entry.manual_verified === true;
+      
+      // Skip unverified entries
+      if (!isVerified) return;
+
       const reg = Number(entry.regular_hours || 0);
       const ot = Number(entry.overtime_hours || 0);
       const wk = Number(entry.weekend_hours || 0);
       const su = Number(entry.sunday_hours || 0);
-
-      const billedHours = Number(entry.billed_hours ?? reg + ot + wk + su);
-      const actualHours = Number(entry.hours_worked ?? reg + ot + wk + su);
+      const actualHours = Number(entry.hours_worked || 0);
 
       // Tarieven
       const rate = rateMap.get(id) || { hourly: 0, billable: 0, saturday: 0, sunday: 0 };
 
       let rev = 0, cost = 0;
 
-      // Only calculate revenue if hours are verified (webhook_verified = true)
-      const isVerified = entry.manual_verified === true;
-      
-      if (isVerified) {
-        if (su > 0) {
-          rev += su * rate.billable * 2;
-          cost += su * rate.sunday;
-        }
-        if (wk > 0) {
-          rev += wk * rate.billable * 1.5;
-          cost += wk * rate.saturday;
-        }
-        if (ot > 0) {
-          rev += ot * rate.billable * 1.25;
-          cost += ot * rate.hourly * 1.25;
-        }
-        if (reg > 0) {
-          rev += reg * rate.billable;
-          cost += reg * rate.hourly;
+      if (isWebhookEntry) {
+        // Revenue calculation: use webhook hours (what we invoice to customer)
+        // For webhook entries, treat all hours as regular billable hours
+        rev += actualHours * rate.billable;
+        
+        // Cost calculation: use manual hours (what mechanics invoice to us)
+        // Find corresponding manual entry for this date/technician
+        const manualEntry = rawWorkHours.find(h => 
+          h.technician_id === id && 
+          h.date === entry.date && 
+          h.is_manual_entry === true &&
+          h.manual_verified === true
+        );
+        
+        if (manualEntry) {
+          const manualReg = Number(manualEntry.regular_hours || 0);
+          const manualOt = Number(manualEntry.overtime_hours || 0);
+          const manualWk = Number(manualEntry.weekend_hours || 0);
+          const manualSu = Number(manualEntry.sunday_hours || 0);
+          
+          cost += manualSu * rate.sunday;
+          cost += manualWk * rate.saturday;
+          cost += manualOt * rate.hourly * 1.25;
+          cost += manualReg * rate.hourly;
+        } else {
+          // Fallback: use webhook hours for costs if no manual entry
+          cost += actualHours * rate.hourly;
         }
       } else {
-        // Still calculate costs even if not verified
-        if (su > 0) cost += su * rate.sunday;
-        if (wk > 0) cost += wk * rate.saturday;
-        if (ot > 0) cost += ot * rate.hourly * 1.25;
-        if (reg > 0) cost += reg * rate.hourly;
+        // Manual entry: calculate both revenue and costs based on manual hours
+        rev += su * rate.billable * 2;
+        rev += wk * rate.billable * 1.5;
+        rev += ot * rate.billable * 1.25;
+        rev += reg * rate.billable;
+        
+        cost += su * rate.sunday;
+        cost += wk * rate.saturday;
+        cost += ot * rate.hourly * 1.25;
+        cost += reg * rate.hourly;
       }
 
-      if (isVerified && billedHours > actualHours) {
-        rev += (billedHours - actualHours) * rate.billable;
-      }
-
+      // Travel expenses
       const customerId = entry.customer_id;
       const travelKey = `${customerId}_${id}`;
       const travel = travelMap.get(travelKey) || { toTech: 0, fromClient: 0 };
 
-      if (isVerified && travel.fromClient > 0) {
-        rev += travel.fromClient;
-      }
-      if (travel.toTech > 0) {
-        cost += travel.toTech;
-      }
+      rev += travel.fromClient;
+      cost += travel.toTech;
 
       const profit = rev - cost;
-      const hrs = actualHours;
-      s.totalHours += hrs;
+      s.totalHours += actualHours;
       s.regularHours += reg;
       s.overtimeHours += ot;
       s.weekendHours += wk;
@@ -632,152 +643,226 @@ const Dashboard = () => {
           )}
         </div>
 
-        {/* Admin: Performance cards/table */}
+        {/* Admin: 4 Charts Layout */}
         {isAdmin && (
-          <>
-            {/* Analytics Summary Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">Totale Winst</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold text-green-600">€{technicianData.reduce((s, t) => s + t.profit, 0).toFixed(2)}</div>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">Totale Omzet</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold text-blue-600">€{technicianData.reduce((s, t) => s + t.revenue, 0).toFixed(2)}</div>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">Totale Kosten</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold text-red-600">€{technicianData.reduce((s, t) => s + t.costs, 0).toFixed(2)}</div>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">Totale Uren</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold text-gray-600">{technicianData.reduce((s, t) => s + t.totalHours, 0).toFixed(1)}</div>
-                </CardContent>
-              </Card>
-            </div>
-            {/* Analytics Charts */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-              {/* Profit per Technician */}
-              <Card>
-                <CardHeader>
-                  <CardTitle>Winst per Monteur</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <ResponsiveContainer width="100%" height={300}>
-                    <BarChart data={technicianData}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="technicianName" tick={{ fontSize: 12 }} />
-                      <YAxis tick={{ fontSize: 12 }} />
-                      <Bar dataKey="profit" fill="#ef4444" />
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+            {/* Chart 1: Revenue vs Costs */}
+            <Card className="shadow-lg border-2 border-gray-200 bg-white/90">
+              <CardHeader>
+                <CardTitle className="text-red-700 flex items-center space-x-2">
+                  <span>Omzet vs Kosten</span>
+                  <Badge color="bg-red-100" text="text-red-800">Admin</Badge>
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="h-64">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={technicianData.map(tech => ({
+                      name: tech.technicianName.split(' ').map(n => n[0]).join(''),
+                      omzet: tech.revenue,
+                      kosten: tech.costs
+                    }))}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.1)"/>
+                      <XAxis dataKey="name" className="text-xs" />
+                      <YAxis className="text-xs" />
+                      <RechartTooltip 
+                        contentStyle={{ backgroundColor: 'white', border: '1px solid #ccc', borderRadius: '8px' }}
+                        formatter={(value, name) => [<ZakelijkEuro value={value} />, name === 'omzet' ? 'Omzet' : 'Kosten']}
+                      />
+                      <Bar dataKey="omzet" fill="#059669" />
+                      <Bar dataKey="kosten" fill="#dc2626" />
+                      <Legend />
                     </BarChart>
                   </ResponsiveContainer>
-                </CardContent>
-              </Card>
-              {/* Hours Distribution */}
-              <Card>
-                <CardHeader>
-                  <CardTitle>Urenverdeling</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <ResponsiveContainer width="100%" height={300}>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Chart 2: Profit Distribution */}
+            <Card className="shadow-lg border-2 border-gray-200 bg-white/90">
+              <CardHeader>
+                <CardTitle className="text-red-700 flex items-center space-x-2">
+                  <span>Winstverdeling</span>
+                  <Badge color="bg-red-100" text="text-red-800">Admin</Badge>
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="h-64">
+                  <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
                       <Pie
-                        data={technicianData}
+                        data={technicianData.map(tech => ({
+                          name: tech.technicianName.split(' ').map(n => n[0]).join(''),
+                          value: Math.max(0, tech.profit),
+                          color: COLORS[technicianData.indexOf(tech) % COLORS.length]
+                        }))}
                         cx="50%"
                         cy="50%"
+                        labelLine={false}
                         outerRadius={80}
-                        dataKey="totalHours"
-                        label={({ technicianName, value }) => `${technicianName}: ${value.toFixed(1)}h`}
+                        fill="#8884d8"
+                        dataKey="value"
                       >
-                        {technicianData.map((_, index) => (
+                        {technicianData.map((entry, index) => (
                           <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                         ))}
                       </Pie>
+                      <RechartTooltip 
+                        contentStyle={{ backgroundColor: 'white', border: '1px solid #ccc', borderRadius: '8px' }}
+                        formatter={(value) => [<ZakelijkEuro value={value} />, 'Winst']}
+                      />
+                      <Legend />
                     </PieChart>
                   </ResponsiveContainer>
-                </CardContent>
-              </Card>
-            </div>
-            {/* Detailed Analytics per Technician */}
-            <div className="space-y-6 mb-8">
-              {technicianData.map((tech, index) => (
-                <Card key={tech.technicianId}>
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                      {getInitials(tech.technicianName)} - Gedetailleerde Analytics
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
-                      <div className="text-center">
-                        <div className="text-sm text-gray-500">Totale Uren</div>
-                        <div className="text-lg font-bold">{tech.totalHours.toFixed(1)}</div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Chart 3: Hours Distribution */}
+            <Card className="shadow-lg border-2 border-gray-200 bg-white/90">
+              <CardHeader>
+                <CardTitle className="text-red-700 flex items-center space-x-2">
+                  <span>Uren Verdeling</span>
+                  <Badge color="bg-red-100" text="text-red-800">Admin</Badge>
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="h-64">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={technicianData.map(tech => ({
+                      name: tech.technicianName.split(' ').map(n => n[0]).join(''),
+                      normaal: tech.regularHours,
+                      overwerk: tech.overtimeHours,
+                      weekend: tech.weekendHours,
+                      zondag: tech.sundayHours
+                    }))}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.1)"/>
+                      <XAxis dataKey="name" className="text-xs" />
+                      <YAxis className="text-xs" />
+                      <RechartTooltip 
+                        contentStyle={{ backgroundColor: 'white', border: '1px solid #ccc', borderRadius: '8px' }}
+                        formatter={(value) => [<ZakelijkUren value={value} />, '']}
+                      />
+                      <Bar dataKey="normaal" stackId="a" fill="#dc2626" />
+                      <Bar dataKey="overwerk" stackId="a" fill="#991b1b" />
+                      <Bar dataKey="weekend" stackId="a" fill="#fbbf24" />
+                      <Bar dataKey="zondag" stackId="a" fill="#8b5cf6" />
+                      <Legend />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Chart 4: Profit per Technician */}
+            <Card className="shadow-lg border-2 border-gray-200 bg-white/90">
+              <CardHeader>
+                <CardTitle className="text-red-700 flex items-center space-x-2">
+                  <span>Winst per Monteur</span>
+                  <Badge color="bg-red-100" text="text-red-800">Admin</Badge>
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="h-64">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={technicianData.map(tech => ({
+                      name: tech.technicianName.split(' ').map(n => n[0]).join(''),
+                      winst: tech.profit
+                    }))}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.1)"/>
+                      <XAxis dataKey="name" className="text-xs" />
+                      <YAxis className="text-xs" />
+                      <RechartTooltip 
+                        contentStyle={{ backgroundColor: 'white', border: '1px solid #ccc', borderRadius: '8px' }}
+                        formatter={(value) => [<ZakelijkEuro value={value} />, 'Winst']}
+                      />
+                      <Bar dataKey="winst" fill="#2563eb" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        )}
+
+        {/* Technician Overview - Always shown for verified hours only */}
+        <Card className="shadow-lg border-2 border-gray-200 bg-white/90 mb-4 md:mb-8">
+          <CardHeader>
+            <CardTitle className="text-red-700 flex items-center space-x-2">
+              <span>Monteur Overzicht</span>
+              {isAdmin && (
+                <Badge color="bg-red-100" text="text-red-800">Alleen geverifieerde uren</Badge>
+              )}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2 md:space-y-4">
+              {displayData.map((tech) => (
+                <div key={tech.technicianId} className="border border-gray-300 rounded-lg p-2 md:p-4 bg-gradient-to-r from-white to-gray-50 hover:shadow-md transition-all">
+                  <div className="flex flex-col md:flex-row md:items-center md:justify-between space-y-2 md:space-y-0">
+                    <div className="flex items-center space-x-2 md:space-x-3">
+                      <div className="w-8 h-8 md:w-10 md:h-10 bg-red-600 rounded-full flex items-center justify-center text-white font-bold text-xs md:text-sm">
+                        {getInitials(tech.technicianName)}
                       </div>
-                      <div className="text-center">
-                        <div className="text-sm text-gray-500">Weekdag Uren</div>
-                        <div className="text-lg font-bold">{tech.regularHours.toFixed(1)}</div>
-                      </div>
-                      <div className="text-center">
-                        <div className="text-sm text-gray-500">Overwerk</div>
-                        <div className="text-lg font-bold text-orange-600">{tech.overtimeHours.toFixed(1)}</div>
-                      </div>
-                      <div className="text-center">
-                        <div className="text-sm text-gray-500">Zaterdag</div>
-                        <div className="text-lg font-bold text-blue-600">{tech.weekendHours.toFixed(1)}</div>
-                      </div>
-                      <div className="text-center">
-                        <div className="text-sm text-gray-500">Zondag</div>
-                        <div className="text-lg font-bold text-purple-600">{tech.sundayHours.toFixed(1)}</div>
+                      <div>
+                        <h3 className="font-semibold text-gray-900 text-sm md:text-base">{tech.technicianName}</h3>
+                        <p className="text-xs md:text-sm text-gray-600">
+                          <ZakelijkUren value={tech.totalHours} /> • <ZakelijkDagen value={tech.daysWorked} /> dagen
+                        </p>
                       </div>
                     </div>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-                      <div className="text-center p-4 bg-green-50 rounded-lg">
-                        <div className="text-sm text-gray-500">Winst</div>
-                        <div className="text-xl font-bold text-green-600">€{tech.profit.toFixed(2)}</div>
-                      </div>
-                      <div className="text-center p-4 bg-blue-50 rounded-lg">
-                        <div className="text-sm text-gray-500">Omzet</div>
-                        <div className="text-xl font-bold text-blue-600">€{tech.revenue.toFixed(2)}</div>
-                      </div>
-                      <div className="text-center p-4 bg-red-50 rounded-lg">
-                        <div className="text-sm text-gray-500">Kosten</div>
-                        <div className="text-xl font-bold text-red-600">€{tech.costs.toFixed(2)}</div>
-                      </div>
+                    <div className="grid grid-cols-2 md:flex md:items-center md:space-x-4 gap-2 md:gap-0">
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <div className="text-center">
+                              <p className="text-xs text-gray-500">Uren</p>
+                              <p className="font-bold text-red-600 text-sm md:text-base">
+                                <ZakelijkUren value={tech.totalHours} />
+                              </p>
+                              <ProgressBar value={tech.totalHours} max={maxHours} color="#dc2626" />
+                            </div>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <div className="text-xs">
+                              <p>Normaal: <ZakelijkUren value={tech.regularHours} /></p>
+                              <p>Overwerk: <ZakelijkUren value={tech.overtimeHours} /></p>
+                              <p>Weekend: <ZakelijkUren value={tech.weekendHours} /></p>
+                              <p>Zondag: <ZakelijkUren value={tech.sundayHours} /></p>
+                            </div>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                      {isAdmin && (
+                        <>
+                          <div className="text-center">
+                            <p className="text-xs text-gray-500">Omzet</p>
+                            <p className="font-bold text-green-600 text-sm md:text-base">
+                              <ZakelijkEuro value={tech.revenue} />
+                            </p>
+                          </div>
+                          <div className="text-center">
+                            <p className="text-xs text-gray-500">Kosten</p>
+                            <p className="font-bold text-orange-600 text-sm md:text-base">
+                              <ZakelijkEuro value={tech.costs} />
+                            </p>
+                          </div>
+                          <div className="text-center">
+                            <p className="text-xs text-gray-500">Winst</p>
+                            <p className="font-bold text-blue-600 text-sm md:text-base">
+                              <ZakelijkEuro value={tech.profit} />
+                            </p>
+                            <ProgressBar value={tech.profit} max={maxProfit} color="#2563eb" />
+                          </div>
+                        </>
+                      )}
                     </div>
-                    {/* Daily profit chart - only if tech.dailyStats exists */}
-                    {tech.dailyStats && (
-                      <div className="h-64">
-                        <ResponsiveContainer width="100%" height="100%">
-                          <LineChart data={tech.dailyStats}>
-                            <CartesianGrid strokeDasharray="3 3" />
-                            <XAxis dataKey="date" tick={{ fontSize: 10 }} />
-                            <YAxis tick={{ fontSize: 12 }} />
-                            <Line type="monotone" dataKey="profit" stroke={COLORS[index % COLORS.length]} strokeWidth={2} />
-                          </LineChart>
-                        </ResponsiveContainer>
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
+                  </div>
+                </div>
               ))}
             </div>
-          </>
-        )}
+          </CardContent>
+        </Card>
       </div>
     </div>
   );
