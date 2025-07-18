@@ -59,6 +59,7 @@ const Badge = ({ children, color = "bg-gray-100", text = "text-gray-800" }) => (
 const Dashboard = () => {
   const { user } = useAuth();
   const isAdmin = user?.role === 'admin';
+  const isOpdrachtgever = user?.role === 'opdrachtgever';
 
   const [rawWorkHours, setRawWorkHours] = useState([]);
   const [rawRates, setRawRates] = useState([]);
@@ -78,9 +79,42 @@ const Dashboard = () => {
   const [selectedTechnicianDetails, setSelectedTechnicianDetails] = useState(null);
   const [detailedHours, setDetailedHours] = useState([]);
 
+  const [projectCounts, setProjectCounts] = useState({
+    completed: 0,
+    inProgress: 0,
+    needsReview: 0,
+  });
+
+  const fetchProjectCounts = async () => {
+    setLoading(true);
+    try {
+      const { data, error } = await supabase.from('projects').select('status');
+      if (error) throw error;
+      const counts = { completed: 0, inProgress: 0, needsReview: 0 };
+      (data || []).forEach((p: any) => {
+        if (p.status === 'completed') counts.completed += 1;
+        else if (p.status === 'in-progress') counts.inProgress += 1;
+        else if (p.status === 'needs-review') counts.needsReview += 1;
+      });
+      setProjectCounts(counts);
+    } catch (err) {
+      console.error('Error fetching project counts:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    fetchDashboardData();
-  }, []);
+    if (isOpdrachtgever) {
+      fetchProjectCounts();
+    }
+  }, [isOpdrachtgever]);
+
+  useEffect(() => {
+    if (!isOpdrachtgever) {
+      fetchDashboardData();
+    }
+  }, [isOpdrachtgever]);
 
   useEffect(() => {
     if (!rawWorkHours.length) return;
@@ -439,6 +473,49 @@ const Dashboard = () => {
   };
 
   // --------------- UI / Layout ---------------
+  if (isOpdrachtgever) {
+    if (loading) {
+      return (
+        <div className="p-6 bg-gray-50 min-h-screen flex items-center justify-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-red-600" />
+        </div>
+      );
+    }
+
+    return (
+      <div className="p-2 md:p-6 bg-gradient-to-br from-white via-gray-100 to-red-50 min-h-screen">
+        <div className="max-w-7xl mx-auto">
+          <header className="mb-4 md:mb-8">
+            <h1 className="text-2xl md:text-3xl font-bold text-red-700 mb-1 md:mb-2 tracking-tight">
+              Dashboard <span className="font-normal text-gray-700 text-base">• Opdrachtgever</span>
+            </h1>
+            <p className="text-gray-600 text-sm md:text-base">Overzicht van jouw projecten.</p>
+          </header>
+          <div className="grid grid-cols-1 gap-2 md:grid-cols-3 md:gap-6 mb-4 md:mb-8">
+            <Card className="shadow-lg border-2 border-gray-200 bg-white/90 hover:bg-gray-50 transition-all">
+              <CardContent className="px-2 py-3 md:px-4 md:py-6">
+                <p className="text-xs md:text-sm text-gray-600">Voltooide projecten</p>
+                <p className="text-2xl md:text-3xl font-bold text-gray-800">{projectCounts.completed}</p>
+              </CardContent>
+            </Card>
+            <Card className="shadow-lg border-2 border-gray-200 bg-white/90 hover:bg-gray-50 transition-all">
+              <CardContent className="px-2 py-3 md:px-4 md:py-6">
+                <p className="text-xs md:text-sm text-gray-600">Projecten in behandeling</p>
+                <p className="text-2xl md:text-3xl font-bold text-gray-800">{projectCounts.inProgress}</p>
+              </CardContent>
+            </Card>
+            <Card className="shadow-lg border-2 border-gray-200 bg-white/90 hover:bg-gray-50 transition-all">
+              <CardContent className="px-2 py-3 md:px-4 md:py-6">
+                <p className="text-xs md:text-sm text-gray-600">Controle nodig</p>
+                <p className="text-2xl md:text-3xl font-bold text-gray-800">{projectCounts.needsReview}</p>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   // Altijd up-to-date gefilterde workhours op basis van admin/monteur + maand
   const filteredWorkHours = rawWorkHours.filter(e => {
     // Filter op monteur
