@@ -90,12 +90,6 @@ const Analytics: React.FC = () => {
         .from('technician_rates')
         .select('*');
 
-      // Fetch webhook hours for comparison
-      const { data: webhookHours } = await supabase
-        .from('webhook_hours')
-        .select('*')
-        .gte('date', startStr)
-        .lte('date', endStr);
 
       const technicianMap = new Map<string, TechnicianAnalytics>();
 
@@ -125,11 +119,8 @@ const Analytics: React.FC = () => {
         const isWeekend = date.getDay() === 6; // Saturday
         const isSunday = date.getDay() === 0; // Sunday
         
-        // Use webhook hours if available and verified
-        const webhookData = webhookHours?.find(w => 
-          w.technician_id === techId && w.date === hour.date && w.webhook_verified
-        );
-        const hoursToUse = webhookData ? webhookData.hours_worked : hour.hours_worked;
+        // Use only manually registered hours for cost and revenue calculations
+        const hoursToUse = hour.hours_worked;
         
         // Calculate rates
         const rates = technicianRates?.find(r => r.technician_id === techId);
