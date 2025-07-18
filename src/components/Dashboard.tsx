@@ -349,7 +349,10 @@ const Dashboard = () => {
     });
 
     (Object.values(grouped) as any[][]).forEach((entries) => {
-      const entry = entries[0];
+      // Splits manual en webhook entries
+      const manualEntries = entries.filter(e => e.manual_verified);
+      const useEntries = manualEntries.length > 0 ? manualEntries : entries;
+      const entry = useEntries[0];
       const id = entry.technician_id || entry.technicianId;
       const name = entry.profiles?.full_name || entry.technicianName || 'Unknown';
       if (!techMap.has(id)) {
@@ -372,26 +375,26 @@ const Dashboard = () => {
         });
       }
       const s = techMap.get(id);
-      const reg = entries.reduce((sum, e) => sum + (e.regular_hours ?? e.regularHours ?? 0), 0);
-      const ot = entries.reduce((sum, e) => sum + (e.overtime_hours ?? e.overtimeHours ?? 0), 0);
-      const wk = entries.reduce((sum, e) => sum + (e.weekend_hours ?? e.weekendHours ?? 0), 0);
-      const su = entries.reduce((sum, e) => sum + (e.sunday_hours ?? e.sundayHours ?? 0), 0);
-      const billedHours = entries.reduce((sum, e) => sum + (e.billed_hours ?? 0), 0) || reg + ot + wk + su;
-      const actualHours = entries.reduce((sum, e) => sum + (e.hours_worked ?? e.hoursWorked ?? 0), 0) || reg + ot + wk + su;
+      const reg = useEntries.reduce((sum, e) => sum + (e.regular_hours ?? e.regularHours ?? 0), 0);
+      const ot = useEntries.reduce((sum, e) => sum + (e.overtime_hours ?? e.overtimeHours ?? 0), 0);
+      const wk = useEntries.reduce((sum, e) => sum + (e.weekend_hours ?? e.weekendHours ?? 0), 0);
+      const su = useEntries.reduce((sum, e) => sum + (e.sunday_hours ?? e.sundayHours ?? 0), 0);
+      const billedHours = useEntries.reduce((sum, e) => sum + (e.billed_hours ?? 0), 0) || reg + ot + wk + su;
+      const actualHours = useEntries.reduce((sum, e) => sum + (e.hours_worked ?? e.hoursWorked ?? 0), 0) || reg + ot + wk + su;
       const rate = rateMap.get(id) || { hourly: 0, billable: 0, saturday: 0, sunday: 0 };
       s.totalHours += actualHours;
       s.regularHours += reg;
       s.overtimeHours += ot;
       s.weekendHours += wk;
       s.sundayHours += su;
-      s.entries.push(...entries);
+      s.entries.push(...useEntries);
       if (entry.date > s.lastWorked) s.lastWorked = entry.date;
     });
 
     // Na het groeperen: bereken daysWorked en reiskosten op basis van dagen
     techMap.forEach(s => {
       s.daysWorked = new Set(s.entries.map((e) => e.date)).size;
-      // Zoek travel rates (pak eerste klant waar monteur op gewerkt heeft, of fallback)
+      // Zoek travel rates (ongewijzigd)
       let travelTo = 0;
       let travelFrom = 0;
       // Verzamel alle unieke klant+monteur combinaties, alleen geldige klantnummers
@@ -413,16 +416,20 @@ const Dashboard = () => {
       s.travelRevenue = s.daysWorked * travelFrom;
       // Log alle relevante info voor debuggen
       // Bereken omzet/kosten/winst
-      const regularCost = s.regularHours * (rateMap.get(s.technicianId)?.hourly || 0);
-      const overtimeCost = s.overtimeHours * (rateMap.get(s.technicianId)?.hourly || 0) * 1.25;
-      const weekendCost = s.weekendHours * (rateMap.get(s.technicianId)?.saturday || 0);
-      const sundayCost = s.sundayHours * (rateMap.get(s.technicianId)?.sunday || 0);
+      // Kostenberekening
+      const costEntries = s.entries.filter(e => e.manual_verified).length > 0 ? s.entries.filter(e => e.manual_verified) : s.entries;
+      const regularCost = costEntries.reduce((sum, e) => sum + (e.regular_hours ?? e.regularHours ?? 0) * (rateMap.get(s.technicianId)?.hourly || 0), 0);
+      const overtimeCost = costEntries.reduce((sum, e) => sum + (e.overtime_hours ?? e.overtimeHours ?? 0) * (rateMap.get(s.technicianId)?.hourly || 0) * 1.25, 0);
+      const weekendCost = costEntries.reduce((sum, e) => sum + (e.weekend_hours ?? e.weekendHours ?? 0) * (rateMap.get(s.technicianId)?.saturday || 0), 0);
+      const sundayCost = costEntries.reduce((sum, e) => sum + (e.sunday_hours ?? e.sundayHours ?? 0) * (rateMap.get(s.technicianId)?.sunday || 0), 0);
       s.costs = regularCost + overtimeCost + weekendCost + sundayCost + s.travelCost;
-      const regularRevenue = s.regularHours * (rateMap.get(s.technicianId)?.billable || 0);
-      const overtimeRevenue = s.overtimeHours * (rateMap.get(s.technicianId)?.billable || 0) * 1.25;
-      const weekendRevenue = s.weekendHours * (rateMap.get(s.technicianId)?.billable || 0) * 1.5;
-      const sundayRevenue = s.sundayHours * (rateMap.get(s.technicianId)?.billable || 0) * 2;
-      s.revenue = regularRevenue + overtimeRevenue + weekendRevenue + sundayRevenue + s.travelRevenue;
+      // Omzet (mag nog steeds alle entries zijn)
+      const regularRevenue = s.entries.reduce((sum, e) => sum + (e.regular_hours ?? e.regularHours ?? 0) * (rateMap.get(s.technicianId)?.billable || 0), 0);
+      const overtimeRevenue = s.entries.reduce((sum, e) => sum + (e.overtime_hours ?? e.overtimeHours ?? 0) * (rateMap.get(s.technicianId)?.billable || 0) * 1.25, 0);
+      const weekendRevenue = s.entries.reduce((sum, e) => sum + (e.weekend_hours ?? e.weekendHours ?? 0) * (rateMap.get(s.technicianId)?.billable || 0) * 1.5, 0);
+      const sundayRevenue = s.entries.reduce((sum, e) => sum + (e.sunday_hours ?? e.sundayHours ?? 0) * (rateMap.get(s.technicianId)?.billable || 0) * 2, 0);
+      const totalRevenue = regularRevenue + overtimeRevenue + weekendRevenue + sundayRevenue + s.travelRevenue;
+      s.revenue = totalRevenue;
       s.profit = s.revenue - s.costs;
       delete s.entries;
     });
@@ -950,6 +957,12 @@ const Dashboard = () => {
                       const weekend = manualEntries.reduce((s, e) => s + (e.weekend_hours ?? e.weekendHours ?? 0), 0);
                       const sunday = manualEntries.reduce((s, e) => s + (e.sunday_hours ?? e.sundayHours ?? 0), 0);
                       const total = manualEntries.reduce((s, e) => s + (e.hours_worked ?? e.hoursWorked ?? 0), 0);
+                      // Omzetberekening (mag alle entries zijn)
+                      const regularRevenue = entries.reduce((sum, e) => sum + (e.regular_hours ?? e.regularHours ?? 0) * (rate.billable_rate || 0), 0);
+                      const overtimeRevenue = entries.reduce((sum, e) => sum + (e.overtime_hours ?? e.overtimeHours ?? 0) * (rate.billable_rate || 0) * 1.25, 0);
+                      const weekendRevenue = entries.reduce((sum, e) => sum + (e.weekend_hours ?? e.weekendHours ?? 0) * (rate.billable_rate || 0) * 1.5, 0);
+                      const sundayRevenue = entries.reduce((sum, e) => sum + (e.sunday_hours ?? e.sundayHours ?? 0) * (rate.billable_rate || 0) * 2, 0);
+                      const totalRevenue = regularRevenue + overtimeRevenue + weekendRevenue + sundayRevenue + travelFrom;
                       // Omschrijving samenvoegen
                       const description = manualEntries.map(e => e.description).filter(Boolean).join(' | ');
                       // Kosten
@@ -958,12 +971,6 @@ const Dashboard = () => {
                       const weekendCost = weekend * (rate.saturday_rate || rate.hourly_rate * 1.5 || 0);
                       const sundayCost = sunday * (rate.sunday_rate || rate.hourly_rate * 2 || 0);
                       const totalCost = regularCost + overtimeCost + weekendCost + sundayCost + travelToManual;
-                      // Omzet (mag nog steeds alle entries zijn)
-                      const regularRevenue = entries.reduce((s, e) => s + (e.regular_hours ?? e.regularHours ?? 0) * (rate.billable_rate || 0), 0);
-                      const overtimeRevenue = entries.reduce((s, e) => s + (e.overtime_hours ?? e.overtimeHours ?? 0) * (rate.billable_rate || 0) * 1.25, 0);
-                      const weekendRevenue = entries.reduce((s, e) => s + (e.weekend_hours ?? e.weekendHours ?? 0) * (rate.billable_rate || 0) * 1.5, 0);
-                      const sundayRevenue = entries.reduce((s, e) => s + (e.sunday_hours ?? e.sundayHours ?? 0) * (rate.billable_rate || 0) * 2, 0);
-                      const totalRevenue = regularRevenue + overtimeRevenue + weekendRevenue + sundayRevenue + travelFrom;
                       const profit = totalRevenue - totalCost;
                       // Breakdown
                       const breakdown = [
