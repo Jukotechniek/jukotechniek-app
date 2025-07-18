@@ -916,10 +916,24 @@ const Dashboard = () => {
                       // Sommeer uren en bedragen per groep
                       const first = entries[0];
                       const rate = rawRates.find(r => r.technician_id === first.technician_id || r.technician_id === first.technicianId) || {};
+                      // Zoek de juiste travel rate voor deze klant+monteur
                       const travelRate = travelRates.find(tr =>
                         String(tr.customer_id) === String(first.customer_id) &&
                         String(tr.technician_id) === String(first.technician_id)
-                      ) || {};
+                      );
+                      // Fallback: als niet gevonden, neem gemiddelde van alle rates voor deze monteur
+                      let travelTo = travelRate?.travel_expense_to_technician;
+                      let travelFrom = travelRate?.travel_expense_from_client;
+                      if (travelRate == null) {
+                        const allRates = travelRates.filter(tr => String(tr.technician_id) === String(first.technician_id));
+                        if (allRates.length > 0) {
+                          travelTo = allRates.reduce((a, b) => a + (b.travel_expense_to_technician || 0), 0) / allRates.length;
+                          travelFrom = allRates.reduce((a, b) => a + (b.travel_expense_from_client || 0), 0) / allRates.length;
+                        } else {
+                          travelTo = 0;
+                          travelFrom = 0;
+                        }
+                      }
                       // Uren
                       const regular = entries.reduce((s, e) => s + (e.regular_hours ?? e.regularHours ?? 0), 0);
                       const overtime = entries.reduce((s, e) => s + (e.overtime_hours ?? e.overtimeHours ?? 0), 0);
@@ -928,15 +942,6 @@ const Dashboard = () => {
                       const total = entries.reduce((s, e) => s + (e.hours_worked ?? e.hoursWorked ?? 0), 0);
                       // Omschrijving samenvoegen
                       const description = entries.map(e => e.description).filter(Boolean).join(' | ');
-                      // Reiskosten: apart tonen
-                      const travelTo =
-                        entries[0].travel_expense_to_technician != null
-                          ? entries[0].travel_expense_to_technician
-                          : (travelRate.travel_expense_to_technician ?? 0);
-                      const travelFrom =
-                        entries[0].travel_expense_from_client != null
-                          ? entries[0].travel_expense_from_client
-                          : (travelRate.travel_expense_from_client ?? 0);
                       // Kosten
                       const regularCost = regular * (rate.hourly_rate || 0);
                       const overtimeCost = overtime * (rate.hourly_rate || 0) * 1.25;
@@ -957,7 +962,9 @@ const Dashboard = () => {
                         `Weekend: €${weekendCost.toFixed(2)}/€${weekendRevenue.toFixed(2)}`,
                         `Zondag: €${sundayCost.toFixed(2)}/€${sundayRevenue.toFixed(2)}`,
                         `Reiskosten aan monteur: 1 × €${travelTo.toFixed(2)} = €${travelTo.toFixed(2)}`,
-                        `Reiskosten van klant: 1 × €${travelFrom.toFixed(2)} = €${travelFrom.toFixed(2)}`
+                        `Reiskosten van klant: 1 × €${travelFrom.toFixed(2)} = €${travelFrom.toFixed(2)}`,
+                        `Te factureren reiskosten klant: €${travelFrom.toFixed(2)}`,
+                        `Betaalde reiskosten aan monteur: €${travelTo.toFixed(2)}`
                       ].join(' | ');
                       return (
                         <tr key={key} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
