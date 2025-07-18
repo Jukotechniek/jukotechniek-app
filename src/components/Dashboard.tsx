@@ -136,30 +136,58 @@ const Dashboard = () => {
         `);
       if (hoursError) console.error(hoursError);
 
-      // Transform webhook hours to match work_hours format
-      const transformedWebhookHours = (webhookHours || []).map(wh => ({
-        ...wh,
-        customer_id: null, // webhook doesn't have customer info
-        hours_worked: wh.hours_worked,
-        regular_hours: wh.hours_worked, // treat all webhook hours as regular for now
-        overtime_hours: 0,
-        weekend_hours: 0,
-        sunday_hours: 0,
-        is_weekend: false,
-        is_sunday: false,
-        is_manual_entry: false,
-        travel_expense_to_technician: 0,
-        travel_expense_from_client: 0,
-        created_at: wh.created_at,
-        created_by: null,
-        start_time: wh.webhook_start,
-        end_time: wh.webhook_end,
-        manual_verified: Boolean(wh.webhook_verified),
-        description: 'Webhook uren',
-        technician_id: wh.technician_id,
-        date: wh.date,
-        profiles: wh.profiles
-      }));
+      // Transform webhook hours to match work_hours format with proper overtime calculations
+      const transformedWebhookHours = (webhookHours || []).map(wh => {
+        const workDate = new Date(wh.date);
+        const dayOfWeek = workDate.getDay();
+        const isSunday = dayOfWeek === 0;
+        const isWeekend = dayOfWeek === 6;
+        
+        let regularHours = 0;
+        let overtimeHours = 0;
+        let weekendHours = 0;
+        let sundayHours = 0;
+        
+        const totalHours = Number(wh.hours_worked);
+        
+        if (isSunday) {
+          sundayHours = totalHours;
+        } else if (isWeekend) {
+          weekendHours = totalHours;
+        } else {
+          // Weekday - calculate regular vs overtime (8 hours regular, rest overtime)
+          if (totalHours <= 8) {
+            regularHours = totalHours;
+          } else {
+            regularHours = 8;
+            overtimeHours = totalHours - 8;
+          }
+        }
+        
+        return {
+          ...wh,
+          customer_id: null, // webhook doesn't have customer info
+          hours_worked: totalHours,
+          regular_hours: regularHours,
+          overtime_hours: overtimeHours,
+          weekend_hours: weekendHours,
+          sunday_hours: sundayHours,
+          is_weekend: isWeekend,
+          is_sunday: isSunday,
+          is_manual_entry: false,
+          travel_expense_to_technician: 0,
+          travel_expense_from_client: 0,
+          created_at: wh.created_at,
+          created_by: null,
+          start_time: wh.webhook_start,
+          end_time: wh.webhook_end,
+          manual_verified: Boolean(wh.webhook_verified),
+          description: 'Webhook uren',
+          technician_id: wh.technician_id,
+          date: wh.date,
+          profiles: wh.profiles
+        };
+      });
 
       // Combine hours where verified entries take precedence
       const combinedMap = new Map<string, any>();
