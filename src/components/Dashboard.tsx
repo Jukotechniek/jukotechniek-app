@@ -83,34 +83,27 @@ const Dashboard = () => {
   }, []);
 
   useEffect(() => {
+    if (!rawWorkHours.length) return;
     let filtered = rawWorkHours;
     if (isAdmin) {
       if (selectedTechnician !== 'all') {
         filtered = filtered.filter(e => e.technician_id === selectedTechnician);
       }
     } else {
-      if (selectedMonth) {
-        const [y, m] = selectedMonth.split('-').map(n => parseInt(n, 10));
-        filtered = filtered.filter(e => {
-          const d = new Date(e.date);
-          return (
-            e.technician_id === user?.id &&
-            d.getFullYear() === y &&
-            d.getMonth() + 1 === m
-          );
-        });
-      } else {
-        filtered = filtered.filter(e => e.technician_id === user?.id);
-      }
-      const uren = filtered.reduce((sum, e) => sum + Number(e.hours_worked || 0), 0);
-      setMonthlyHours(uren);
+      filtered = filtered.filter(e => e.technician_id === user?.id);
     }
-    if (isAdmin && selectedMonth) {
-      const [year, month] = selectedMonth.split('-').map(n => parseInt(n, 10));
+    // DEBUG: Toon alle technician_ids in de gefilterde lijst
+    console.log('DEBUG filtered technician_ids:', [...new Set(filtered.map(e => e.technician_id))]);
+    if (selectedMonth) {
+      const [y, m] = selectedMonth.split('-').map(n => parseInt(n, 10));
       filtered = filtered.filter(e => {
         const d = new Date(e.date);
-        return d.getFullYear() === year && d.getMonth() + 1 === month;
+        return d.getFullYear() === y && d.getMonth() + 1 === m;
       });
+    }
+    if (!isAdmin) {
+      const uren = filtered.reduce((sum, e) => sum + Number(e.hours_worked || 0), 0);
+      setMonthlyHours(uren);
     }
     setTechnicianData(processTechnicianData(filtered, rawRates, travelRates, rawWorkHours));
     setWeeklyData(processWeeklyData(filtered, isAdmin ? null : user?.id));
@@ -446,19 +439,41 @@ const Dashboard = () => {
   };
 
   // --------------- UI / Layout ---------------
-  const totalHours = technicianData.reduce((s, t) => s + t.totalHours, 0);
-  const totalDays = technicianData.reduce((s, t) => s + t.daysWorked, 0);
-  const avgHoursPerDay = totalDays > 0 ? (totalHours / totalDays) : 0;
+  // Altijd up-to-date gefilterde workhours op basis van admin/monteur + maand
+  const filteredWorkHours = rawWorkHours.filter(e => {
+    // Filter op monteur
+    if (isAdmin) {
+      if (selectedTechnician !== 'all' && e.technician_id !== selectedTechnician) return false;
+    } else {
+      if (e.technician_id !== user?.id) return false;
+    }
+    // Filter op maand
+    if (selectedMonth) {
+      const [y, m] = selectedMonth.split('-').map(Number);
+      const d = new Date(e.date);
+      if (d.getFullYear() !== y || d.getMonth() + 1 !== m) return false;
+    }
+    return true;
+  });
+
+  // Gebruik altijd deze als input voor alles wat je op het dashboard toont!
+  const filteredTechnicianData = processTechnicianData(
+    filteredWorkHours, rawRates, travelRates, filteredWorkHours
+  );
+
   const displayData = isAdmin
-    ? technicianData
-    : technicianData.filter(t => t.technicianId === user?.id);
-  const availableTechnicians = technicianData.map(t => ({
+    ? filteredTechnicianData
+    : filteredTechnicianData.filter(t => t.technicianId === user?.id);
+
+  const totalHours = displayData.reduce((s, t) => s + t.totalHours, 0);
+  const totalDays = displayData.reduce((s, t) => s + t.daysWorked, 0);
+  const avgHoursPerDay = totalDays > 0 ? (totalHours / totalDays) : 0;
+  const availableTechnicians = displayData.map(t => ({
     id: t.technicianId,
     name: t.technicianName,
   }));
-
-  const maxHours = Math.max(...displayData.map(t => t.totalHours));
-  const maxProfit = Math.max(...displayData.map(t => t.profit));
+  const maxHours = Math.max(...displayData.map(t => t.totalHours), 0);
+  const maxProfit = Math.max(...displayData.map(t => t.profit), 0);
 
   if (loading) {
     return (
@@ -517,14 +532,14 @@ const Dashboard = () => {
           <Card className="shadow-lg border-2 border-gray-200 bg-white/90 hover:bg-gray-50 transition-all">
             <CardContent className="px-2 py-3 md:px-4 md:py-6">
               <p className="text-xs md:text-sm text-gray-600">Totale uren</p>
-              <p className="text-2xl md:text-3xl font-bold text-gray-800"><ZakelijkUren value={totalHours} /></p>
+              <p className="text-2xl md:text-3xl font-bold text-gray-800"><ZakelijkUren value={displayData.reduce((s, t) => s + t.totalHours, 0)} /></p>
             </CardContent>
           </Card>
           {isAdmin && (
             <Card className="shadow-lg border-2 border-gray-200 bg-white/90 hover:bg-gray-50 transition-all">
               <CardContent className="px-2 py-3 md:px-4 md:py-6">
                 <p className="text-xs md:text-sm text-gray-600">Totale omzet</p>
-                <p className="text-2xl md:text-3xl font-bold text-gray-800"><ZakelijkEuro value={technicianData.reduce((s, t) => s + t.revenue, 0)} /></p>
+                <p className="text-2xl md:text-3xl font-bold text-gray-800"><ZakelijkEuro value={displayData.reduce((s, t) => s + t.revenue, 0)} /></p>
               </CardContent>
             </Card>
           )}
@@ -532,7 +547,7 @@ const Dashboard = () => {
             <Card className="shadow-lg border-2 border-gray-200 bg-white/90 hover:bg-gray-50 transition-all">
               <CardContent className="px-2 py-3 md:px-4 md:py-6">
                 <p className="text-xs md:text-sm text-gray-600">Totale winst</p>
-                <p className="text-2xl md:text-3xl font-bold text-gray-800"><ZakelijkEuro value={technicianData.reduce((s, t) => s + t.profit, 0)} /></p>
+                <p className="text-2xl md:text-3xl font-bold text-gray-800"><ZakelijkEuro value={displayData.reduce((s, t) => s + t.profit, 0)} /></p>
               </CardContent>
             </Card>
           )}
@@ -664,7 +679,7 @@ const Dashboard = () => {
                 </CardHeader>
                 <CardContent className="p-1 md:p-4">
                   <ResponsiveContainer width="100%" height={220}>
-                    <BarChart data={technicianData}>
+                    <BarChart data={displayData}>
                       <CartesianGrid strokeDasharray="3 3" />
                       <XAxis dataKey="technicianName" fontSize={11} />
                       <YAxis fontSize={11} />
