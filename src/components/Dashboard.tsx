@@ -210,13 +210,13 @@ const Dashboard = () => {
 
       // Start with manual hours
       (workHours || []).forEach(wh => {
-        const key = `${wh.technician_id}_${wh.date}`;
+        const key = `${wh.technician_id}_${wh.date}_${wh.customer_id}`;
         combinedMap.set(key, wh);
       });
 
       // Merge webhook hours, only overriding when verified or no manual entry
       transformedWebhookHours.forEach(wh => {
-        const key = `${wh.technician_id}_${wh.date}`;
+        const key = `${wh.technician_id}_${wh.date}_${wh.customer_id}`;
         const existing = combinedMap.get(key);
         if (!existing || Boolean(wh.webhook_verified) || !Boolean(existing.manual_verified)) {
           combinedMap.set(key, wh);
