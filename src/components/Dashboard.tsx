@@ -83,9 +83,7 @@ const Dashboard = () => {
   }, []);
 
   useEffect(() => {
-    if (!rawWorkHours.length) return;
-    let filtered = rawWorkHours.filter(e => Boolean(e.manual_verified));
-
+    let filtered = rawWorkHours;
     if (isAdmin) {
       if (selectedTechnician !== 'all') {
         filtered = filtered.filter(e => e.technician_id === selectedTechnician);
@@ -114,7 +112,7 @@ const Dashboard = () => {
         return d.getFullYear() === year && d.getMonth() + 1 === month;
       });
     }
-    setTechnicianData(processTechnicianData(filtered, rawRates, travelRates));
+    setTechnicianData(processTechnicianData(filtered, rawRates, travelRates, rawWorkHours));
     setWeeklyData(processWeeklyData(filtered, isAdmin ? null : user?.id));
     if (isAdmin)
       setWeeklyAdminData(
@@ -218,7 +216,8 @@ const Dashboard = () => {
       transformedWebhookHours.forEach(wh => {
         const key = `${wh.technician_id}_${wh.date}`;
         const existing = combinedMap.get(key);
-        if (!existing || Boolean(wh.webhook_verified) || !Boolean(existing.manual_verified)) {
+        // FIX: alleen toevoegen als er nog GEEN entry is (dus nooit manuele uren overschrijven)
+        if (!existing) {
           combinedMap.set(key, wh);
         }
       });
@@ -243,6 +242,7 @@ const Dashboard = () => {
       setRawWorkHours(combinedHours);
       setRawRates(rates || []);
       setTravelRates(travelRatesData || []);
+      console.log('DEBUG setRawWorkHours:', combinedHours);
     } catch (err) {
       console.error('Fetch error:', err);
     } finally {
@@ -317,7 +317,27 @@ const Dashboard = () => {
     setSelectedTechnicianDetails(technician);
   };
 
-  const processTechnicianData = (workHours, rates, travelRates) => {
+  const processTechnicianData = (workHours, rates, travelRates, allRawWorkHours) => {
+    // Combineer manuele en webhook uren per dag/monteur/klant: manueel als die er is, anders webhook
+    const allEntries = (allRawWorkHours || []).concat((workHours || []).filter(e => e.is_manual_entry !== true));
+    const grouped = {};
+    allEntries.forEach(entry => {
+      const key = `${entry.technician_id}_${entry.date}_${entry.customer_id}`;
+      if (!grouped[key]) grouped[key] = [];
+      grouped[key].push(entry);
+    });
+    // Per groep: kies manueel als die er is, anders webhook
+    const chosenEntries = [];
+    (Object.values(grouped) as any[][]).forEach((entries) => {
+      const manual = entries.find(e => e.is_manual_entry);
+      if (manual) {
+        chosenEntries.push(manual);
+      } else if (entries.length > 0) {
+        chosenEntries.push(entries[0]);
+      }
+    });
+
+    // Nu: groepeer chosenEntries per monteur
     const techMap = new Map();
     const rateMap = new Map();
     rates.forEach(r => {
@@ -329,8 +349,6 @@ const Dashboard = () => {
         sunday: Number(r.sunday_rate ?? hourly * 2),
       });
     });
-
-    // Map van klant+monteur naar reiskosten uit tarieven (fallback)
     const travelMap = new Map();
     travelRates.forEach(tr => {
       travelMap.set(`${String(tr.customer_id)}_${String(tr.technician_id)}`, {
@@ -338,27 +356,6 @@ const Dashboard = () => {
         fromClient: Number(tr.travel_expense_from_client || 0)
       });
     });
-
-    // Groepeer per monteur, per dag, per klant
-    const grouped = {};
-    workHours.forEach(entry => {
-      const key = `${entry.technician_id}_${entry.date}_${entry.customer_id}`;
-      if (!grouped[key]) grouped[key] = [];
-      grouped[key].push(entry);
-    });
-
-    // Voor elke groep: kies alleen de manuele entry als die er is, anders webhook
-    const chosenEntries = [];
-    (Object.values(grouped) as any[][]).forEach((entries) => {
-      const manualEntries = entries.filter(e => e.manual_verified);
-      const useEntries = manualEntries.length > 0 ? manualEntries : entries;
-      // Neem alleen de eerste entry van useEntries (er hoort er maar één te zijn per dag/monteur/klant)
-      if (useEntries.length > 0) {
-        chosenEntries.push(useEntries[0]);
-      }
-    });
-
-    // Nu: groepeer chosenEntries per monteur
     chosenEntries.forEach((entry) => {
       const id = entry.technician_id || entry.technicianId;
       const name = entry.profiles?.full_name || entry.technicianName || 'Unknown';
@@ -390,26 +387,18 @@ const Dashboard = () => {
       s.entries.push(entry);
       if (entry.date > s.lastWorked) s.lastWorked = entry.date;
     });
-
-    // Verzamel alle manuele entries per monteur voor kostenberekening
+    // Kostenberekening: alleen entries met is_manual_entry voor deze monteur
     const allManualEntriesPerTech = new Map();
-    workHours.forEach(entry => {
-      if (entry.is_manual_entry) {
-        const id = entry.technician_id || entry.technicianId;
-        if (!allManualEntriesPerTech.has(id)) allManualEntriesPerTech.set(id, []);
-        allManualEntriesPerTech.get(id).push(entry);
-      }
+    (allRawWorkHours || []).filter(e => e.is_manual_entry).forEach(entry => {
+      const id = entry.technician_id || entry.technicianId;
+      if (!allManualEntriesPerTech.has(id)) allManualEntriesPerTech.set(id, []);
+      allManualEntriesPerTech.get(id).push(entry);
     });
-
-    // Na het groeperen: bereken daysWorked en reiskosten op basis van dagen
     techMap.forEach(s => {
       s.daysWorked = new Set(s.entries.map((e) => e.date)).size;
-      // Zoek travel rates (ongewijzigd)
       let travelTo = 0;
       let travelFrom = 0;
-      // Verzamel alle unieke klant+monteur combinaties, alleen geldige klantnummers
       const customerIds = Array.from(new Set(s.entries.map(e => e.customer_id || e.customerId).filter(Boolean)));
-      // Voor nu: neem gemiddelde van alle travel rates voor deze monteur
       let toTechArr = [], fromClientArr = [];
       customerIds.forEach(cid => {
         const travelKey = `${String(cid)}_${String(s.technicianId)}`;
@@ -421,23 +410,28 @@ const Dashboard = () => {
       });
       if (toTechArr.length > 0) travelTo = toTechArr.reduce((a, b) => a + b, 0) / toTechArr.length;
       if (fromClientArr.length > 0) travelFrom = fromClientArr.reduce((a, b) => a + b, 0) / fromClientArr.length;
-      // Reiskosten op basis van werkdagen
-      s.travelCost = s.daysWorked * travelTo;
+      // Reiskosten aan monteur: som van alle travel_expense_to_technician van de gekozen entries
+      let travelCostSumChosen = s.entries.reduce((sum, e) => sum + (Number(e.travel_expense_to_technician) || 0), 0);
+      // DEBUG: Toon travel_expense_to_technician per entry
+      console.log('DEBUG travel_cost entries for', s.technicianName, ':', s.entries.map(e => e.travel_expense_to_technician), '| sum:', travelCostSumChosen);
+      // Fallback: als alles 0 is, gebruik oude berekening
+      s.travelCost = travelCostSumChosen > 0 ? travelCostSumChosen : s.daysWorked * travelTo;
       s.travelRevenue = s.daysWorked * travelFrom;
-      // Kostenberekening: ALLE manuele entries van deze monteur gebruiken
+      // Kostenberekening: ALLEEN manuele entries van deze monteur
       const costEntries = allManualEntriesPerTech.get(s.technicianId) || [];
       const rate = rateMap.get(s.technicianId) || { hourly: 0, billable: 0, saturday: 0, sunday: 0 };
-      let regularCost = 0, overtimeCost = 0, weekendCost = 0, sundayCost = 0;
+      let regularCost = 0, overtimeCost = 0, weekendCost = 0, sundayCost = 0, travelCostSum = 0;
       if (costEntries.length > 0) {
         regularCost = costEntries.reduce((sum, e) => sum + (e.regular_hours ?? e.regularHours ?? 0) * (rate.hourly || 0), 0);
         overtimeCost = costEntries.reduce((sum, e) => sum + (e.overtime_hours ?? e.overtimeHours ?? 0) * (rate.hourly || 0) * 1.25, 0);
         weekendCost = costEntries.reduce((sum, e) => sum + (e.weekend_hours ?? e.weekendHours ?? 0) * (rate.saturday || (rate.hourly * 1.5) || 0), 0);
         sundayCost = costEntries.reduce((sum, e) => sum + (e.sunday_hours ?? e.sundayHours ?? 0) * (rate.sunday || (rate.hourly * 2) || 0), 0);
-        s.costs = regularCost + overtimeCost + weekendCost + sundayCost + s.travelCost;
+        travelCostSum = costEntries.reduce((sum, e) => sum + (e.travel_expense_to_technician ?? 0), 0);
+        s.costs = regularCost + overtimeCost + weekendCost + sundayCost + travelCostSum;
       } else {
         s.costs = 0;
       }
-      // Omzet (over ALLE gekozen entries)
+      // Omzet (alle gekozen entries)
       const regularRevenue = s.entries.reduce((sum, e) => sum + (e.regular_hours ?? e.regularHours ?? 0) * (rate.billable || 0), 0);
       const overtimeRevenue = s.entries.reduce((sum, e) => sum + (e.overtime_hours ?? e.overtimeHours ?? 0) * (rate.billable || 0) * 1.25, 0);
       const weekendRevenue = s.entries.reduce((sum, e) => sum + (e.weekend_hours ?? e.weekendHours ?? 0) * (rate.billable || 0) * 1.5, 0);
@@ -956,7 +950,7 @@ const Dashboard = () => {
                         }
                       }
                       // Filter alleen manual hours voor kosten aan monteur
-                      const manualEntries = entries.filter(e => e.manual_verified);
+                      const manualEntries = entries.filter(e => e.is_manual_entry === true && !e.webhook_verified);
                       let travelToManual = 0;
                       if (manualEntries.length > 0) {
                         // Neem de eerste geldige reiskosten aan monteur uit manual entries
