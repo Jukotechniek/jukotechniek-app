@@ -396,19 +396,23 @@ const Dashboard = () => {
       const customerId = entry.customer_id || entry.customerId;
       const travelKey = `${String(customerId)}_${String(id)}`;
       const travel = {
-        toTech: Number(entries[0].travel_expense_to_technician ?? 0),
-        fromClient: Number(entries[0].travel_expense_from_client ?? 0)
+        toTech: entries[0].travel_expense_to_technician != null
+          ? Number(entries[0].travel_expense_to_technician)
+          : undefined,
+        fromClient: entries[0].travel_expense_from_client != null
+          ? Number(entries[0].travel_expense_from_client)
+          : undefined
       };
-      if (!travel.toTech && !travel.fromClient) {
+      if (travel.toTech == null && travel.fromClient == null) {
         const fallback = travelMap.get(travelKey) || { toTech: 0, fromClient: 0 };
         travel.toTech = fallback.toTech;
         travel.fromClient = fallback.fromClient;
       }
-      if (travel.fromClient > 0) {
+      if (travel.fromClient != null && travel.fromClient > 0) {
         rev += travel.fromClient;
         s.travelRevenue += travel.fromClient;
       }
-      if (travel.toTech > 0) {
+      if (travel.toTech != null && travel.toTech > 0) {
         cost += travel.toTech;
         s.travelCost += travel.toTech;
       }
@@ -924,13 +928,13 @@ const Dashboard = () => {
                       const description = entries.map(e => e.description).filter(Boolean).join(' | ');
                       // Reiskosten: apart tonen
                       const travelTo =
-                        entries[0].travel_expense_to_technician ??
-                        travelRate.travel_expense_to_technician ??
-                        0;
+                        entries[0].travel_expense_to_technician != null
+                          ? entries[0].travel_expense_to_technician
+                          : (travelRate.travel_expense_to_technician ?? 0);
                       const travelFrom =
-                        entries[0].travel_expense_from_client ??
-                        travelRate.travel_expense_from_client ??
-                        0;
+                        entries[0].travel_expense_from_client != null
+                          ? entries[0].travel_expense_from_client
+                          : (travelRate.travel_expense_from_client ?? 0);
                       // Kosten
                       const regularCost = regular * (rate.hourly_rate || 0);
                       const overtimeCost = overtime * (rate.hourly_rate || 0) * 1.25;
