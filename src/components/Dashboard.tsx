@@ -394,7 +394,7 @@ const Dashboard = () => {
     // Verzamel alle manuele entries per monteur voor kostenberekening
     const allManualEntriesPerTech = new Map();
     workHours.forEach(entry => {
-      if (entry.manual_verified) {
+      if (entry.is_manual_entry) {
         const id = entry.technician_id || entry.technicianId;
         if (!allManualEntriesPerTech.has(id)) allManualEntriesPerTech.set(id, []);
         allManualEntriesPerTech.get(id).push(entry);
