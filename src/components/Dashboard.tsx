@@ -210,13 +210,13 @@ const Dashboard = () => {
 
       // Start with manual hours
       (workHours || []).forEach(wh => {
-        const key = `${wh.technician_id}_${wh.date}_${wh.customer_id}`;
+        const key = `${wh.technician_id}_${wh.date}`;
         combinedMap.set(key, wh);
       });
 
       // Merge webhook hours, only overriding when verified or no manual entry
       transformedWebhookHours.forEach(wh => {
-        const key = `${wh.technician_id}_${wh.date}_${wh.customer_id}`;
+        const key = `${wh.technician_id}_${wh.date}`;
         const existing = combinedMap.get(key);
         if (!existing || Boolean(wh.webhook_verified) || !Boolean(existing.manual_verified)) {
           combinedMap.set(key, wh);
@@ -342,16 +342,24 @@ const Dashboard = () => {
     // Groepeer per monteur, per dag, per klant
     const grouped = {};
     workHours.forEach(entry => {
-      if (!entry.manual_verified) return;
       const key = `${entry.technician_id}_${entry.date}_${entry.customer_id}`;
       if (!grouped[key]) grouped[key] = [];
       grouped[key].push(entry);
     });
 
+    // Voor elke groep: kies alleen de manuele entry als die er is, anders webhook
+    const chosenEntries = [];
     (Object.values(grouped) as any[][]).forEach((entries) => {
-      const manualEntries = entries.filter(e => e.is_manual_entry);
-      const webhookEntries = entries.filter(e => !e.is_manual_entry);
-      const entry = webhookEntries[0] || manualEntries[0];
+      const manualEntries = entries.filter(e => e.manual_verified);
+      const useEntries = manualEntries.length > 0 ? manualEntries : entries;
+      // Neem alleen de eerste entry van useEntries (er hoort er maar één te zijn per dag/monteur/klant)
+      if (useEntries.length > 0) {
+        chosenEntries.push(useEntries[0]);
+      }
+    });
+
+    // Nu: groepeer chosenEntries per monteur
+    chosenEntries.forEach((entry) => {
       const id = entry.technician_id || entry.technicianId;
       const name = entry.profiles?.full_name || entry.technicianName || 'Unknown';
       if (!techMap.has(id)) {
@@ -374,29 +382,28 @@ const Dashboard = () => {
         });
       }
       const s = techMap.get(id);
-      const regWebhook = webhookEntries.reduce((sum, e) => sum + (e.regular_hours ?? e.regularHours ?? 0), 0);
-      const otWebhook = webhookEntries.reduce((sum, e) => sum + (e.overtime_hours ?? e.overtimeHours ?? 0), 0);
-      const wkWebhook = webhookEntries.reduce((sum, e) => sum + (e.weekend_hours ?? e.weekendHours ?? 0), 0);
-      const suWebhook = webhookEntries.reduce((sum, e) => sum + (e.sunday_hours ?? e.sundayHours ?? 0), 0);
-      const actualWebhookHours = webhookEntries.reduce((sum, e) => sum + (e.hours_worked ?? e.hoursWorked ?? 0), 0);
-
-      const rate = rateMap.get(id) || { hourly: 0, billable: 0, saturday: 0, sunday: 0 };
-      s.totalHours += actualWebhookHours;
-      s.regularHours += regWebhook;
-      s.overtimeHours += otWebhook;
-      s.weekendHours += wkWebhook;
-      s.sundayHours += suWebhook;
-      s.entries.push(...entries);
+      s.totalHours += entry.hours_worked ?? entry.hoursWorked ?? 0;
+      s.regularHours += entry.regular_hours ?? entry.regularHours ?? 0;
+      s.overtimeHours += entry.overtime_hours ?? entry.overtimeHours ?? 0;
+      s.weekendHours += entry.weekend_hours ?? entry.weekendHours ?? 0;
+      s.sundayHours += entry.sunday_hours ?? entry.sundayHours ?? 0;
+      s.entries.push(entry);
       if (entry.date > s.lastWorked) s.lastWorked = entry.date;
+    });
+
+    // Verzamel alle manuele entries per monteur voor kostenberekening
+    const allManualEntriesPerTech = new Map();
+    workHours.forEach(entry => {
+      if (entry.manual_verified) {
+        const id = entry.technician_id || entry.technicianId;
+        if (!allManualEntriesPerTech.has(id)) allManualEntriesPerTech.set(id, []);
+        allManualEntriesPerTech.get(id).push(entry);
+      }
     });
 
     // Na het groeperen: bereken daysWorked en reiskosten op basis van dagen
     techMap.forEach(s => {
-      const costEntries = s.entries.filter(e => e.is_manual_entry);
-      const revenueEntries = s.entries.filter(e => !e.is_manual_entry);
-      const manualDays = new Set(costEntries.map(e => e.date)).size;
-      const revenueDays = new Set(revenueEntries.map(e => e.date)).size;
-      s.daysWorked = revenueDays;
+      s.daysWorked = new Set(s.entries.map((e) => e.date)).size;
       // Zoek travel rates (ongewijzigd)
       let travelTo = 0;
       let travelFrom = 0;
@@ -415,19 +422,26 @@ const Dashboard = () => {
       if (toTechArr.length > 0) travelTo = toTechArr.reduce((a, b) => a + b, 0) / toTechArr.length;
       if (fromClientArr.length > 0) travelFrom = fromClientArr.reduce((a, b) => a + b, 0) / fromClientArr.length;
       // Reiskosten op basis van werkdagen
-      s.travelCost = manualDays * travelTo;
-      s.travelRevenue = revenueDays * travelFrom;
-      // Kostenberekening op basis van manual entries
-      const regularCost = costEntries.reduce((sum, e) => sum + (e.regular_hours ?? e.regularHours ?? 0) * (rateMap.get(s.technicianId)?.hourly || 0), 0);
-      const overtimeCost = costEntries.reduce((sum, e) => sum + (e.overtime_hours ?? e.overtimeHours ?? 0) * (rateMap.get(s.technicianId)?.hourly || 0) * 1.25, 0);
-      const weekendCost = costEntries.reduce((sum, e) => sum + (e.weekend_hours ?? e.weekendHours ?? 0) * (rateMap.get(s.technicianId)?.saturday || 0), 0);
-      const sundayCost = costEntries.reduce((sum, e) => sum + (e.sunday_hours ?? e.sundayHours ?? 0) * (rateMap.get(s.technicianId)?.sunday || 0), 0);
-      s.costs = regularCost + overtimeCost + weekendCost + sundayCost + s.travelCost;
-      // Omzet berekening enkel via webhook entries
-      const regularRevenue = revenueEntries.reduce((sum, e) => sum + (e.regular_hours ?? e.regularHours ?? 0) * (rateMap.get(s.technicianId)?.billable || 0), 0);
-      const overtimeRevenue = revenueEntries.reduce((sum, e) => sum + (e.overtime_hours ?? e.overtimeHours ?? 0) * (rateMap.get(s.technicianId)?.billable || 0) * 1.25, 0);
-      const weekendRevenue = revenueEntries.reduce((sum, e) => sum + (e.weekend_hours ?? e.weekendHours ?? 0) * (rateMap.get(s.technicianId)?.billable || 0) * 1.5, 0);
-      const sundayRevenue = revenueEntries.reduce((sum, e) => sum + (e.sunday_hours ?? e.sundayHours ?? 0) * (rateMap.get(s.technicianId)?.billable || 0) * 2, 0);
+      s.travelCost = s.daysWorked * travelTo;
+      s.travelRevenue = s.daysWorked * travelFrom;
+      // Kostenberekening: ALLE manuele entries van deze monteur gebruiken
+      const costEntries = allManualEntriesPerTech.get(s.technicianId) || [];
+      const rate = rateMap.get(s.technicianId) || { hourly: 0, billable: 0, saturday: 0, sunday: 0 };
+      let regularCost = 0, overtimeCost = 0, weekendCost = 0, sundayCost = 0;
+      if (costEntries.length > 0) {
+        regularCost = costEntries.reduce((sum, e) => sum + (e.regular_hours ?? e.regularHours ?? 0) * (rate.hourly || 0), 0);
+        overtimeCost = costEntries.reduce((sum, e) => sum + (e.overtime_hours ?? e.overtimeHours ?? 0) * (rate.hourly || 0) * 1.25, 0);
+        weekendCost = costEntries.reduce((sum, e) => sum + (e.weekend_hours ?? e.weekendHours ?? 0) * (rate.saturday || (rate.hourly * 1.5) || 0), 0);
+        sundayCost = costEntries.reduce((sum, e) => sum + (e.sunday_hours ?? e.sundayHours ?? 0) * (rate.sunday || (rate.hourly * 2) || 0), 0);
+        s.costs = regularCost + overtimeCost + weekendCost + sundayCost + s.travelCost;
+      } else {
+        s.costs = 0;
+      }
+      // Omzet (over ALLE gekozen entries)
+      const regularRevenue = s.entries.reduce((sum, e) => sum + (e.regular_hours ?? e.regularHours ?? 0) * (rate.billable || 0), 0);
+      const overtimeRevenue = s.entries.reduce((sum, e) => sum + (e.overtime_hours ?? e.overtimeHours ?? 0) * (rate.billable || 0) * 1.25, 0);
+      const weekendRevenue = s.entries.reduce((sum, e) => sum + (e.weekend_hours ?? e.weekendHours ?? 0) * (rate.billable || 0) * 1.5, 0);
+      const sundayRevenue = s.entries.reduce((sum, e) => sum + (e.sunday_hours ?? e.sundayHours ?? 0) * (rate.billable || 0) * 2, 0);
       const totalRevenue = regularRevenue + overtimeRevenue + weekendRevenue + sundayRevenue + s.travelRevenue;
       s.revenue = totalRevenue;
       s.profit = s.revenue - s.costs;
@@ -898,8 +912,7 @@ const Dashboard = () => {
                     <th className="p-2 border">Overwerk</th>
                     <th className="p-2 border">Weekend</th>
                     <th className="p-2 border">Zondag</th>
-                    <th className="p-2 border">Totaal uren (manual)</th>
-                    <th className="p-2 border">Webhook uren</th>
+                    <th className="p-2 border">Totaal uren</th>
                     <th className="p-2 border">Reiskosten aan monteur</th>
                     <th className="p-2 border">Reiskosten van klant</th>
                     <th className="p-2 border">Omzet</th>
@@ -942,9 +955,8 @@ const Dashboard = () => {
                           travelFrom = 0;
                         }
                       }
-                      // Splits manual en webhook entries
-                      const manualEntries = entries.filter(e => e.is_manual_entry);
-                      const webhookEntries = entries.filter(e => !e.is_manual_entry);
+                      // Filter alleen manual hours voor kosten aan monteur
+                      const manualEntries = entries.filter(e => e.manual_verified);
                       let travelToManual = 0;
                       if (manualEntries.length > 0) {
                         // Neem de eerste geldige reiskosten aan monteur uit manual entries
@@ -959,12 +971,11 @@ const Dashboard = () => {
                       const weekend = manualEntries.reduce((s, e) => s + (e.weekend_hours ?? e.weekendHours ?? 0), 0);
                       const sunday = manualEntries.reduce((s, e) => s + (e.sunday_hours ?? e.sundayHours ?? 0), 0);
                       const total = manualEntries.reduce((s, e) => s + (e.hours_worked ?? e.hoursWorked ?? 0), 0);
-                      const webhookTotal = webhookEntries.reduce((s, e) => s + (e.hours_worked ?? e.hoursWorked ?? 0), 0);
-                      // Omzetberekening op basis van webhook uren
-                      const regularRevenue = webhookEntries.reduce((sum, e) => sum + (e.regular_hours ?? e.regularHours ?? 0) * (rate.billable_rate || 0), 0);
-                      const overtimeRevenue = webhookEntries.reduce((sum, e) => sum + (e.overtime_hours ?? e.overtimeHours ?? 0) * (rate.billable_rate || 0) * 1.25, 0);
-                      const weekendRevenue = webhookEntries.reduce((sum, e) => sum + (e.weekend_hours ?? e.weekendHours ?? 0) * (rate.billable_rate || 0) * 1.5, 0);
-                      const sundayRevenue = webhookEntries.reduce((sum, e) => sum + (e.sunday_hours ?? e.sundayHours ?? 0) * (rate.billable_rate || 0) * 2, 0);
+                      // Omzetberekening (mag alle entries zijn)
+                      const regularRevenue = entries.reduce((sum, e) => sum + (e.regular_hours ?? e.regularHours ?? 0) * (rate.billable_rate || 0), 0);
+                      const overtimeRevenue = entries.reduce((sum, e) => sum + (e.overtime_hours ?? e.overtimeHours ?? 0) * (rate.billable_rate || 0) * 1.25, 0);
+                      const weekendRevenue = entries.reduce((sum, e) => sum + (e.weekend_hours ?? e.weekendHours ?? 0) * (rate.billable_rate || 0) * 1.5, 0);
+                      const sundayRevenue = entries.reduce((sum, e) => sum + (e.sunday_hours ?? e.sundayHours ?? 0) * (rate.billable_rate || 0) * 2, 0);
                       const totalRevenue = regularRevenue + overtimeRevenue + weekendRevenue + sundayRevenue + travelFrom;
                       // Omschrijving samenvoegen
                       const description = manualEntries.map(e => e.description).filter(Boolean).join(' | ');
@@ -996,7 +1007,6 @@ const Dashboard = () => {
                           <td className="p-2 border text-right">{weekend.toFixed(2)}</td>
                           <td className="p-2 border text-right">{sunday.toFixed(2)}</td>
                           <td className="p-2 border text-right font-bold">{total.toFixed(2)}</td>
-                          <td className="p-2 border text-right">{webhookTotal.toFixed(2)}</td>
                           <td className="p-2 border text-right">€{Number.isFinite(travelToManual) ? travelToManual.toFixed(2) : '0.00'}</td>
                           <td className="p-2 border text-right text-green-700 font-semibold">€{Number.isFinite(travelFrom) ? travelFrom.toFixed(2) : '0.00'}</td>
                           <td className="p-2 border text-right text-green-700">€{totalRevenue.toFixed(2)}</td>
