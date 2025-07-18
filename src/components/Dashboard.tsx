@@ -295,8 +295,17 @@ const Dashboard = () => {
   };
 
   const handleTechnicianClick = (technician) => {
-    // Gebruik de gecombineerde rawWorkHours, gefilterd op monteur en verified
-    const details = rawWorkHours.filter(e => e.technician_id === technician.technicianId && e.manual_verified);
+    // Gebruik de gecombineerde rawWorkHours, gefilterd op monteur/maand en verified
+    let details = rawWorkHours.filter(
+      e => e.technician_id === technician.technicianId && e.manual_verified
+    );
+    if (selectedMonth) {
+      const [y, m] = selectedMonth.split('-').map(n => parseInt(n, 10));
+      details = details.filter(d => {
+        const dt = new Date(d.date);
+        return dt.getFullYear() === y && dt.getMonth() + 1 === m;
+      });
+    }
     setDetailedHours(details);
     setSelectedTechnicianDetails(technician);
   };
@@ -314,16 +323,13 @@ const Dashboard = () => {
       });
     });
 
-    // Map van klant+monteur naar reiskosten
+    // Map van klant+monteur naar reiskosten uit tarieven (fallback)
     const travelMap = new Map();
     travelRates.forEach(tr => {
-      travelMap.set(
-        `${String(tr.customer_id)}_${String(tr.technician_id)}`,
-        {
-          toTech: Number(tr.travel_expense_to_technician || 0),
-          fromClient: Number(tr.travel_expense_from_client || 0),
-        }
-      );
+      travelMap.set(`${String(tr.customer_id)}_${String(tr.technician_id)}`, {
+        toTech: Number(tr.travel_expense_to_technician || 0),
+        fromClient: Number(tr.travel_expense_from_client || 0)
+      });
     });
 
     // Groepeer per monteur, per dag, per klant
@@ -386,10 +392,18 @@ const Dashboard = () => {
       if (billedHours > actualHours) {
         rev += (billedHours - actualHours) * rate.billable;
       }
-      // Reiskosten altijd meenemen als er gewerkt is (ook voor webhook)
+      // Reiskosten meenemen vanuit de entry zelf, fallback naar tarief tabel
       const customerId = entry.customer_id || entry.customerId;
       const travelKey = `${String(customerId)}_${String(id)}`;
-      const travel = travelMap.get(travelKey) || { toTech: 0, fromClient: 0 };
+      const travel = {
+        toTech: Number(entries[0].travel_expense_to_technician ?? 0),
+        fromClient: Number(entries[0].travel_expense_from_client ?? 0)
+      };
+      if (!travel.toTech && !travel.fromClient) {
+        const fallback = travelMap.get(travelKey) || { toTech: 0, fromClient: 0 };
+        travel.toTech = fallback.toTech;
+        travel.fromClient = fallback.fromClient;
+      }
       if (travel.fromClient > 0) {
         rev += travel.fromClient;
         s.travelRevenue += travel.fromClient;
@@ -909,8 +923,14 @@ const Dashboard = () => {
                       // Omschrijving samenvoegen
                       const description = entries.map(e => e.description).filter(Boolean).join(' | ');
                       // Reiskosten: apart tonen
-                      const travelTo = travelRate.travel_expense_to_technician || 0;
-                      const travelFrom = travelRate.travel_expense_from_client || 0;
+                      const travelTo =
+                        entries[0].travel_expense_to_technician ??
+                        travelRate.travel_expense_to_technician ??
+                        0;
+                      const travelFrom =
+                        entries[0].travel_expense_from_client ??
+                        travelRate.travel_expense_from_client ??
+                        0;
                       // Kosten
                       const regularCost = regular * (rate.hourly_rate || 0);
                       const overtimeCost = overtime * (rate.hourly_rate || 0) * 1.25;
