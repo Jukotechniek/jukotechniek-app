@@ -135,6 +135,12 @@ const Dashboard = () => {
           profiles!webhook_hours_technician_id_fkey(full_name)
         `);
       if (webhookError) console.error(webhookError);
+      if (webhookHours && webhookHours.length > 0) {
+        console.log('Eerste webhook entry:', webhookHours[0]);
+        console.log('Webhook entry keys:', Object.keys(webhookHours[0]));
+      } else {
+        console.log('Geen webhookHours data gevonden');
+      }
 
       const { data: workHours, error: hoursError } = await supabase
         .from('work_hours')
@@ -151,7 +157,8 @@ const Dashboard = () => {
         const dayOfWeek = workDate.getDay();
         const isSunday = dayOfWeek === 0;
         const isWeekend = dayOfWeek === 6;
-        
+        // Removed invalid console.log referencing non-existent customer_id on webhookHours
+
         let regularHours = 0;
         let overtimeHours = 0;
         let weekendHours = 0;
@@ -175,7 +182,7 @@ const Dashboard = () => {
         
         return {
           ...wh,
-          customer_id: null, // webhook doesn't have customer info
+          customer_id: (wh as any).customer_id,
           hours_worked: totalHours,
           regular_hours: regularHours,
           overtime_hours: overtimeHours,
@@ -372,66 +379,51 @@ const Dashboard = () => {
       const billedHours = entries.reduce((sum, e) => sum + (e.billed_hours ?? 0), 0) || reg + ot + wk + su;
       const actualHours = entries.reduce((sum, e) => sum + (e.hours_worked ?? e.hoursWorked ?? 0), 0) || reg + ot + wk + su;
       const rate = rateMap.get(id) || { hourly: 0, billable: 0, saturday: 0, sunday: 0 };
-      let rev = 0, cost = 0;
-      if (su > 0) {
-        rev += su * rate.billable * 2;
-        cost += su * rate.sunday;
-      }
-      if (wk > 0) {
-        rev += wk * rate.billable * 1.5;
-        cost += wk * rate.saturday;
-      }
-      if (ot > 0) {
-        rev += ot * rate.billable * 1.25;
-        cost += ot * rate.hourly * 1.25;
-      }
-      if (reg > 0) {
-        rev += reg * rate.billable;
-        cost += reg * rate.hourly;
-      }
-      if (billedHours > actualHours) {
-        rev += (billedHours - actualHours) * rate.billable;
-      }
-      // Reiskosten meenemen vanuit de entry zelf, fallback naar tarief tabel
-      const customerId = entry.customer_id || entry.customerId;
-      const travelKey = `${String(customerId)}_${String(id)}`;
-      const travel = {
-        toTech: entries[0].travel_expense_to_technician != null
-          ? Number(entries[0].travel_expense_to_technician)
-          : undefined,
-        fromClient: entries[0].travel_expense_from_client != null
-          ? Number(entries[0].travel_expense_from_client)
-          : undefined
-      };
-      if (travel.toTech == null && travel.fromClient == null) {
-        const fallback = travelMap.get(travelKey) || { toTech: 0, fromClient: 0 };
-        travel.toTech = fallback.toTech;
-        travel.fromClient = fallback.fromClient;
-      }
-      if (travel.fromClient != null && travel.fromClient > 0) {
-        rev += travel.fromClient;
-        s.travelRevenue += travel.fromClient;
-      }
-      if (travel.toTech != null && travel.toTech > 0) {
-        cost += travel.toTech;
-        s.travelCost += travel.toTech;
-      }
-      const profit = rev - cost;
-      const hrs = actualHours;
-      s.totalHours += hrs;
+      s.totalHours += actualHours;
       s.regularHours += reg;
       s.overtimeHours += ot;
       s.weekendHours += wk;
       s.sundayHours += su;
-      s.profit += profit;
-      s.revenue += rev;
-      s.costs += cost;
       s.entries.push(...entries);
       if (entry.date > s.lastWorked) s.lastWorked = entry.date;
     });
 
+    // Na het groeperen: bereken daysWorked en reiskosten op basis van dagen
     techMap.forEach(s => {
       s.daysWorked = new Set(s.entries.map((e) => e.date)).size;
+      // Zoek travel rates (pak eerste klant waar monteur op gewerkt heeft, of fallback)
+      let travelTo = 0;
+      let travelFrom = 0;
+      // Verzamel alle unieke klant+monteur combinaties, alleen geldige klantnummers
+      const customerIds = Array.from(new Set(s.entries.map(e => e.customer_id || e.customerId).filter(Boolean)));
+      // Voor nu: neem gemiddelde van alle travel rates voor deze monteur
+      let toTechArr = [], fromClientArr = [];
+      customerIds.forEach(cid => {
+        const travelKey = `${String(cid)}_${String(s.technicianId)}`;
+        const travel = travelMap.get(travelKey);
+        if (travel) {
+          toTechArr.push(travel.toTech);
+          fromClientArr.push(travel.fromClient);
+        }
+      });
+      if (toTechArr.length > 0) travelTo = toTechArr.reduce((a, b) => a + b, 0) / toTechArr.length;
+      if (fromClientArr.length > 0) travelFrom = fromClientArr.reduce((a, b) => a + b, 0) / fromClientArr.length;
+      // Reiskosten op basis van werkdagen
+      s.travelCost = s.daysWorked * travelTo;
+      s.travelRevenue = s.daysWorked * travelFrom;
+      // Log alle relevante info voor debuggen
+      // Bereken omzet/kosten/winst
+      const regularCost = s.regularHours * (rateMap.get(s.technicianId)?.hourly || 0);
+      const overtimeCost = s.overtimeHours * (rateMap.get(s.technicianId)?.hourly || 0) * 1.25;
+      const weekendCost = s.weekendHours * (rateMap.get(s.technicianId)?.saturday || 0);
+      const sundayCost = s.sundayHours * (rateMap.get(s.technicianId)?.sunday || 0);
+      s.costs = regularCost + overtimeCost + weekendCost + sundayCost + s.travelCost;
+      const regularRevenue = s.regularHours * (rateMap.get(s.technicianId)?.billable || 0);
+      const overtimeRevenue = s.overtimeHours * (rateMap.get(s.technicianId)?.billable || 0) * 1.25;
+      const weekendRevenue = s.weekendHours * (rateMap.get(s.technicianId)?.billable || 0) * 1.5;
+      const sundayRevenue = s.sundayHours * (rateMap.get(s.technicianId)?.billable || 0) * 2;
+      s.revenue = regularRevenue + overtimeRevenue + weekendRevenue + sundayRevenue + s.travelRevenue;
+      s.profit = s.revenue - s.costs;
       delete s.entries;
     });
 
@@ -686,8 +678,12 @@ const Dashboard = () => {
                 <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
                   {displayData.map((t, i) => {
                     const margin = t.revenue > 0 ? ((t.profit / t.revenue) * 100).toFixed(1) : '0';
-                    const costBreakdown = `Normaal: €${(t.regularHours * (rawRates.find(r => r.technician_id === t.technicianId)?.hourly_rate || 0)).toFixed(2)} | Overtime: €${(t.overtimeHours * (rawRates.find(r => r.technician_id === t.technicianId)?.hourly_rate || 0) * 1.25).toFixed(2)} | Weekend: €${(t.weekendHours * (rawRates.find(r => r.technician_id === t.technicianId)?.saturday_rate || 0)).toFixed(2)} | Zondag: €${(t.sundayHours * (rawRates.find(r => r.technician_id === t.technicianId)?.sunday_rate || 0)).toFixed(2)} | Reiskosten: €${t.travelCost.toFixed(2)}`;
-                    const revenueBreakdown = `Normaal: €${(t.regularHours * (rawRates.find(r => r.technician_id === t.technicianId)?.billable_rate || 0)).toFixed(2)} | Overtime: €${(t.overtimeHours * (rawRates.find(r => r.technician_id === t.technicianId)?.billable_rate || 0) * 1.25).toFixed(2)} | Weekend: €${(t.weekendHours * (rawRates.find(r => r.technician_id === t.technicianId)?.billable_rate || 0) * 1.5).toFixed(2)} | Zondag: €${(t.sundayHours * (rawRates.find(r => r.technician_id === t.technicianId)?.billable_rate || 0) * 2).toFixed(2)} | Reisopbrengst: €${t.travelRevenue.toFixed(2)}`;
+                    const rate = rawRates.find(r => r.technician_id === t.technicianId) || {};
+                    // Reiskosten breakdown
+                    const travelTo = t.daysWorked > 0 ? (t.travelCost / t.daysWorked) : 0;
+                    const travelFrom = t.daysWorked > 0 ? (t.travelRevenue / t.daysWorked) : 0;
+                    const costBreakdown = `Normaal: €${(t.regularHours * (rate.hourly_rate || 0)).toFixed(2)} | Overtime: €${(t.overtimeHours * (rate.hourly_rate || 0) * 1.25).toFixed(2)} | Weekend: €${(t.weekendHours * (rate.saturday_rate || 0)).toFixed(2)} | Zondag: €${(t.sundayHours * (rate.sunday_rate || 0)).toFixed(2)} | Reiskosten: ${t.daysWorked} × €${travelTo.toFixed(2)} = €${t.travelCost.toFixed(2)}`;
+                    const revenueBreakdown = `Normaal: €${(t.regularHours * (rate.billable_rate || 0)).toFixed(2)} | Overtime: €${(t.overtimeHours * (rate.billable_rate || 0) * 1.25).toFixed(2)} | Weekend: €${(t.weekendHours * (rate.billable_rate || 0) * 1.5).toFixed(2)} | Zondag: €${(t.sundayHours * (rate.billable_rate || 0) * 2).toFixed(2)} | Reisopbrengst: ${t.daysWorked} × €${travelFrom.toFixed(2)} = €${t.travelRevenue.toFixed(2)}`;
                     
                     return (
                       <div
@@ -731,6 +727,7 @@ const Dashboard = () => {
                                 <div>
                                   <div className="text-xs text-gray-400 mb-1">Omzet</div>
                                   <div className="font-semibold text-gray-800"><ZakelijkEuro value={t.revenue} /></div>
+                                  <div className="text-xs text-green-700 mt-1">Te factureren reiskosten klant: <ZakelijkEuro value={t.travelRevenue} /></div>
                                 </div>
                               </TooltipTrigger>
                               <TooltipContent>
@@ -786,8 +783,12 @@ const Dashboard = () => {
               <div className="space-y-2 md:hidden">
                 {displayData.map((t, i) => {
                   const margin = t.revenue > 0 ? ((t.profit / t.revenue) * 100).toFixed(1) : '0';
-                  const costBreakdown = `Normaal: €${(t.regularHours * (rawRates.find(r => r.technician_id === t.technicianId)?.hourly_rate || 0)).toFixed(2)} | Overtime: €${(t.overtimeHours * (rawRates.find(r => r.technician_id === t.technicianId)?.hourly_rate || 0) * 1.25).toFixed(2)} | Weekend: €${(t.weekendHours * (rawRates.find(r => r.technician_id === t.technicianId)?.saturday_rate || 0)).toFixed(2)} | Zondag: €${(t.sundayHours * (rawRates.find(r => r.technician_id === t.technicianId)?.sunday_rate || 0)).toFixed(2)} | Reiskosten: €${t.travelCost.toFixed(2)}`;
-                  const revenueBreakdown = `Normaal: €${(t.regularHours * (rawRates.find(r => r.technician_id === t.technicianId)?.billable_rate || 0)).toFixed(2)} | Overtime: €${(t.overtimeHours * (rawRates.find(r => r.technician_id === t.technicianId)?.billable_rate || 0) * 1.25).toFixed(2)} | Weekend: €${(t.weekendHours * (rawRates.find(r => r.technician_id === t.technicianId)?.billable_rate || 0) * 1.5).toFixed(2)} | Zondag: €${(t.sundayHours * (rawRates.find(r => r.technician_id === t.technicianId)?.billable_rate || 0) * 2).toFixed(2)} | Reisopbrengst: €${t.travelRevenue.toFixed(2)}`;
+                  const rate = rawRates.find(r => r.technician_id === t.technicianId) || {};
+                  // Reiskosten breakdown
+                  const travelTo = t.daysWorked > 0 ? (t.travelCost / t.daysWorked) : 0;
+                  const travelFrom = t.daysWorked > 0 ? (t.travelRevenue / t.daysWorked) : 0;
+                  const costBreakdown = `Normaal: €${(t.regularHours * (rate.hourly_rate || 0)).toFixed(2)} | Overtime: €${(t.overtimeHours * (rate.hourly_rate || 0) * 1.25).toFixed(2)} | Weekend: €${(t.weekendHours * (rate.saturday_rate || 0)).toFixed(2)} | Zondag: €${(t.sundayHours * (rate.sunday_rate || 0)).toFixed(2)} | Reiskosten: ${t.daysWorked} × €${travelTo.toFixed(2)} = €${t.travelCost.toFixed(2)}`;
+                  const revenueBreakdown = `Normaal: €${(t.regularHours * (rate.billable_rate || 0)).toFixed(2)} | Overtime: €${(t.overtimeHours * (rate.billable_rate || 0) * 1.25).toFixed(2)} | Weekend: €${(t.weekendHours * (rate.billable_rate || 0) * 1.5).toFixed(2)} | Zondag: €${(t.sundayHours * (rate.billable_rate || 0) * 2).toFixed(2)} | Reisopbrengst: ${t.daysWorked} × €${travelFrom.toFixed(2)} = €${t.travelRevenue.toFixed(2)}`;
                   
                   return (
                     <div
@@ -897,6 +898,7 @@ const Dashboard = () => {
                     <th className="p-2 border">Kosten</th>
                     <th className="p-2 border">Winst</th>
                     <th className="p-2 border">Breakdown</th>
+                    <th className="p-2 border">Te factureren reiskosten klant</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -954,8 +956,8 @@ const Dashboard = () => {
                         `Overwerk: €${overtimeCost.toFixed(2)}/€${overtimeRevenue.toFixed(2)}`,
                         `Weekend: €${weekendCost.toFixed(2)}/€${weekendRevenue.toFixed(2)}`,
                         `Zondag: €${sundayCost.toFixed(2)}/€${sundayRevenue.toFixed(2)}`,
-                        `Reiskosten aan monteur: €${travelTo.toFixed(2)}`,
-                        `Reiskosten van klant: €${travelFrom.toFixed(2)}`
+                        `Reiskosten aan monteur: 1 × €${travelTo.toFixed(2)} = €${travelTo.toFixed(2)}`,
+                        `Reiskosten van klant: 1 × €${travelFrom.toFixed(2)} = €${travelFrom.toFixed(2)}`
                       ].join(' | ');
                       return (
                         <tr key={key} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
@@ -968,7 +970,7 @@ const Dashboard = () => {
                           <td className="p-2 border text-right">{sunday.toFixed(2)}</td>
                           <td className="p-2 border text-right font-bold">{total.toFixed(2)}</td>
                           <td className="p-2 border text-right">€{Number.isFinite(travelTo) ? travelTo.toFixed(2) : '0.00'}</td>
-                          <td className="p-2 border text-right">€{Number.isFinite(travelFrom) ? travelFrom.toFixed(2) : '0.00'}</td>
+                          <td className="p-2 border text-right text-green-700 font-semibold">€{Number.isFinite(travelFrom) ? travelFrom.toFixed(2) : '0.00'}</td>
                           <td className="p-2 border text-right text-green-700">€{totalRevenue.toFixed(2)}</td>
                           <td className="p-2 border text-right text-red-700">€{totalCost.toFixed(2)}</td>
                           <td className={`p-2 border text-right font-bold ${profit >= 0 ? 'text-green-700' : 'text-red-700'}`}>€{profit.toFixed(2)}</td>
