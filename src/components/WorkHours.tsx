@@ -75,13 +75,17 @@ const WorkHours = () => {
         .select('*');
       if (rateError) throw rateError;
 
+      // --- HIER: bepaal velden afhankelijk van rol ---
+      let selectFields: string;
+      if (user?.role === 'technician') {
+        selectFields = 'id, date, start_time, end_time, hours_worked, description, customer_id, customers(name)';
+      } else {
+        selectFields = `*, customers(name), technician:profiles!work_hours_technician_id_fkey(full_name)`;
+      }
+
       const { data: entries, error: entryError } = await supabase
         .from('work_hours')
-        .select(`
-          *,
-          customers(name),
-          technician:profiles!work_hours_technician_id_fkey(full_name)
-        `)
+        .select(selectFields)
         .order('date', { ascending: false });
       if (entryError) throw entryError;
 
@@ -89,30 +93,47 @@ const WorkHours = () => {
       setTechnicians(technicianData || []);
       setTravelRates(rateData || []);
 
-      const formatted = (entries || []).map(e => ({
-        id: e.id,
-        technicianId: e.technician_id || '',
-        technicianName: e.technician?.full_name || '',
-        customerId: e.customer_id || '',
-        customerName: e.customers?.name || '',
-        date: e.date,
-        hoursWorked: e.hours_worked,
-        startTime: e.start_time || '',
-        endTime: e.end_time || '',
-        regularHours: e.regular_hours || 0,
-        overtimeHours: e.overtime_hours || 0,
-        weekendHours: e.weekend_hours || 0,
-        sundayHours: e.sunday_hours || 0,
-        isWeekend: e.is_weekend || false,
-        isSunday: e.is_sunday || false,
-        isManualEntry: e.is_manual_entry || false,
-        description: e.description || '',
-        travelExpenseToTechnician: e.travel_expense_to_technician || 0,
-        travelExpenseFromClient: e.travel_expense_from_client || 0,
-        createdAt: e.created_at || '',
-        createdBy: e.created_by || ''
-      }));
-
+      // Pas mapping aan voor beperkte velden
+      let formatted: any[] = [];
+      // Typeguard: alleen mappen als entries een array is en geen error-object
+      if (entries && Array.isArray(entries) && !(entries as any).message) {
+        if (user?.role === 'technician') {
+          formatted = entries.map((e: any) => ({
+            id: e.id,
+            date: e.date,
+            startTime: e.start_time || '',
+            endTime: e.end_time || '',
+            hoursWorked: e.hours_worked,
+            description: e.description || '',
+            customerId: e.customer_id || '',
+            customerName: e.customers?.name || ''
+          }));
+        } else {
+          formatted = entries.map((e: any) => ({
+            id: e.id,
+            technicianId: e.technician_id || '',
+            technicianName: e.technician?.full_name || '',
+            customerId: e.customer_id || '',
+            customerName: e.customers?.name || '',
+            date: e.date,
+            hoursWorked: e.hours_worked,
+            startTime: e.start_time || '',
+            endTime: e.end_time || '',
+            regularHours: e.regular_hours || 0,
+            overtimeHours: e.overtime_hours || 0,
+            weekendHours: e.weekend_hours || 0,
+            sundayHours: e.sunday_hours || 0,
+            isWeekend: e.is_weekend || false,
+            isSunday: e.is_sunday || false,
+            isManualEntry: e.is_manual_entry || false,
+            description: e.description || '',
+            travelExpenseToTechnician: e.travel_expense_to_technician || 0,
+            travelExpenseFromClient: e.travel_expense_from_client || 0,
+            createdAt: e.created_at || '',
+            createdBy: e.created_by || ''
+          }));
+        }
+      }
       setWorkEntries(formatted);
     } catch (error) {
       console.error('Error fetching work hours:', error);
@@ -251,7 +272,7 @@ const WorkHours = () => {
   };
 
   const handleEdit = (entry: WorkEntry) => {
-    if (!isAdmin && entry.technicianId !== user?.id) {
+    if (!isAdmin && entry.technicianId && entry.technicianId !== user?.id) {
       toast({
         title: 'Fout',
         description: 'Je kunt alleen je eigen uren bewerken',
@@ -309,7 +330,7 @@ const WorkHours = () => {
   };
 
   const handleDelete = async (entryId: string, entry: WorkEntry) => {
-    if (!isAdmin && entry.technicianId !== user?.id) {
+    if (!isAdmin && entry.technicianId && entry.technicianId !== user?.id) {
       toast({
         title: 'Fout',
         description: 'Je kunt alleen je eigen uren verwijderen',
@@ -331,9 +352,8 @@ const WorkHours = () => {
   const filteredEntries = workEntries.filter(e => {
     if (isAdmin) {
       if (selectedTech !== 'all' && e.technicianId !== selectedTech) return false;
-    } else {
-      if (e.technicianId !== user?.id) return false;
-    }
+    } 
+    // Voor monteurs: geen filter op technicianId, entries zijn al alleen van deze monteur
     if (selectedMonth !== 'all') {
       const [year, month] = selectedMonth.split('-').map(n => parseInt(n, 10));
       const d = new Date(e.date);
@@ -615,16 +635,16 @@ const WorkHours = () => {
                       {isAdmin && (
                         <>
                           <td className="py-3 text-gray-700">
-                            {entry.regularHours.toFixed(1)}h
+                            {(entry.regularHours || 0).toFixed(1)}h
                           </td>
                           <td className="py-3 text-orange-600">
-                            {entry.overtimeHours.toFixed(1)}h
+                            {(entry.overtimeHours || 0).toFixed(1)}h
                           </td>
                           <td className="py-3 text-orange-600">
-                            {entry.weekendHours.toFixed(1)}h
+                            {(entry.weekendHours || 0).toFixed(1)}h
                           </td>
                           <td className="py-3 text-purple-600">
-                            {entry.sundayHours.toFixed(1)}h
+                            {(entry.sundayHours || 0).toFixed(1)}h
                           </td>
                         </>
                       )}

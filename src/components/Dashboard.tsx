@@ -126,8 +126,6 @@ const Dashboard = () => {
     } else {
       filtered = filtered.filter(e => e.technician_id === user?.id);
     }
-    // DEBUG: Toon alle technician_ids in de gefilterde lijst
-    console.log('DEBUG filtered technician_ids:', [...new Set(filtered.map(e => e.technician_id))]);
     if (selectedMonth) {
       const [y, m] = selectedMonth.split('-').map(n => parseInt(n, 10));
       filtered = filtered.filter(e => {
@@ -161,10 +159,7 @@ const Dashboard = () => {
         `);
       if (webhookError) console.error(webhookError);
       if (webhookHours && webhookHours.length > 0) {
-        console.log('Eerste webhook entry:', webhookHours[0]);
-        console.log('Webhook entry keys:', Object.keys(webhookHours[0]));
       } else {
-        console.log('Geen webhookHours data gevonden');
       }
 
       const { data: workHours, error: hoursError } = await supabase
@@ -182,7 +177,6 @@ const Dashboard = () => {
         const dayOfWeek = workDate.getDay();
         const isSunday = dayOfWeek === 0;
         const isWeekend = dayOfWeek === 6;
-        // Removed invalid console.log referencing non-existent customer_id on webhookHours
 
         let regularHours = 0;
         let overtimeHours = 0;
@@ -269,7 +263,6 @@ const Dashboard = () => {
       setRawWorkHours(combinedHours);
       setRawRates(rates || []);
       setTravelRates(travelRatesData || []);
-      console.log('DEBUG setRawWorkHours:', combinedHours);
     } catch (err) {
       console.error('Fetch error:', err);
     } finally {
@@ -439,8 +432,6 @@ const Dashboard = () => {
       if (fromClientArr.length > 0) travelFrom = fromClientArr.reduce((a, b) => a + b, 0) / fromClientArr.length;
       // Reiskosten aan monteur: som van alle travel_expense_to_technician van de gekozen entries
       let travelCostSumChosen = s.entries.reduce((sum, e) => sum + (Number(e.travel_expense_to_technician) || 0), 0);
-      // DEBUG: Toon travel_expense_to_technician per entry
-      console.log('DEBUG travel_cost entries for', s.technicianName, ':', s.entries.map(e => e.travel_expense_to_technician), '| sum:', travelCostSumChosen);
       // Fallback: als alles 0 is, gebruik oude berekening
       s.travelCost = travelCostSumChosen > 0 ? travelCostSumChosen : s.daysWorked * travelTo;
       s.travelRevenue = s.daysWorked * travelFrom;
