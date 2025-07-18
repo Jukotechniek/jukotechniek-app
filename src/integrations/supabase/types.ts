@@ -616,6 +616,13 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "webhook_hours_technician_id_fkey"
+            columns: ["technician_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "webhook_hours_verified_by_fkey"
             columns: ["verified_by"]
             isOneToOne: false

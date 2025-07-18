@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import {
   BarChart,
   Bar,
@@ -68,6 +70,8 @@ const Dashboard = () => {
 
   const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7));
   const [monthlyHours, setMonthlyHours] = useState(0);
+  const [selectedTechnicianDetails, setSelectedTechnicianDetails] = useState(null);
+  const [detailedHours, setDetailedHours] = useState([]);
 
   useEffect(() => {
     fetchDashboardData();
@@ -264,6 +268,33 @@ const Dashboard = () => {
   };
 
   // --- bestaande functies ---
+  const fetchTechnicianDetails = async (technicianId) => {
+    try {
+      const { data: workHours, error } = await supabase
+        .from('work_hours')
+        .select(`
+          *,
+          customers(name),
+          profiles!work_hours_technician_id_fkey(full_name)
+        `)
+        .eq('technician_id', technicianId)
+        .eq('manual_verified', true)
+        .order('date', { ascending: false });
+      
+      if (error) throw error;
+      return workHours || [];
+    } catch (err) {
+      console.error('Error fetching technician details:', err);
+      return [];
+    }
+  };
+
+  const handleTechnicianClick = async (technician) => {
+    const details = await fetchTechnicianDetails(technician.technicianId);
+    setDetailedHours(details);
+    setSelectedTechnicianDetails(technician);
+  };
+
   const processTechnicianData = (workHours, rates, travelRates) => {
     const techMap = new Map();
     const rateMap = new Map();
@@ -635,6 +666,9 @@ const Dashboard = () => {
                 <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
                   {displayData.map((t, i) => {
                     const margin = t.revenue > 0 ? ((t.profit / t.revenue) * 100).toFixed(1) : '0';
+                    const costBreakdown = `Normaal: €${(t.regularHours * (rawRates.find(r => r.technician_id === t.technicianId)?.hourly_rate || 0)).toFixed(2)} | Overtime: €${(t.overtimeHours * (rawRates.find(r => r.technician_id === t.technicianId)?.hourly_rate || 0) * 1.25).toFixed(2)} | Weekend: €${(t.weekendHours * (rawRates.find(r => r.technician_id === t.technicianId)?.saturday_rate || 0)).toFixed(2)} | Zondag: €${(t.sundayHours * (rawRates.find(r => r.technician_id === t.technicianId)?.sunday_rate || 0)).toFixed(2)} | Reiskosten: €${t.travelCost.toFixed(2)}`;
+                    const revenueBreakdown = `Normaal: €${(t.regularHours * (rawRates.find(r => r.technician_id === t.technicianId)?.billable_rate || 0)).toFixed(2)} | Overtime: €${(t.overtimeHours * (rawRates.find(r => r.technician_id === t.technicianId)?.billable_rate || 0) * 1.25).toFixed(2)} | Weekend: €${(t.weekendHours * (rawRates.find(r => r.technician_id === t.technicianId)?.billable_rate || 0) * 1.5).toFixed(2)} | Zondag: €${(t.sundayHours * (rawRates.find(r => r.technician_id === t.technicianId)?.billable_rate || 0) * 2).toFixed(2)} | Reisopbrengst: €${t.travelRevenue.toFixed(2)}`;
+                    
                     return (
                       <div
                         key={t.technicianId}
@@ -642,8 +676,9 @@ const Dashboard = () => {
                           flex flex-col bg-gradient-to-br from-white via-gray-50 to-gray-100
                           rounded-2xl shadow-2xl border-2 border-gray-200
                           hover:scale-[1.01] hover:shadow-gray-300
-                          transition p-5 relative
+                          transition p-5 relative cursor-pointer
                         `}
+                        onClick={() => handleTechnicianClick(t)}
                       >
                         <div className="flex items-center mb-2">
                           <div className="flex items-center justify-center w-12 h-12 bg-gray-100 rounded-full text-red-700 text-xl font-bold mr-3 shadow">
@@ -670,18 +705,45 @@ const Dashboard = () => {
                             <div className="text-xs text-gray-400 mb-1">Laatste Werkdag</div>
                             <div>{new Date(t.lastWorked).toLocaleDateString('nl-NL')}</div>
                           </div>
-                          <div>
-                            <div className="text-xs text-gray-400 mb-1">Omzet</div>
-                            <div className="font-semibold text-gray-800"><ZakelijkEuro value={t.revenue} /></div>
-                          </div>
-                          <div>
-                            <div className="text-xs text-gray-400 mb-1">Kosten</div>
-                            <div className="font-semibold text-gray-800"><ZakelijkEuro value={t.costs} /></div>
-                          </div>
-                          <div>
-                            <div className="text-xs text-gray-400 mb-1">Reiskosten</div>
-                            <div className="font-semibold text-gray-800"><ZakelijkEuro value={t.travelCost} /></div>
-                          </div>
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <div>
+                                  <div className="text-xs text-gray-400 mb-1">Omzet</div>
+                                  <div className="font-semibold text-gray-800"><ZakelijkEuro value={t.revenue} /></div>
+                                </div>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p className="text-xs max-w-xs">{revenueBreakdown}</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <div>
+                                  <div className="text-xs text-gray-400 mb-1">Kosten</div>
+                                  <div className="font-semibold text-gray-800"><ZakelijkEuro value={t.costs} /></div>
+                                </div>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p className="text-xs max-w-xs">{costBreakdown}</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <div>
+                                  <div className="text-xs text-gray-400 mb-1">Reiskosten</div>
+                                  <div className="font-semibold text-gray-800"><ZakelijkEuro value={t.travelCost} /></div>
+                                </div>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p className="text-xs">Totale reiskosten betaald aan monteur: €{t.travelCost.toFixed(2)}</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
                           <div>
                             <div className="text-xs text-gray-400 mb-1">Winst</div>
                             <div className={`font-bold ${t.profit >= 0 ? 'text-green-700' : 'text-red-700'}`}>
@@ -704,6 +766,9 @@ const Dashboard = () => {
               <div className="space-y-2 md:hidden">
                 {displayData.map((t, i) => {
                   const margin = t.revenue > 0 ? ((t.profit / t.revenue) * 100).toFixed(1) : '0';
+                  const costBreakdown = `Normaal: €${(t.regularHours * (rawRates.find(r => r.technician_id === t.technicianId)?.hourly_rate || 0)).toFixed(2)} | Overtime: €${(t.overtimeHours * (rawRates.find(r => r.technician_id === t.technicianId)?.hourly_rate || 0) * 1.25).toFixed(2)} | Weekend: €${(t.weekendHours * (rawRates.find(r => r.technician_id === t.technicianId)?.saturday_rate || 0)).toFixed(2)} | Zondag: €${(t.sundayHours * (rawRates.find(r => r.technician_id === t.technicianId)?.sunday_rate || 0)).toFixed(2)} | Reiskosten: €${t.travelCost.toFixed(2)}`;
+                  const revenueBreakdown = `Normaal: €${(t.regularHours * (rawRates.find(r => r.technician_id === t.technicianId)?.billable_rate || 0)).toFixed(2)} | Overtime: €${(t.overtimeHours * (rawRates.find(r => r.technician_id === t.technicianId)?.billable_rate || 0) * 1.25).toFixed(2)} | Weekend: €${(t.weekendHours * (rawRates.find(r => r.technician_id === t.technicianId)?.billable_rate || 0) * 1.5).toFixed(2)} | Zondag: €${(t.sundayHours * (rawRates.find(r => r.technician_id === t.technicianId)?.billable_rate || 0) * 2).toFixed(2)} | Reisopbrengst: €${t.travelRevenue.toFixed(2)}`;
+                  
                   return (
                     <div
                       key={t.technicianId}
@@ -722,18 +787,45 @@ const Dashboard = () => {
                           <span className="text-xs text-gray-400">Totaal uren</span>
                           <span className="font-semibold"><ZakelijkUren value={t.totalHours} /></span>
                         </div>
-                        <div className="flex flex-col items-start">
-                          <span className="text-xs text-gray-400">Omzet</span>
-                          <span className="font-semibold text-gray-800"><ZakelijkEuro value={t.revenue} /></span>
-                        </div>
-                        <div className="flex flex-col items-start">
-                          <span className="text-xs text-gray-400">Kosten</span>
-                          <span className="font-semibold text-gray-800"><ZakelijkEuro value={t.costs} /></span>
-                        </div>
-                        <div className="flex flex-col items-start">
-                          <span className="text-xs text-gray-400">Reiskosten</span>
-                          <span className="font-semibold text-gray-800"><ZakelijkEuro value={t.travelCost} /></span>
-                        </div>
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <div className="flex flex-col items-start">
+                                <span className="text-xs text-gray-400">Omzet</span>
+                                <span className="font-semibold text-gray-800"><ZakelijkEuro value={t.revenue} /></span>
+                              </div>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p className="text-xs max-w-xs">{revenueBreakdown}</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <div className="flex flex-col items-start">
+                                <span className="text-xs text-gray-400">Kosten</span>
+                                <span className="font-semibold text-gray-800"><ZakelijkEuro value={t.costs} /></span>
+                              </div>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p className="text-xs max-w-xs">{costBreakdown}</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <div className="flex flex-col items-start">
+                                <span className="text-xs text-gray-400">Reiskosten</span>
+                                <span className="font-semibold text-gray-800"><ZakelijkEuro value={t.travelCost} /></span>
+                              </div>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p className="text-xs">Totale reiskosten betaald aan monteur: €{t.travelCost.toFixed(2)}</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
                         <div className="flex flex-col items-start">
                           <span className="text-xs text-gray-400">Winst</span>
                           <span className={`font-bold ${t.profit >= 0 ? 'text-green-700' : 'text-red-700'}`}>
@@ -758,6 +850,101 @@ const Dashboard = () => {
             </CardContent>
           </Card>
         )}
+
+        {/* Detail Dialog */}
+        <Dialog open={!!selectedTechnicianDetails} onOpenChange={() => setSelectedTechnicianDetails(null)}>
+          <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>
+                Gedetailleerd overzicht - {selectedTechnicianDetails?.technicianName}
+              </DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              {detailedHours.map((entry, index) => {
+                const rate = rawRates.find(r => r.technician_id === entry.technician_id) || {};
+                const travelRate = travelRates.find(tr => 
+                  tr.customer_id === entry.customer_id && tr.technician_id === entry.technician_id
+                ) || {};
+                
+                const regularCost = (entry.regular_hours || 0) * (rate.hourly_rate || 0);
+                const overtimeCost = (entry.overtime_hours || 0) * (rate.hourly_rate || 0) * 1.25;
+                const weekendCost = (entry.weekend_hours || 0) * (rate.saturday_rate || rate.hourly_rate * 1.5 || 0);
+                const sundayCost = (entry.sunday_hours || 0) * (rate.sunday_rate || rate.hourly_rate * 2 || 0);
+                const travelCostEntry = travelRate.travel_expense_to_technician || 0;
+                const totalCost = regularCost + overtimeCost + weekendCost + sundayCost + travelCostEntry;
+                
+                const regularRevenue = (entry.regular_hours || 0) * (rate.billable_rate || 0);
+                const overtimeRevenue = (entry.overtime_hours || 0) * (rate.billable_rate || 0) * 1.25;
+                const weekendRevenue = (entry.weekend_hours || 0) * (rate.billable_rate || 0) * 1.5;
+                const sundayRevenue = (entry.sunday_hours || 0) * (rate.billable_rate || 0) * 2;
+                const travelRevenue = travelRate.travel_expense_from_client || 0;
+                const totalRevenue = regularRevenue + overtimeRevenue + weekendRevenue + sundayRevenue + travelRevenue;
+                
+                return (
+                  <Card key={index} className="p-4 border-l-4 border-blue-500">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div>
+                        <h4 className="font-semibold text-lg">{new Date(entry.date).toLocaleDateString('nl-NL')}</h4>
+                        <p className="text-sm text-gray-600">{entry.customers?.name || 'Geen klant'}</p>
+                        <p className="text-sm text-gray-600">{entry.description || 'Geen beschrijving'}</p>
+                        <p className="text-sm text-gray-600">
+                          {entry.start_time && entry.end_time ? 
+                            `${entry.start_time} - ${entry.end_time}` : 
+                            'Geen tijden'
+                          }
+                        </p>
+                      </div>
+                      
+                      <div>
+                        <h5 className="font-medium mb-2">Uren Breakdown</h5>
+                        {entry.regular_hours > 0 && (
+                          <p className="text-xs">Normaal: {entry.regular_hours}u</p>
+                        )}
+                        {entry.overtime_hours > 0 && (
+                          <p className="text-xs">Overtime: {entry.overtime_hours}u</p>
+                        )}
+                        {entry.weekend_hours > 0 && (
+                          <p className="text-xs">Weekend: {entry.weekend_hours}u</p>
+                        )}
+                        {entry.sunday_hours > 0 && (
+                          <p className="text-xs">Zondag: {entry.sunday_hours}u</p>
+                        )}
+                        <p className="text-sm font-semibold">Totaal: {entry.hours_worked}u</p>
+                      </div>
+                      
+                      <div>
+                        <h5 className="font-medium mb-2">Financieel</h5>
+                        <div className="space-y-1">
+                          <div className="text-xs">
+                            <span className="text-green-600">Omzet: €{totalRevenue.toFixed(2)}</span>
+                            {regularRevenue > 0 && <span className="block ml-2">• Normaal: €{regularRevenue.toFixed(2)}</span>}
+                            {overtimeRevenue > 0 && <span className="block ml-2">• Overtime: €{overtimeRevenue.toFixed(2)}</span>}
+                            {weekendRevenue > 0 && <span className="block ml-2">• Weekend: €{weekendRevenue.toFixed(2)}</span>}
+                            {sundayRevenue > 0 && <span className="block ml-2">• Zondag: €{sundayRevenue.toFixed(2)}</span>}
+                            {travelRevenue > 0 && <span className="block ml-2">• Reisopbrengst: €{travelRevenue.toFixed(2)}</span>}
+                          </div>
+                          <div className="text-xs">
+                            <span className="text-red-600">Kosten: €{totalCost.toFixed(2)}</span>
+                            {regularCost > 0 && <span className="block ml-2">• Normaal: €{regularCost.toFixed(2)}</span>}
+                            {overtimeCost > 0 && <span className="block ml-2">• Overtime: €{overtimeCost.toFixed(2)}</span>}
+                            {weekendCost > 0 && <span className="block ml-2">• Weekend: €{weekendCost.toFixed(2)}</span>}
+                            {sundayCost > 0 && <span className="block ml-2">• Zondag: €{sundayCost.toFixed(2)}</span>}
+                            {travelCostEntry > 0 && <span className="block ml-2">• Reiskosten: €{travelCostEntry.toFixed(2)}</span>}
+                          </div>
+                          <div className="text-sm font-semibold">
+                            <span className={totalRevenue - totalCost >= 0 ? 'text-green-600' : 'text-red-600'}>
+                              Winst: €{(totalRevenue - totalCost).toFixed(2)}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </Card>
+                );
+              })}
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
     </div>
   );
