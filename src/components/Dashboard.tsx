@@ -111,10 +111,11 @@ const Dashboard = () => {
   }, [isOpdrachtgever]);
 
   useEffect(() => {
-    if (!isOpdrachtgever) {
+    if (!isOpdrachtgever && user) {
       fetchDashboardData();
     }
-  }, [isOpdrachtgever]);
+  }, [isOpdrachtgever, user]);
+  
 
   useEffect(() => {
     if (!rawWorkHours.length) return;
@@ -137,7 +138,9 @@ const Dashboard = () => {
       const uren = filtered.reduce((sum, e) => sum + Number(e.hours_worked || 0), 0);
       setMonthlyHours(uren);
     }
-    setTechnicianData(processTechnicianData(filtered, rawRates, travelRates, rawWorkHours));
+    // Process data once and store in state
+    const processedData = processTechnicianData(filtered, rawRates, travelRates, rawWorkHours);
+    setTechnicianData(processedData);
     setWeeklyData(processWeeklyData(filtered, isAdmin ? null : user?.id));
     if (isAdmin)
       setWeeklyAdminData(
@@ -356,28 +359,53 @@ const Dashboard = () => {
   };
 
   const processTechnicianData = (workHours, rates, travelRates, allRawWorkHours) => {
-    // Combineer manuele en webhook uren per dag/monteur/klant: manueel als die er is, anders webhook
-    const allEntries = (allRawWorkHours || []).concat((workHours || []).filter(e => e.is_manual_entry !== true));
-    const grouped = {};
-    allEntries.forEach(entry => {
-      const key = `${entry.technician_id}_${entry.date}_${entry.customer_id}`;
-      if (!grouped[key]) grouped[key] = [];
-      grouped[key].push(entry);
+    // Eerst filteren we de entries op basis van de geselecteerde filters
+    const filteredEntries = (allRawWorkHours || []).filter(entry => {
+      // Als er een geselecteerde monteur is, filter daarop
+      if (selectedTechnician !== 'all' && entry.technician_id !== selectedTechnician) {
+        return false;
+      }
+      
+      // Als er een geselecteerde maand is, filter daarop
+      if (selectedMonth) {
+        const [y, m] = selectedMonth.split('-').map(n => parseInt(n, 10));
+        const d = new Date(entry.date);
+        if (d.getFullYear() !== y || d.getMonth() + 1 !== m) {
+          return false;
+        }
+      }
+      
+      return true;
     });
-    // Per groep: kies manueel als die er is, anders webhook
+
+    // Groepeer entries per monteur/dag/klant
+    const entriesMap = {};
+    filteredEntries.forEach(entry => {
+      const key = `${entry.technician_id}_${entry.date}_${entry.customer_id}`;
+      if (!entriesMap[key]) entriesMap[key] = [];
+      entriesMap[key].push(entry);
+    });
+
+    // Kies voor elke groep de juiste entry (manueel heeft voorrang)
     const chosenEntries = [];
-    (Object.values(grouped) as any[][]).forEach((entries) => {
-      const manual = entries.find(e => e.is_manual_entry);
-      if (manual) {
-        chosenEntries.push(manual);
-      } else if (entries.length > 0) {
-        chosenEntries.push(entries[0]);
+    Object.values(entriesMap).forEach((entries: any[]) => {
+      const manualEntry = entries.find(e => e.is_manual_entry === true);
+      if (manualEntry) {
+        chosenEntries.push(manualEntry);
+      } else {
+        // Als er geen manuele entry is, neem de webhook entry
+        const webhookEntry = entries.find(e => !e.is_manual_entry);
+        if (webhookEntry) {
+          chosenEntries.push(webhookEntry);
+        }
       }
     });
 
-    // Nu: groepeer chosenEntries per monteur
+    // Groepeer per monteur
     const techMap = new Map();
     const rateMap = new Map();
+    
+    // Zet alle tarieven in een map
     rates.forEach(r => {
       const hourly = Number(r.hourly_rate || 0);
       rateMap.set(r.technician_id, {
@@ -387,16 +415,12 @@ const Dashboard = () => {
         sunday: Number(r.sunday_rate ?? hourly * 2),
       });
     });
-    const travelMap = new Map();
-    travelRates.forEach(tr => {
-      travelMap.set(`${String(tr.customer_id)}_${String(tr.technician_id)}`, {
-        toTech: Number(tr.travel_expense_to_technician || 0),
-        fromClient: Number(tr.travel_expense_from_client || 0)
-      });
-    });
-    chosenEntries.forEach((entry) => {
-      const id = entry.technician_id || entry.technicianId;
-      const name = entry.profiles?.full_name || entry.technicianName || 'Unknown';
+
+    // Verwerk alle entries
+    chosenEntries.forEach(entry => {
+      const id = entry.technician_id;
+      const name = entry.profiles?.full_name || 'Unknown';
+      
       if (!techMap.has(id)) {
         techMap.set(id, {
           technicianId: id,
@@ -406,79 +430,114 @@ const Dashboard = () => {
           overtimeHours: 0,
           weekendHours: 0,
           sundayHours: 0,
-          daysWorked: 0,
-          lastWorked: entry.date,
-          entries: [],
-          profit: 0,
+          daysWorked: new Set(),
+          lastWorked: null,
           revenue: 0,
           costs: 0,
           travelCost: 0,
           travelRevenue: 0,
+          profit: 0
         });
       }
-      const s = techMap.get(id);
-      s.totalHours += entry.hours_worked ?? entry.hoursWorked ?? 0;
-      s.regularHours += entry.regular_hours ?? entry.regularHours ?? 0;
-      s.overtimeHours += entry.overtime_hours ?? entry.overtimeHours ?? 0;
-      s.weekendHours += entry.weekend_hours ?? entry.weekendHours ?? 0;
-      s.sundayHours += entry.sunday_hours ?? entry.sundayHours ?? 0;
-      s.entries.push(entry);
-      if (entry.date > s.lastWorked) s.lastWorked = entry.date;
-    });
-    // Kostenberekening: alleen entries met is_manual_entry voor deze monteur
-    const allManualEntriesPerTech = new Map();
-    (allRawWorkHours || []).filter(e => e.is_manual_entry).forEach(entry => {
-      const id = entry.technician_id || entry.technicianId;
-      if (!allManualEntriesPerTech.has(id)) allManualEntriesPerTech.set(id, []);
-      allManualEntriesPerTech.get(id).push(entry);
-    });
-    techMap.forEach(s => {
-      s.daysWorked = new Set(s.entries.map((e) => e.date)).size;
-      let travelTo = 0;
-      let travelFrom = 0;
-      const customerIds = Array.from(new Set(s.entries.map(e => e.customer_id || e.customerId).filter(Boolean)));
-      let toTechArr = [], fromClientArr = [];
-      customerIds.forEach(cid => {
-        const travelKey = `${String(cid)}_${String(s.technicianId)}`;
-        const travel = travelMap.get(travelKey);
-        if (travel) {
-          toTechArr.push(travel.toTech);
-          fromClientArr.push(travel.fromClient);
-        }
-      });
-      if (toTechArr.length > 0) travelTo = toTechArr.reduce((a, b) => a + b, 0) / toTechArr.length;
-      if (fromClientArr.length > 0) travelFrom = fromClientArr.reduce((a, b) => a + b, 0) / fromClientArr.length;
-      // Reiskosten aan monteur: som van alle travel_expense_to_technician van de gekozen entries
-      let travelCostSumChosen = s.entries.reduce((sum, e) => sum + (Number(e.travel_expense_to_technician) || 0), 0);
-      // Fallback: als alles 0 is, gebruik oude berekening
-      s.travelCost = travelCostSumChosen > 0 ? travelCostSumChosen : s.daysWorked * travelTo;
-      s.travelRevenue = s.daysWorked * travelFrom;
-      // Kostenberekening: ALLEEN manuele entries van deze monteur
-      const costEntries = allManualEntriesPerTech.get(s.technicianId) || [];
-      const rate = rateMap.get(s.technicianId) || { hourly: 0, billable: 0, saturday: 0, sunday: 0 };
-      let regularCost = 0, overtimeCost = 0, weekendCost = 0, sundayCost = 0, travelCostSum = 0;
-      if (costEntries.length > 0) {
-        regularCost = costEntries.reduce((sum, e) => sum + (e.regular_hours ?? e.regularHours ?? 0) * (rate.hourly || 0), 0);
-        overtimeCost = costEntries.reduce((sum, e) => sum + (e.overtime_hours ?? e.overtimeHours ?? 0) * (rate.hourly || 0) * 1.25, 0);
-        weekendCost = costEntries.reduce((sum, e) => sum + (e.weekend_hours ?? e.weekendHours ?? 0) * (rate.saturday || (rate.hourly * 1.5) || 0), 0);
-        sundayCost = costEntries.reduce((sum, e) => sum + (e.sunday_hours ?? e.sundayHours ?? 0) * (rate.sunday || (rate.hourly * 2) || 0), 0);
-        travelCostSum = costEntries.reduce((sum, e) => sum + (e.travel_expense_to_technician ?? 0), 0);
-        s.costs = regularCost + overtimeCost + weekendCost + sundayCost + travelCostSum;
-      } else {
-        s.costs = 0;
+
+      const tech = techMap.get(id);
+      const rate = rateMap.get(id) || { hourly: 0, billable: 0, saturday: 0, sunday: 0 };
+
+      // Update uren
+      const regular = Number(entry.regular_hours || 0);
+      const overtime = Number(entry.overtime_hours || 0);
+      const weekend = Number(entry.weekend_hours || 0);
+      const sunday = Number(entry.sunday_hours || 0);
+      const total = Number(entry.hours_worked || 0);
+
+      tech.regularHours += regular;
+      tech.overtimeHours += overtime;
+      tech.weekendHours += weekend;
+      tech.sundayHours += sunday;
+      tech.totalHours += total;
+      tech.daysWorked.add(entry.date);
+      
+      if (!tech.lastWorked || entry.date > tech.lastWorked) {
+        tech.lastWorked = entry.date;
       }
-      // Omzet (alle gekozen entries)
-      const regularRevenue = s.entries.reduce((sum, e) => sum + (e.regular_hours ?? e.regularHours ?? 0) * (rate.billable || 0), 0);
-      const overtimeRevenue = s.entries.reduce((sum, e) => sum + (e.overtime_hours ?? e.overtimeHours ?? 0) * (rate.billable || 0) * 1.25, 0);
-      const weekendRevenue = s.entries.reduce((sum, e) => sum + (e.weekend_hours ?? e.weekendHours ?? 0) * (rate.billable || 0) * 1.5, 0);
-      const sundayRevenue = s.entries.reduce((sum, e) => sum + (e.sunday_hours ?? e.sundayHours ?? 0) * (rate.billable || 0) * 2, 0);
-      const totalRevenue = regularRevenue + overtimeRevenue + weekendRevenue + sundayRevenue + s.travelRevenue;
-      s.revenue = totalRevenue;
-      s.profit = s.revenue - s.costs;
-      delete s.entries;
+
+      // Bereken kosten alleen voor manuele entries
+      if (entry.is_manual_entry === true) {
+        const regularCost = regular * rate.hourly;
+        const overtimeCost = overtime * rate.hourly * 1.25;
+        const weekendCost = weekend * rate.saturday;
+        const sundayCost = sunday * rate.sunday;
+        const travelCost = Number(entry.travel_expense_to_technician || 0);
+
+        tech.costs += regularCost + overtimeCost + weekendCost + sundayCost;
+        tech.travelCost += travelCost;
+      }
+
+      // Bereken omzet voor alle entries
+      const regularRevenue = regular * rate.billable;
+      const overtimeRevenue = overtime * rate.billable * 1.25;
+      const weekendRevenue = weekend * rate.billable * 1.5;
+      const sundayRevenue = sunday * rate.billable * 2;
+
+      tech.revenue += regularRevenue + overtimeRevenue + weekendRevenue + sundayRevenue;
     });
 
-    return Array.from(techMap.values()).sort((a, b) => b.totalHours - a.totalHours);
+    // Verwerk reiskosten
+    techMap.forEach((tech, techId) => {
+      const uniqueCustomers = new Set(
+        chosenEntries
+          .filter(e => e.technician_id === techId)
+          .map(e => e.customer_id)
+      );
+
+      uniqueCustomers.forEach(customerId => {
+        if (!customerId) return;
+
+        const travel = travelRates.find(tr => 
+          String(tr.customer_id) === String(customerId) && 
+          String(tr.technician_id) === String(techId)
+        );
+
+        if (travel) {
+          // Voor manuele entries: bereken reiskosten aan monteur
+          const manualDays = new Set(
+            chosenEntries
+              .filter(e => 
+                e.technician_id === techId && 
+                e.customer_id === customerId &&
+                e.is_manual_entry === true
+              )
+              .map(e => e.date)
+          ).size;
+
+          if (manualDays > 0) {
+            tech.travelCost += manualDays * Number(travel.travel_expense_to_technician || 0);
+          }
+
+          // Voor alle entries: bereken reiskosten van klant
+          const allDays = new Set(
+            chosenEntries
+              .filter(e => 
+                e.technician_id === techId && 
+                e.customer_id === customerId
+              )
+              .map(e => e.date)
+          ).size;
+
+          tech.travelRevenue += allDays * Number(travel.travel_expense_from_client || 0);
+        }
+      });
+
+      // Update final totals
+      tech.costs += tech.travelCost;
+      tech.revenue += tech.travelRevenue;
+      tech.profit = tech.revenue - tech.costs;
+      tech.daysWorked = tech.daysWorked.size;
+    });
+
+    return Array.from(techMap.values())
+      .filter(t => t.totalHours > 0)
+      .sort((a, b) => b.totalHours - a.totalHours);
   };
 
   // --------------- UI / Layout ---------------
@@ -543,9 +602,7 @@ const Dashboard = () => {
   });
 
   // Gebruik altijd deze als input voor alles wat je op het dashboard toont!
-  const filteredTechnicianData = processTechnicianData(
-    filteredWorkHours, rawRates, travelRates, filteredWorkHours
-  );
+  const filteredTechnicianData = technicianData;
 
   const displayData = isAdmin
     ? filteredTechnicianData
@@ -898,14 +955,9 @@ const Dashboard = () => {
               {/* Mobiel: cards */}
               <div className="space-y-2 md:hidden">
                 {displayData.map((t, i) => {
+                  // Gebruik exact dezelfde data als desktop
                   const margin = t.revenue > 0 ? ((t.profit / t.revenue) * 100).toFixed(1) : '0';
-                  const rate = rawRates.find(r => r.technician_id === t.technicianId) || {};
-                  // Reiskosten breakdown
-                  const travelTo = t.daysWorked > 0 ? (t.travelCost / t.daysWorked) : 0;
-                  const travelFrom = t.daysWorked > 0 ? (t.travelRevenue / t.daysWorked) : 0;
-                  const costBreakdown = `Normaal: €${(t.regularHours * (rate.hourly_rate || 0)).toFixed(2)} | Overtime: €${(t.overtimeHours * (rate.hourly_rate || 0) * 1.25).toFixed(2)} | Weekend: €${(t.weekendHours * (rate.saturday_rate || 0)).toFixed(2)} | Zondag: €${(t.sundayHours * (rate.sunday_rate || 0)).toFixed(2)} | Reiskosten: ${t.daysWorked} × €${travelTo.toFixed(2)} = €${t.travelCost.toFixed(2)}`;
-                  const revenueBreakdown = `Normaal: €${(t.regularHours * (rate.billable_rate || 0)).toFixed(2)} | Overtime: €${(t.overtimeHours * (rate.billable_rate || 0) * 1.25).toFixed(2)} | Weekend: €${(t.weekendHours * (rate.billable_rate || 0) * 1.5).toFixed(2)} | Zondag: €${(t.sundayHours * (rate.billable_rate || 0) * 2).toFixed(2)} | Reisopbrengst: ${t.daysWorked} × €${travelFrom.toFixed(2)} = €${t.travelRevenue.toFixed(2)}`;
-                  
+
                   return (
                     <div
                       key={t.technicianId}
@@ -914,55 +966,37 @@ const Dashboard = () => {
                         from-gray-50 via-white to-gray-50 flex flex-col gap-1
                         ${i % 2 === 0 ? 'border-l-4 border-red-600' : 'border-l-4 border-yellow-300'}
                       `}
+                      onClick={() => handleTechnicianClick(t)}
                     >
                       <div className="flex items-center gap-2 mb-1">
                         <span className="font-bold text-base text-gray-900">{t.technicianName}</span>
                         <Badge color="bg-gray-100" text="text-gray-700"><ZakelijkDagen value={t.daysWorked} /> dagen</Badge>
+                        {t.totalHours === maxHours && (
+                          <Badge color="bg-green-50" text="text-green-700">Top uren</Badge>
+                        )}
+                        {t.profit === maxProfit && (
+                          <Badge color="bg-yellow-50" text="text-yellow-700">Top winst</Badge>
+                        )}
                       </div>
+                      <ProgressBar value={t.totalHours} max={maxHours} color="#dc2626" />
                       <div className="flex flex-wrap gap-x-4 gap-y-1">
                         <div className="flex flex-col items-start">
                           <span className="text-xs text-gray-400">Totaal uren</span>
                           <span className="font-semibold"><ZakelijkUren value={t.totalHours} /></span>
                         </div>
-                        <TooltipProvider>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <div className="flex flex-col items-start">
-                                <span className="text-xs text-gray-400">Omzet</span>
-                                <span className="font-semibold text-gray-800"><ZakelijkEuro value={t.revenue} /></span>
-                              </div>
-                            </TooltipTrigger>
-                            <TooltipContent>
-                              <p className="text-xs max-w-xs">{revenueBreakdown}</p>
-                            </TooltipContent>
-                          </Tooltip>
-                        </TooltipProvider>
-                        <TooltipProvider>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <div className="flex flex-col items-start">
-                                <span className="text-xs text-gray-400">Kosten</span>
-                                <span className="font-semibold text-gray-800"><ZakelijkEuro value={t.costs} /></span>
-                              </div>
-                            </TooltipTrigger>
-                            <TooltipContent>
-                              <p className="text-xs max-w-xs">{costBreakdown}</p>
-                            </TooltipContent>
-                          </Tooltip>
-                        </TooltipProvider>
-                        <TooltipProvider>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <div className="flex flex-col items-start">
-                                <span className="text-xs text-gray-400">Reiskosten</span>
-                                <span className="font-semibold text-gray-800"><ZakelijkEuro value={t.travelCost} /></span>
-                              </div>
-                            </TooltipTrigger>
-                            <TooltipContent>
-                              <p className="text-xs">Totale reiskosten betaald aan monteur: €{t.travelCost.toFixed(2)}</p>
-                            </TooltipContent>
-                          </Tooltip>
-                        </TooltipProvider>
+                        <div className="flex flex-col items-start">
+                          <span className="text-xs text-gray-400">Omzet</span>
+                          <span className="font-semibold text-gray-800"><ZakelijkEuro value={t.revenue} /></span>
+                          <span className="text-xs text-green-700 mt-1">Te factureren reiskosten klant: <ZakelijkEuro value={t.travelRevenue} /></span>
+                        </div>
+                        <div className="flex flex-col items-start">
+                          <span className="text-xs text-gray-400">Kosten</span>
+                          <span className="font-semibold text-gray-800"><ZakelijkEuro value={t.costs} /></span>
+                        </div>
+                        <div className="flex flex-col items-start">
+                          <span className="text-xs text-gray-400">Reiskosten</span>
+                          <span className="font-semibold text-gray-800"><ZakelijkEuro value={t.travelCost} /></span>
+                        </div>
                         <div className="flex flex-col items-start">
                           <span className="text-xs text-gray-400">Winst</span>
                           <span className={`font-bold ${t.profit >= 0 ? 'text-green-700' : 'text-red-700'}`}>
