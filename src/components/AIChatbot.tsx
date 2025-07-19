@@ -28,7 +28,7 @@ const AIChatbot: React.FC = () => {
   const { toast } = useToast();
   const [messages, setMessages] = useState<Message[]>([{
     id: 'welcome',
-    text: 'Hallo! Ik ben je AI-assistent. Hoe kan ik je vandaag helpen?',
+    text: 'Hallo! Ik ben Juko Bot. Hoe kan ik je helpen vandaag?',
     isUser: false,
     timestamp: new Date().toISOString(),
   }]);
@@ -132,15 +132,15 @@ const AIChatbot: React.FC = () => {
 
   return (
     <PageLayout 
-      title="AI Assistent" 
-      subtitle="Chat met je intelligente assistent voor hulp en informatie."
+      title="Juko Bot" 
+      subtitle="Chat voor assistentie, machine locaties en manuals"
     >
       <div className="flex flex-col h-[calc(100vh-80px)] max-h-[100dvh] w-full bg-gray-50 rounded-lg shadow-md overflow-hidden">
         {/* Header */}
         <div className="flex justify-between items-center px-4 py-3 border-b bg-white">
           <div className="flex items-center space-x-3">
             <Bot className="h-5 w-5 text-red-600" />
-            <span className="text-lg font-semibold">AI Chat</span>
+            <span className="text-lg font-semibold">Juko Bot</span>
             <span className={`h-2 w-2 rounded-full ${aiConfig?.is_enabled ? 'bg-green-500' : 'bg-red-500'}`}></span>
             <span className="text-xs font-medium text-gray-600">
               {aiConfig?.is_enabled ? 'Live' : 'Offline'}
