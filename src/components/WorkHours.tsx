@@ -53,7 +53,7 @@ const WorkHours = () => {
   const [selectedTech, setSelectedTech] = useState<string>('all');
   const [selectedMonth, setSelectedMonth] = useState<string>(new Date().toISOString().slice(0, 7));
 
-  const fetchData = async () => {
+  const fetchData = async (retryCount = 0) => {
     setLoading(true);
     try {
       const { data: customerData, error: custError } = await supabase
@@ -75,14 +75,12 @@ const WorkHours = () => {
         .select('*');
       if (rateError) throw rateError;
 
-      // --- HIER: bepaal velden afhankelijk van rol ---
       let selectFields: string;
       if (user?.role === 'technician') {
         selectFields = 'id, date, start_time, end_time, hours_worked, description, customer_id, customers(name)';
       } else {
         selectFields = '*, customers(name), profiles!work_hours_technician_id_fkey(full_name)';
       }
-
 
       const { data: entries, error: entryError } = await supabase
         .from('work_hours')
@@ -94,11 +92,8 @@ const WorkHours = () => {
       setTechnicians(technicianData || []);
       setTravelRates(rateData || []);
 
-      // Pas mapping aan voor beperkte velden
       let formatted: any[] = [];
-      // Typeguard: alleen mappen als entries een array is en geen error-object
       if (entries && Array.isArray(entries) && !(entries as any).message) {
-
         if (user?.role === 'technician') {
           formatted = entries.map((e: any) => ({
             id: e.id,
@@ -136,9 +131,19 @@ const WorkHours = () => {
           }));
         }
       }
+
+      // Check if we need to retry due to missing data
+      if (formatted.length > 0 && formatted.some(entry => !entry.technicianName) && retryCount < 3) {
+        setTimeout(() => fetchData(retryCount + 1), 1000);
+        return;
+      }
+
       setWorkEntries(formatted);
     } catch (error) {
       console.error('Error fetching work hours:', error);
+      if (retryCount < 3) {
+        setTimeout(() => fetchData(retryCount + 1), 1000);
+      }
     } finally {
       setLoading(false);
     }
@@ -146,14 +151,19 @@ const WorkHours = () => {
 
   useEffect(() => {
     fetchData();
-    // eslint-disable-next-line
-  }, []);
+  }, [user]); // Add user as dependency
+
+  // Add new useEffect to monitor data changes
+  useEffect(() => {
+    if (workEntries.length > 0 && workEntries.some(entry => !entry.technicianName)) {
+      fetchData();
+    }
+  }, [workEntries]);
 
   useEffect(() => {
     if (customers.length > 0 && !newEntry.customerId) {
       setNewEntry(prev => ({ ...prev, customerId: customers[0].id }));
     }
-    // eslint-disable-next-line
   }, [customers]);
 
   const getTravelExpenses = (customerId: string, technicianId: string) => {
