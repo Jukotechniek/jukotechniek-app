@@ -83,6 +83,7 @@ const WorkHours = () => {
         selectFields = `*, customers(name), technician:profiles!work_hours_technician_id_fkey(full_name)`;
       }
 
+
       const { data: entries, error: entryError } = await supabase
         .from('work_hours')
         .select(selectFields)
@@ -97,6 +98,7 @@ const WorkHours = () => {
       let formatted: any[] = [];
       // Typeguard: alleen mappen als entries een array is en geen error-object
       if (entries && Array.isArray(entries) && !(entries as any).message) {
+
         if (user?.role === 'technician') {
           formatted = entries.map((e: any) => ({
             id: e.id,
@@ -219,11 +221,7 @@ const WorkHours = () => {
           manual_verified: false
         }
       ])
-      .select(`
-        *,
-        customers(name),
-        technician:profiles!work_hours_technician_id_fkey(full_name)
-      `)
+      .select('*, customers(name), technician:profiles!work_hours_technician_id_fkey(full_name)')
       .single();
 
     if (error) {
@@ -232,29 +230,56 @@ const WorkHours = () => {
     }
 
     if (data) {
-      const formatted: WorkEntry = {
-        id: data.id,
-        technicianId: data.technician_id || '',
-        technicianName: data.technician?.full_name || '',
-        customerId: data.customer_id || '',
-        customerName: data.customers?.name || '',
-        date: data.date,
-        hoursWorked: data.hours_worked,
-        startTime: data.start_time || '',
-        endTime: data.end_time || '',
-        regularHours: data.regular_hours || 0,
-        overtimeHours: data.overtime_hours || 0,
-        weekendHours: data.weekend_hours || 0,
-        sundayHours: data.sunday_hours || 0,
-        isWeekend: data.is_weekend || false,
-        isSunday: data.is_sunday || false,
-        isManualEntry: data.is_manual_entry || false,
-        description: data.description || '',
-        travelExpenseToTechnician: data.travel_expense_to_technician || 0,
-        travelExpenseFromClient: data.travel_expense_from_client || 0,
-        createdAt: data.created_at || '',
-        createdBy: data.created_by || ''
-      };
+      let formatted: WorkEntry;
+      if (user?.role === 'technician') {
+        formatted = {
+          id: data.id,
+          technicianId: '',
+          technicianName: '',
+          customerId: data.customer_id || '',
+          customerName: data.customers?.name || '',
+          date: data.date,
+          hoursWorked: data.hours_worked,
+          startTime: data.start_time || '',
+          endTime: data.end_time || '',
+          regularHours: 0,
+          overtimeHours: 0,
+          weekendHours: 0,
+          sundayHours: 0,
+          isWeekend: false,
+          isSunday: false,
+          isManualEntry: false,
+          description: data.description || '',
+          travelExpenseToTechnician: 0,
+          travelExpenseFromClient: 0,
+          createdAt: '',
+          createdBy: ''
+        };
+      } else {
+        formatted = {
+          id: data.id,
+          technicianId: data.technician_id || '',
+          technicianName: data.technician?.full_name || '',
+          customerId: data.customer_id || '',
+          customerName: data.customers?.name || '',
+          date: data.date,
+          hoursWorked: data.hours_worked,
+          startTime: data.start_time || '',
+          endTime: data.end_time || '',
+          regularHours: data.regular_hours || 0,
+          overtimeHours: data.overtime_hours || 0,
+          weekendHours: data.weekend_hours || 0,
+          sundayHours: data.sunday_hours || 0,
+          isWeekend: data.is_weekend || false,
+          isSunday: data.is_sunday || false,
+          isManualEntry: data.is_manual_entry || false,
+          description: data.description || '',
+          travelExpenseToTechnician: data.travel_expense_to_technician || 0,
+          travelExpenseFromClient: data.travel_expense_from_client || 0,
+          createdAt: data.created_at || '',
+          createdBy: data.created_by || ''
+        };
+      }
       setWorkEntries(prev => [formatted, ...prev]);
     }
 

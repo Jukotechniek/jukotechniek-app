@@ -27,7 +27,7 @@ const AppContent: React.FC = () => {
         ? ['dashboard', 'hours', 'projects', 'magazine', 'schedule', 'customers', 'billing', 'verification', 'users', 'reports', 'chatbot', 'analytics']
         : user.role === 'opdrachtgever'
         ? ['dashboard', 'projects', 'schedule', 'chatbot']
-        : ['dashboard', 'hours', 'projects', 'magazine', 'schedule', 'users', 'chatbot'];
+        : ['dashboard', 'hours', 'projects', 'magazine', 'schedule', 'chatbot'];
       
       if (allowedTabs.includes(savedTab)) {
         return savedTab;

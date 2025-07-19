@@ -162,13 +162,31 @@ const Dashboard = () => {
       } else {
       }
 
-      const { data: workHours, error: hoursError } = await supabase
-        .from('work_hours')
-        .select(`
-          *,
-          customers(name),
-          profiles!work_hours_technician_id_fkey(full_name)
-        `);
+      // Fetch work hours with role-based restrictions
+      let workHours;
+      let hoursError;
+      
+      if (user?.role === 'technician') {
+        // For technicians: only fetch essential fields
+        const { data, error } = await supabase
+          .from('work_hours')
+          .select(`
+            id, date, start_time, end_time, hours_worked, description, customer_id, customers(name), technician_id, profiles!work_hours_technician_id_fkey(full_name)
+          `);
+        workHours = data;
+        hoursError = error;
+      } else {
+        // For admins: fetch all fields
+        const { data, error } = await supabase
+          .from('work_hours')
+          .select(`
+            *,
+            customers(name),
+            profiles!work_hours_technician_id_fkey(full_name)
+          `);
+        workHours = data;
+        hoursError = error;
+      }
       if (hoursError) console.error(hoursError);
 
       // Transform webhook hours to match work_hours format with proper overtime calculations
