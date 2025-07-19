@@ -80,7 +80,7 @@ const WorkHours = () => {
       if (user?.role === 'technician') {
         selectFields = 'id, date, start_time, end_time, hours_worked, description, customer_id, customers(name)';
       } else {
-        selectFields = `*, customers(name), technician:profiles!work_hours_technician_id_fkey(full_name)`;
+        selectFields = '*, customers(name), profiles!work_hours_technician_id_fkey(full_name)';
       }
 
 
@@ -114,7 +114,7 @@ const WorkHours = () => {
           formatted = entries.map((e: any) => ({
             id: e.id,
             technicianId: e.technician_id || '',
-            technicianName: e.technician?.full_name || '',
+            technicianName: e.profiles?.full_name || '',
             customerId: e.customer_id || '',
             customerName: e.customers?.name || '',
             date: e.date,
