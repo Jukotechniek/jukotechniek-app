@@ -484,6 +484,7 @@ const Dashboard = () => {
 
     // Verwerk reiskosten
     techMap.forEach((tech, techId) => {
+      // Verzamel alle unieke klanten voor deze monteur
       const uniqueCustomers = new Set(
         chosenEntries
           .filter(e => e.technician_id === techId)
@@ -499,8 +500,20 @@ const Dashboard = () => {
         );
 
         if (travel) {
-          // Voor manuele entries: bereken reiskosten aan monteur
-          const manualDays = new Set(
+          // Bereken unieke dagen per klant
+          const daysPerCustomer = new Set(
+            chosenEntries
+              .filter(e => 
+                e.technician_id === techId && 
+                e.customer_id === customerId
+              )
+              .map(e => e.date)
+          );
+
+          const daysCount = daysPerCustomer.size;
+
+          // Bereken reiskosten aan monteur voor manuele entries
+          const manualDaysCount = new Set(
             chosenEntries
               .filter(e => 
                 e.technician_id === techId && 
@@ -510,21 +523,13 @@ const Dashboard = () => {
               .map(e => e.date)
           ).size;
 
-          if (manualDays > 0) {
-            tech.travelCost += manualDays * Number(travel.travel_expense_to_technician || 0);
+          // Voeg reiskosten toe aan monteur voor manuele dagen
+          if (manualDaysCount > 0) {
+            tech.travelCost += manualDaysCount * Number(travel.travel_expense_to_technician || 0);
           }
 
-          // Voor alle entries: bereken reiskosten van klant
-          const allDays = new Set(
-            chosenEntries
-              .filter(e => 
-                e.technician_id === techId && 
-                e.customer_id === customerId
-              )
-              .map(e => e.date)
-          ).size;
-
-          tech.travelRevenue += allDays * Number(travel.travel_expense_from_client || 0);
+          // Voeg reiskosten toe van klant voor alle dagen
+          tech.travelRevenue += daysCount * Number(travel.travel_expense_from_client || 0);
         }
       });
 
@@ -1071,61 +1076,57 @@ const Dashboard = () => {
                         String(tr.customer_id) === String(first.customer_id) &&
                         String(tr.technician_id) === String(first.technician_id)
                       );
-                      // Fallback: als niet gevonden, neem gemiddelde van alle rates voor deze monteur
-                      let travelTo = travelRate?.travel_expense_to_technician;
-                      let travelFrom = travelRate?.travel_expense_from_client;
-                      if (travelRate == null) {
-                        const allRates = travelRates.filter(tr => String(tr.technician_id) === String(first.technician_id));
-                        if (allRates.length > 0) {
-                          travelTo = allRates.reduce((a, b) => a + (b.travel_expense_to_technician || 0), 0) / allRates.length;
-                          travelFrom = allRates.reduce((a, b) => a + (b.travel_expense_from_client || 0), 0) / allRates.length;
-                        } else {
-                          travelTo = 0;
-                          travelFrom = 0;
-                        }
-                      }
+
                       // Filter alleen manual hours voor kosten aan monteur
-                      const manualEntries = entries.filter(e => e.is_manual_entry === true && !e.webhook_verified);
-                      let travelToManual = 0;
-                      if (manualEntries.length > 0) {
-                        // Neem de eerste geldige reiskosten aan monteur uit manual entries
-                        travelToManual = manualEntries[0].travel_expense_to_technician ?? 0;
-                      } else {
-                        // Fallback: gebruik de bestaande travelTo uit de rates lookup
-                        // (deze is al bepaald via de fallback code eerder)
-                      }
-                      // Kosten alleen op basis van manual uren
+                      const manualEntries = entries.filter(e => e.is_manual_entry === true);
                       const regular = manualEntries.reduce((s, e) => s + (e.regular_hours ?? e.regularHours ?? 0), 0);
                       const overtime = manualEntries.reduce((s, e) => s + (e.overtime_hours ?? e.overtimeHours ?? 0), 0);
                       const weekend = manualEntries.reduce((s, e) => s + (e.weekend_hours ?? e.weekendHours ?? 0), 0);
                       const sunday = manualEntries.reduce((s, e) => s + (e.sunday_hours ?? e.sundayHours ?? 0), 0);
                       const total = manualEntries.reduce((s, e) => s + (e.hours_worked ?? e.hoursWorked ?? 0), 0);
-                      // Omzetberekening (mag alle entries zijn)
-                      const regularRevenue = entries.reduce((sum, e) => sum + (e.regular_hours ?? e.regularHours ?? 0) * (rate.billable_rate || 0), 0);
-                      const overtimeRevenue = entries.reduce((sum, e) => sum + (e.overtime_hours ?? e.overtimeHours ?? 0) * (rate.billable_rate || 0) * 1.25, 0);
-                      const weekendRevenue = entries.reduce((sum, e) => sum + (e.weekend_hours ?? e.weekendHours ?? 0) * (rate.billable_rate || 0) * 1.5, 0);
-                      const sundayRevenue = entries.reduce((sum, e) => sum + (e.sunday_hours ?? e.sundayHours ?? 0) * (rate.billable_rate || 0) * 2, 0);
-                      const totalRevenue = regularRevenue + overtimeRevenue + weekendRevenue + sundayRevenue + travelFrom;
-                      // Omschrijving samenvoegen
-                      const description = manualEntries.map(e => e.description).filter(Boolean).join(' | ');
-                      // Kosten
+
+                      // Bereken kosten voor manuele entries
                       const regularCost = regular * (rate.hourly_rate || 0);
                       const overtimeCost = overtime * (rate.hourly_rate || 0) * 1.25;
                       const weekendCost = weekend * (rate.saturday_rate || rate.hourly_rate * 1.5 || 0);
                       const sundayCost = sunday * (rate.sunday_rate || rate.hourly_rate * 2 || 0);
-                      const totalCost = regularCost + overtimeCost + weekendCost + sundayCost + travelToManual;
+                      
+                      // Bereken reiskosten aan monteur voor manuele entries
+                      let travelCostToTech = 0;
+                      if (travelRate && manualEntries.length > 0) {
+                        travelCostToTech = Number(travelRate.travel_expense_to_technician || 0);
+                      }
+
+                      // Bereken omzet voor alle entries
+                      const regularRevenue = entries.reduce((sum, e) => sum + (e.regular_hours ?? e.regularHours ?? 0) * (rate.billable_rate || 0), 0);
+                      const overtimeRevenue = entries.reduce((sum, e) => sum + (e.overtime_hours ?? e.overtimeHours ?? 0) * (rate.billable_rate || 0) * 1.25, 0);
+                      const weekendRevenue = entries.reduce((sum, e) => sum + (e.weekend_hours ?? e.weekendHours ?? 0) * (rate.billable_rate || 0) * 1.5, 0);
+                      const sundayRevenue = entries.reduce((sum, e) => sum + (e.sunday_hours ?? e.sundayHours ?? 0) * (rate.billable_rate || 0) * 2, 0);
+
+                      // Bereken reiskosten van klant
+                      const travelRevenue = travelRate ? Number(travelRate.travel_expense_from_client || 0) : 0;
+
+                      // Bereken totalen
+                      const hoursCost = regularCost + overtimeCost + weekendCost + sundayCost;
+                      const totalCost = hoursCost + travelCostToTech;
+                      const totalRevenue = regularRevenue + overtimeRevenue + weekendRevenue + sundayRevenue + travelRevenue;
                       const profit = totalRevenue - totalCost;
+
+                      // Omschrijving samenvoegen
+                      const description = manualEntries.map(e => e.description).filter(Boolean).join(' | ');
+
                       // Breakdown
                       const breakdown = [
                         `Normaal: €${regularCost.toFixed(2)}/€${regularRevenue.toFixed(2)}`,
                         `Overwerk: €${overtimeCost.toFixed(2)}/€${overtimeRevenue.toFixed(2)}`,
                         `Weekend: €${weekendCost.toFixed(2)}/€${weekendRevenue.toFixed(2)}`,
                         `Zondag: €${sundayCost.toFixed(2)}/€${sundayRevenue.toFixed(2)}`,
-                        `Reiskosten aan monteur (manual): €${travelToManual.toFixed(2)}`,
-                        `Reiskosten van klant: 1 × €${travelFrom.toFixed(2)} = €${travelFrom.toFixed(2)}`,
-                        `Te factureren reiskosten klant: €${travelFrom.toFixed(2)}`,
-                        `Betaalde reiskosten aan monteur: €${travelToManual.toFixed(2)}`
+                        `Uren kosten: €${hoursCost.toFixed(2)}`,
+                        `Reiskosten aan monteur: €${travelCostToTech.toFixed(2)}`,
+                        `Totale kosten: €${totalCost.toFixed(2)}`,
+                        `Te factureren reiskosten klant: €${travelRevenue.toFixed(2)}`
                       ].join(' | ');
+
                       return (
                         <tr key={key} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
                           <td className="p-2 border whitespace-nowrap">{new Date(first.date).toLocaleDateString('nl-NL')}</td>
@@ -1136,8 +1137,8 @@ const Dashboard = () => {
                           <td className="p-2 border text-right">{weekend.toFixed(2)}</td>
                           <td className="p-2 border text-right">{sunday.toFixed(2)}</td>
                           <td className="p-2 border text-right font-bold">{total.toFixed(2)}</td>
-                          <td className="p-2 border text-right">€{Number.isFinite(travelToManual) ? travelToManual.toFixed(2) : '0.00'}</td>
-                          <td className="p-2 border text-right text-green-700 font-semibold">€{Number.isFinite(travelFrom) ? travelFrom.toFixed(2) : '0.00'}</td>
+                          <td className="p-2 border text-right">€{travelCostToTech.toFixed(2)}</td>
+                          <td className="p-2 border text-right text-green-700 font-semibold">€{travelRevenue.toFixed(2)}</td>
                           <td className="p-2 border text-right text-green-700">€{totalRevenue.toFixed(2)}</td>
                           <td className="p-2 border text-right text-red-700">€{totalCost.toFixed(2)}</td>
                           <td className={`p-2 border text-right font-bold ${profit >= 0 ? 'text-green-700' : 'text-red-700'}`}>€{profit.toFixed(2)}</td>
