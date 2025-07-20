@@ -11,15 +11,12 @@ import { PageLayout } from '@/components/ui/page-layout';
 
 interface Message {
   id: string;
-  text?: string;
+  text: string;
   isUser: boolean;
   timestamp: string;
   table?: Record<string, string>[];
   images?: string[];
-  file?: {
-    name: string;
-    url: string;
-  };
+  files?: { name: string; url: string }[];
 }
 
 interface AIConfig {
@@ -113,37 +110,12 @@ const AIChatbot: React.FC = () => {
         body: JSON.stringify(userMsg),
       });
       const data = await resp.json();
-
-      let parsed: any = data;
-      if (typeof parsed === 'string') {
-        try {
-          parsed = JSON.parse(parsed);
-        } catch {
-          parsed = { text: parsed };
-        }
-      }
-      if (typeof parsed.text === 'string') {
-        const trimmed = parsed.text.trim();
-        if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
-          try {
-            const inner = JSON.parse(parsed.text);
-            parsed = { ...parsed, ...inner };
-          } catch {
-            /* ignore */
-          }
-        }
-      }
-
       const botMsg: Message = {
         id: Date.now().toString(),
-        text: parsed.text,
-        table: parsed.table || undefined,
-        images: parsed.images || (parsed.image ? [parsed.image] : undefined),
-        file: parsed.file
-          ? typeof parsed.file === 'string'
-            ? { name: parsed.file.split('/').pop() || 'download', url: parsed.file }
-            : { name: parsed.file.name || 'download', url: parsed.file.url }
-          : undefined,
+        text: data.text,
+        table: data.table || undefined,
+        images: data.images || [],
+        files: data.files || [],
         isUser: false,
         timestamp: new Date().toISOString(),
       };
@@ -163,10 +135,7 @@ const AIChatbot: React.FC = () => {
   };
 
   return (
-    <PageLayout 
-      title="Juko Bot" 
-      subtitle="Chat voor assistentie, machine locaties en manuals"
-    >
+    <PageLayout title="Juko Bot" subtitle="Chat voor assistentie, machine locaties en manuals">
       <div className="flex flex-col h-[calc(100vh-80px)] max-h-[100dvh] w-full bg-gray-50 rounded-lg shadow-md overflow-hidden">
         {/* Header */}
         <div className="flex justify-between items-center px-4 py-3 border-b bg-white">
@@ -185,12 +154,11 @@ const AIChatbot: React.FC = () => {
             </Button>
           )}
         </div>
+
         {/* Config */}
         {isAdmin && showConfig && (
           <Card className="bg-white mb-2 shadow-sm border-none">
-            <CardHeader>
-              <CardTitle>AI Configuratie</CardTitle>
-            </CardHeader>
+            <CardHeader><CardTitle>AI Configuratie</CardTitle></CardHeader>
             <CardContent>
               <Label htmlFor="webhookUrl">Webhook URL</Label>
               <Input
@@ -206,6 +174,7 @@ const AIChatbot: React.FC = () => {
             </CardContent>
           </Card>
         )}
+
         {/* Chat area */}
         <div className="flex-1 overflow-y-auto px-2 md:px-4 py-4 space-y-4 bg-gray-50" style={{ minHeight: 0 }}>
           {messages.map((m) => (
@@ -215,28 +184,31 @@ const AIChatbot: React.FC = () => {
                   {m.isUser ? <User className="h-4 w-4 mt-0.5 flex-shrink-0" /> : <Bot className="h-4 w-4 mt-0.5 text-red-600 flex-shrink-0" />}
                   <div className="min-w-0 flex-1">
                     <div className="text-base break-words space-y-2">
-                      {m.text && <p>{m.text}</p>}
-                      {m.images && m.images.length > 0 && (
-                        <div className="space-y-2">
-                          {m.images.map((img, idx) => (
-                            <img
-                              key={idx}
-                              src={img}
-                              alt={`image-${idx}`}
-                              className="max-w-full rounded"
-                            />
-                          ))}
-                        </div>
-                      )}
-                      {m.file && (
+                      <p>{m.text}</p>
+
+                      {/* Inline afbeeldingen */}
+                      {m.images?.map((src, idx) => (
+                        <img
+                          key={idx}
+                          src={src}
+                          alt={`image-${idx}`}
+                          className="mt-2 max-w-full rounded border"
+                        />
+                      ))}
+
+                      {/* Download links */}
+                      {m.files?.map((file, idx) => (
                         <a
-                          href={m.file.url}
-                          download={m.file.name}
-                          className="text-red-600 underline break-words block"
+                          key={idx}
+                          href={file.url}
+                          download
+                          className="block text-sm text-blue-600 underline mt-1"
                         >
-                          {m.file.name || 'Download'}
+                          📎 {file.name}
                         </a>
-                      )}
+                      ))}
+
+                      {/* Tabellen */}
                       {m.table && m.table.length > 0 && (
                         <div className="overflow-x-auto mt-2">
                           <table className="min-w-full text-xs border border-gray-300">
@@ -268,6 +240,7 @@ const AIChatbot: React.FC = () => {
               </div>
             </div>
           ))}
+
           {isLoading && (
             <div className="flex justify-start">
               <div className="px-4 py-2 rounded-2xl bg-white border border-gray-200 shadow-sm">
@@ -284,7 +257,8 @@ const AIChatbot: React.FC = () => {
           )}
           <div ref={messagesEndRef} />
         </div>
-        {/* Input bar */}
+
+        {/* Input */}
         <div className="border-t p-2 md:p-4 bg-white sticky bottom-0 w-full z-10">
           <form className="flex w-full space-x-2" onSubmit={e => { e.preventDefault(); sendMessage(); }}>
             <Input
