@@ -8,6 +8,11 @@ import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { Send, Bot, User, Settings } from 'lucide-react';
 import { PageLayout } from '@/components/ui/page-layout';
+import {
+  Dialog,
+  DialogTrigger,
+  DialogContent
+} from '@/components/ui/dialog';
 
 interface Message {
   id: string;
@@ -186,23 +191,31 @@ const AIChatbot: React.FC = () => {
                     <div className="text-base break-words space-y-2">
                       <p>{m.text}</p>
 
-                      {/* Inline afbeeldingen */}
+                      {/* Inline afbeeldingen met modal */}
                       {m.images?.map((src, idx) => (
-                        <img
-                          key={idx}
-                          src={src}
-                          alt={`image-${idx}`}
-                          className="mt-2 max-w-full rounded border"
-                        />
+                        <Dialog key={idx}>
+                          <DialogTrigger asChild>
+                            <img
+                              src={src}
+                              alt={`image-${idx}`}
+                              className="mt-2 max-w-full rounded border cursor-zoom-in hover:opacity-90 transition"
+                            />
+                          </DialogTrigger>
+                          <DialogContent className="max-w-3xl p-0 overflow-hidden">
+                            <img src={src} alt={`preview-${idx}`} className="w-full h-auto object-contain" />
+                          </DialogContent>
+                        </Dialog>
                       ))}
 
-                      {/* Download links */}
+                      {/* Downloadbare bestanden */}
                       {m.files?.map((file, idx) => (
                         <a
                           key={idx}
                           href={file.url}
                           download
-                          className="block text-sm text-blue-600 underline mt-1"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-block mt-2 px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded hover:bg-blue-700 transition"
                         >
                           📎 {file.name}
                         </a>
