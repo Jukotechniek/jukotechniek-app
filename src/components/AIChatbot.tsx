@@ -11,10 +11,15 @@ import { PageLayout } from '@/components/ui/page-layout';
 
 interface Message {
   id: string;
-  text: string;
+  text?: string;
   isUser: boolean;
   timestamp: string;
   table?: Record<string, string>[];
+  images?: string[];
+  file?: {
+    name: string;
+    url: string;
+  };
 }
 
 interface AIConfig {
@@ -108,10 +113,37 @@ const AIChatbot: React.FC = () => {
         body: JSON.stringify(userMsg),
       });
       const data = await resp.json();
+
+      let parsed: any = data;
+      if (typeof parsed === 'string') {
+        try {
+          parsed = JSON.parse(parsed);
+        } catch {
+          parsed = { text: parsed };
+        }
+      }
+      if (typeof parsed.text === 'string') {
+        const trimmed = parsed.text.trim();
+        if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+          try {
+            const inner = JSON.parse(parsed.text);
+            parsed = { ...parsed, ...inner };
+          } catch {
+            /* ignore */
+          }
+        }
+      }
+
       const botMsg: Message = {
         id: Date.now().toString(),
-        text: data.text,
-        table: data.table || undefined,
+        text: parsed.text,
+        table: parsed.table || undefined,
+        images: parsed.images || (parsed.image ? [parsed.image] : undefined),
+        file: parsed.file
+          ? typeof parsed.file === 'string'
+            ? { name: parsed.file.split('/').pop() || 'download', url: parsed.file }
+            : { name: parsed.file.name || 'download', url: parsed.file.url }
+          : undefined,
         isUser: false,
         timestamp: new Date().toISOString(),
       };
@@ -182,8 +214,29 @@ const AIChatbot: React.FC = () => {
                 <div className="flex items-start space-x-2">
                   {m.isUser ? <User className="h-4 w-4 mt-0.5 flex-shrink-0" /> : <Bot className="h-4 w-4 mt-0.5 text-red-600 flex-shrink-0" />}
                   <div className="min-w-0 flex-1">
-                    <div className="text-base break-words">
-                      <p>{m.text}</p>
+                    <div className="text-base break-words space-y-2">
+                      {m.text && <p>{m.text}</p>}
+                      {m.images && m.images.length > 0 && (
+                        <div className="space-y-2">
+                          {m.images.map((img, idx) => (
+                            <img
+                              key={idx}
+                              src={img}
+                              alt={`image-${idx}`}
+                              className="max-w-full rounded"
+                            />
+                          ))}
+                        </div>
+                      )}
+                      {m.file && (
+                        <a
+                          href={m.file.url}
+                          download={m.file.name}
+                          className="text-red-600 underline break-words block"
+                        >
+                          {m.file.name || 'Download'}
+                        </a>
+                      )}
                       {m.table && m.table.length > 0 && (
                         <div className="overflow-x-auto mt-2">
                           <table className="min-w-full text-xs border border-gray-300">
