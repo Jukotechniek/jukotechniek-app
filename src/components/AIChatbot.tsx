@@ -191,17 +191,23 @@ const AIChatbot: React.FC = () => {
                     <div className="text-base break-words space-y-2">
                       <p>{m.text}</p>
 
-                      {/* Inline afbeeldingen met modal */}
+                      {/* Inline afbeeldingen met modal en button voor mobiel */}
                       {m.images?.map((src, idx) => (
                         <Dialog key={idx}>
                           <DialogTrigger asChild>
-                            <img
-                              src={src}
-                              alt={`image-${idx}`}
-                              className="mt-2 max-w-full rounded border cursor-zoom-in hover:opacity-90 transition"
-                            />
+                            <button
+                              type="button"
+                              style={{ padding: 0, border: 'none', background: 'none' }}
+                              className="block"
+                            >
+                              <img
+                                src={src}
+                                alt={`image-${idx}`}
+                                className="mt-2 max-w-full rounded border cursor-zoom-in hover:opacity-90 transition"
+                              />
+                            </button>
                           </DialogTrigger>
-                          <DialogContent className="max-w-3xl p-0 overflow-hidden">
+                          <DialogContent className="max-w-3xl p-0 overflow-hidden flex items-center justify-center">
                             <img src={src} alt={`preview-${idx}`} className="w-full h-auto object-contain" />
                           </DialogContent>
                         </Dialog>
