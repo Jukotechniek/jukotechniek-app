@@ -14,6 +14,7 @@ import AIChatbot from '@/components/AIChatbot';
 import WorkSchedulePage from '@/components/WorkSchedule';
 import Magazine from '@/components/Magazine';
 import Analytics from '@/components/Analytics';
+import ChatHistoryPage from '@/components/ChatHistory';
 
 const AppContent: React.FC = () => {
   const { isAuthenticated, loading, user } = useAuth();
@@ -24,7 +25,7 @@ const AppContent: React.FC = () => {
     if (savedTab && user) {
       // Validate saved tab is allowed for current user role
       const allowedTabs = user.role === 'admin' 
-        ? ['dashboard', 'hours', 'projects', 'magazine', 'schedule', 'customers', 'billing', 'verification', 'users', 'reports', 'chatbot', 'analytics']
+        ? ['dashboard', 'hours', 'projects', 'magazine', 'schedule', 'customers', 'billing', 'verification', 'users', 'reports', 'chatbot', 'chat_history', 'analytics']
         : user.role === 'opdrachtgever'
         ? ['dashboard', 'projects', 'schedule', 'chatbot']
         : ['dashboard', 'hours', 'projects', 'magazine', 'schedule', 'chatbot'];
@@ -114,6 +115,8 @@ const AppContent: React.FC = () => {
         return <Magazine />;
       case 'chatbot':
         return <AIChatbot />;
+      case 'chat_history':
+        return <ChatHistoryPage />;
       case 'analytics':
         return <Analytics />;
       default:

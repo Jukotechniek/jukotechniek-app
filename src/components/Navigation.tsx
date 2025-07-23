@@ -42,6 +42,7 @@ const Navigation: React.FC<NavigationProps> = ({ activeTab, onTabChange }) => {
     { id: 'verification', label: 'Uren Verificatie', icon: CheckCircle },
     { id: 'users', label: 'Gebruikersbeheer', icon: Users },
     { id: 'reports', label: 'Rapporten', icon: FileText },
+    { id: 'chat_history', label: 'Chatgeschiedenis', icon: FileText },
     { id: 'analytics', label: 'Analytics', icon: BarChart3 },
     { id: 'chatbot', label: 'AI Assistent', icon: Bot }
   ];
