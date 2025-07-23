@@ -28,21 +28,16 @@ const ChatHistoryPage: React.FC = () => {
 
   const fetchMessages = async () => {
     setLoading(true);
-    let query = supabase
+    // TODO: Regenerate Supabase types so n8n_chat_histories is included in Database
+    let query = (supabase as any)
       .from('n8n_chat_histories')
       .select('*')
-      .order('created_at', { ascending: false });
+      .order('id', { ascending: false });
 
     if (selectedTech !== 'all') {
       query = query.eq('session_id', selectedTech);
     }
-    if (selectedDate) {
-      const start = new Date(selectedDate);
-      start.setHours(0, 0, 0, 0);
-      const end = new Date(selectedDate);
-      end.setHours(23, 59, 59, 999);
-      query = query.gte('created_at', start.toISOString()).lte('created_at', end.toISOString());
-    }
+    // No date filtering since there is no created_at column
 
     const { data, error } = await query;
     if (!error && data) setMessages(data as ChatHistory[]);
@@ -115,9 +110,9 @@ const ChatHistoryPage: React.FC = () => {
                 <TableBody>
                   {messages.map(msg => (
                     <TableRow key={msg.id}>
-                      <TableCell>{new Date(msg.created_at).toLocaleString('nl-NL')}</TableCell>
+                      <TableCell>{msg.id}</TableCell>
                       <TableCell>{technicians.find(t => t.id === msg.session_id)?.full_name || msg.session_id}</TableCell>
-                      <TableCell className="whitespace-pre-wrap">{msg.message}</TableCell>
+                      <TableCell className="whitespace-pre-wrap">{typeof msg.message === 'object' ? msg.message.content : String(msg.message)}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>

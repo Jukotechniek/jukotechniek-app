@@ -1,6 +1,5 @@
 export interface ChatHistory {
-  id: string;
+  id: number;
   session_id: string;
-  message: string;
-  created_at: string;
+  message: any; // You can type this more strictly if you know the structure
 }
