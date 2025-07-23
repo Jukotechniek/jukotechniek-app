@@ -114,7 +114,14 @@ const AIChatbot: React.FC = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(userMsg),
       });
-      const data = await resp.json();
+      
+      let data = await resp.json();
+      
+      // Als de response een array is, neem het eerste item
+      if (Array.isArray(data)) {
+        data = data[0];
+      }
+
       const botMsg: Message = {
         id: Date.now().toString(),
         text: data.text,
@@ -124,8 +131,10 @@ const AIChatbot: React.FC = () => {
         isUser: false,
         timestamp: new Date().toISOString(),
       };
+
       setMessages((prev) => [...prev, botMsg]);
-    } catch {
+    } catch (error) {
+      console.error('Error sending message:', error);
       toast({ title: 'Error', description: 'Bericht versturen mislukt', variant: 'destructive' });
     } finally {
       setIsLoading(false);
