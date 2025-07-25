@@ -103,20 +103,24 @@ const ChatHistoryPage: React.FC = () => {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Datum</TableHead>
-                    <TableHead>Monteur</TableHead>
-                    <TableHead>Verzender</TableHead>
+                    <TableHead>Gebruiker</TableHead>
+                    <TableHead>Rol</TableHead>
                     <TableHead>Bericht</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {messages.map(msg => (
-                    <TableRow key={msg.id}>
-                      <TableCell>{msg.id}</TableCell>
-                      <TableCell>{technicians.find(t => t.id === msg.session_id)?.full_name || msg.session_id}</TableCell>
-                      <TableCell>{typeof msg.message === 'object' && 'role' in msg.message ? (msg.message.role === 'assistant' ? 'Bot' : msg.message.role) : ''}</TableCell>
-                      <TableCell className="whitespace-pre-wrap">{typeof msg.message === 'object' ? msg.message.content : String(msg.message)}</TableCell>
-                    </TableRow>
-                  ))}
+                  {messages.map(msg => {
+                    const userName = (msg as any).user_name || (msg as any).username || technicians.find(t => t.id === msg.session_id)?.full_name || msg.session_id;
+                    const role = typeof msg.message === 'object' && 'role' in msg.message ? (msg.message.role === 'assistant' ? 'Bot' : msg.message.role) : '';
+                    return (
+                      <TableRow key={msg.id}>
+                        <TableCell>{msg.id}</TableCell>
+                        <TableCell>{userName}</TableCell>
+                        <TableCell>{role}</TableCell>
+                        <TableCell className="whitespace-pre-wrap">{typeof msg.message === 'object' ? msg.message.content : String(msg.message)}</TableCell>
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
               </Table>
             </CardContent>

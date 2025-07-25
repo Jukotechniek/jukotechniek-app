@@ -354,7 +354,30 @@ const Projects = () => {
   const [webhookUrl, setWebhookUrl] = useState(() =>
     localStorage.getItem('projectEmailWebhook') || ''
   ); // Admin can set this
+  const [emailConfigId, setEmailConfigId] = useState<string | null>(null);
   const [showEmailConfig, setShowEmailConfig] = useState(false);
+
+  // Fetch saved email config from Supabase if available
+  useEffect(() => {
+    const fetchEmailConfig = async () => {
+      const { data, error } = await supabase
+        .from('ai_assistant_config')
+        .select('id, project_email_recipient, project_email_webhook')
+        .single();
+      if (!error && data) {
+        setEmailConfigId(data.id);
+        if (data.project_email_recipient) {
+          setRecipientEmail(data.project_email_recipient);
+          localStorage.setItem('projectEmailRecipient', data.project_email_recipient);
+        }
+        if (data.project_email_webhook) {
+          setWebhookUrl(data.project_email_webhook);
+          localStorage.setItem('projectEmailWebhook', data.project_email_webhook);
+        }
+      }
+    };
+    fetchEmailConfig();
+  }, []);
 
   // Set default month filter to current month on mount
   useEffect(() => {
@@ -568,7 +591,7 @@ const Projects = () => {
       <TooltipTrigger asChild>
         <Card
           className="bg-white hover:shadow-lg transition-shadow duration-200 cursor-pointer"
-          onClick={() => handleEdit(project)}
+          onClick={() => openDetails(project)}
         >
           <CardHeader>
             <div className="flex justify-between items-start">
@@ -711,8 +734,33 @@ const Projects = () => {
   const saveEmailConfig = () => {
     localStorage.setItem('projectEmailRecipient', recipientEmail);
     localStorage.setItem('projectEmailWebhook', webhookUrl);
-    toast({ title: 'Succes', description: 'Email instellingen opgeslagen' });
-    setShowEmailConfig(false);
+    const save = async () => {
+      let error;
+      if (emailConfigId) {
+        ({ error } = await supabase
+          .from('ai_assistant_config')
+          .update({
+            project_email_recipient: recipientEmail,
+            project_email_webhook: webhookUrl,
+          })
+          .eq('id', emailConfigId));
+      } else {
+        const { error: insertError, data } = await supabase
+          .from('ai_assistant_config')
+          .insert([{ project_email_recipient: recipientEmail, project_email_webhook: webhookUrl }])
+          .select()
+          .single();
+        error = insertError;
+        if (!insertError && data) setEmailConfigId(data.id);
+      }
+      if (error) {
+        toast({ title: 'Fout', description: 'Kon instellingen niet opslaan', variant: 'destructive' });
+      } else {
+        toast({ title: 'Succes', description: 'Email instellingen opgeslagen' });
+        setShowEmailConfig(false);
+      }
+    };
+    save();
   };
 
   return (
@@ -985,6 +1033,19 @@ const Projects = () => {
                 <div className="col-span-2 text-gray-400">Geen afbeeldingen toegevoegd</div>
               )}
             </div>
+            {(isAdmin || selectedProject.technicianId === user?.id) && (
+              <div className="mt-4 text-right">
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    setDetailsOpen(false);
+                    handleEdit(selectedProject);
+                  }}
+                >
+                  Bewerken
+                </Button>
+              </div>
+            )}
           </div>
         </div>
       )}
