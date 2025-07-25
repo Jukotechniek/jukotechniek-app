@@ -360,19 +360,22 @@ const Projects = () => {
   // Fetch saved email config from Supabase if available
   useEffect(() => {
     const fetchEmailConfig = async () => {
-      const { data, error } = await supabase
+      // @ts-expect-error Type instantiation is excessively deep and possibly infinite
+      const result = await supabase
         .from('ai_assistant_config')
         .select('id, project_email_recipient, project_email_webhook')
+        .eq('type', 'email')
         .single();
-      if (!error && data) {
-        setEmailConfigId(data.id);
-        if (data.project_email_recipient) {
-          setRecipientEmail(data.project_email_recipient);
-          localStorage.setItem('projectEmailRecipient', data.project_email_recipient);
+      const { data, error } = result as any;
+      if (!error && data && typeof data === 'object' && data !== null && 'id' in data) {
+        setEmailConfigId((data as any).id);
+        if ((data as any).project_email_recipient) {
+          setRecipientEmail((data as any).project_email_recipient);
+          localStorage.setItem('projectEmailRecipient', (data as any).project_email_recipient);
         }
-        if (data.project_email_webhook) {
-          setWebhookUrl(data.project_email_webhook);
-          localStorage.setItem('projectEmailWebhook', data.project_email_webhook);
+        if ((data as any).project_email_webhook) {
+          setWebhookUrl((data as any).project_email_webhook);
+          localStorage.setItem('projectEmailWebhook', (data as any).project_email_webhook);
         }
       }
     };
@@ -742,16 +745,17 @@ const Projects = () => {
           .update({
             project_email_recipient: recipientEmail,
             project_email_webhook: webhookUrl,
-          })
+            type: 'email',
+          } as any)
           .eq('id', emailConfigId));
       } else {
         const { error: insertError, data } = await supabase
           .from('ai_assistant_config')
-          .insert([{ project_email_recipient: recipientEmail, project_email_webhook: webhookUrl }])
+          .insert([{ project_email_recipient: recipientEmail, project_email_webhook: webhookUrl, type: 'email' } as any])
           .select()
           .single();
         error = insertError;
-        if (!insertError && data) setEmailConfigId(data.id);
+        if (!insertError && data) setEmailConfigId((data as any).id);
       }
       if (error) {
         toast({ title: 'Fout', description: 'Kon instellingen niet opslaan', variant: 'destructive' });
@@ -945,7 +949,35 @@ const Projects = () => {
                   <Label>Afbeeldingen (max 5)</Label>
                   <div className="grid grid-cols-3 gap-2 mt-2">
                     {editingProject?.images?.map((url, i) => (
-                      <img key={i} src={url} alt="bestaande afbeelding" className="h-24 w-full object-cover rounded" />
+                      <div key={i} className="relative">
+                        <img src={url} alt="bestaande afbeelding" className="h-24 w-full object-cover rounded" />
+                        {(isAdmin || editingProject.technicianId === user?.id) && (
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              // Remove image from project in DB
+                              const newImages = editingProject.images.filter((_, idx) => idx !== i);
+                              const { error } = await supabase
+                                .from('projects')
+                                .update({ images: newImages })
+                                .eq('id', editingProject.id);
+                              if (error) {
+                                toast({ title: 'Fout', description: error.message, variant: 'destructive' });
+                              } else {
+                                // Update local state
+                                setEditingProject({ ...editingProject, images: newImages });
+                                // Also update projects list
+                                setProjects(prev => prev.map(p => p.id === editingProject.id ? { ...p, images: newImages } : p));
+                                toast({ title: 'Succes', description: 'Afbeelding verwijderd' });
+                              }
+                            }}
+                            className="absolute top-1 right-1 bg-white rounded-full p-0.5 shadow border border-red-300 text-red-600 hover:bg-red-50"
+                            title="Verwijder afbeelding"
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        )}
+                      </div>
                     ))}
                     {selectedImages.map((file, idx) => (
                       <div key={idx} className="relative">
