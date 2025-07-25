@@ -104,6 +104,7 @@ const ChatHistoryPage: React.FC = () => {
                   <TableRow>
                     <TableHead>Datum</TableHead>
                     <TableHead>Monteur</TableHead>
+                    <TableHead>Verzender</TableHead>
                     <TableHead>Bericht</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -112,6 +113,7 @@ const ChatHistoryPage: React.FC = () => {
                     <TableRow key={msg.id}>
                       <TableCell>{msg.id}</TableCell>
                       <TableCell>{technicians.find(t => t.id === msg.session_id)?.full_name || msg.session_id}</TableCell>
+                      <TableCell>{typeof msg.message === 'object' && 'role' in msg.message ? (msg.message.role === 'assistant' ? 'Bot' : msg.message.role) : ''}</TableCell>
                       <TableCell className="whitespace-pre-wrap">{typeof msg.message === 'object' ? msg.message.content : String(msg.message)}</TableCell>
                     </TableRow>
                   ))}

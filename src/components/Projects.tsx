@@ -348,8 +348,12 @@ const Projects = () => {
 
   const [showEmailDialog, setShowEmailDialog] = useState(false);
   const [emailDate, setEmailDate] = useState(() => format(new Date(), 'yyyy-MM-dd'));
-  const [recipientEmail, setRecipientEmail] = useState(''); // Admin can set this
-  const [webhookUrl, setWebhookUrl] = useState(''); // Admin can set this
+  const [recipientEmail, setRecipientEmail] = useState(() =>
+    localStorage.getItem('projectEmailRecipient') || ''
+  ); // Admin can set this
+  const [webhookUrl, setWebhookUrl] = useState(() =>
+    localStorage.getItem('projectEmailWebhook') || ''
+  ); // Admin can set this
   const [showEmailConfig, setShowEmailConfig] = useState(false);
 
   // Set default month filter to current month on mount
@@ -375,7 +379,9 @@ const Projects = () => {
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (files) {
-      const newImages = Array.from(files).slice(0, 5 - selectedImages.length);
+      const existing = editingProject?.images?.length || 0;
+      const allowed = 5 - (selectedImages.length + existing);
+      const newImages = Array.from(files).slice(0, allowed);
       setSelectedImages(prev => [...prev, ...newImages]);
     }
   };
@@ -452,9 +458,10 @@ const Projects = () => {
     if (projectId && selectedImages.length > 0) {
       const urls = await uploadProjectImages(selectedImages, projectId);
       if (urls.length > 0) {
+        const existing = editingProject?.images || [];
         const { error } = await supabase
           .from('projects')
-          .update({ images: urls })
+          .update({ images: existing.concat(urls) })
           .eq('id', projectId);
         if (error) {
           toast({ title: 'Fout', description: error.message, variant: 'destructive' });
@@ -495,6 +502,7 @@ const Projects = () => {
       technicianId: project.technicianId,
       isPublic: project.isPublic || false
     });
+    setSelectedImages([]);
     setShowAddForm(true);
   };
 
@@ -700,6 +708,13 @@ const Projects = () => {
     }
   };
 
+  const saveEmailConfig = () => {
+    localStorage.setItem('projectEmailRecipient', recipientEmail);
+    localStorage.setItem('projectEmailWebhook', webhookUrl);
+    toast({ title: 'Succes', description: 'Email instellingen opgeslagen' });
+    setShowEmailConfig(false);
+  };
+
   return (
     <div className="p-6 bg-gray-50 min-h-screen">
       <div className="mx-auto max-w-7xl">
@@ -878,6 +893,29 @@ const Projects = () => {
                     onChange={e => setNewProject({ ...newProject, description: e.target.value })}
                   />
                 </div>
+                <div>
+                  <Label>Afbeeldingen (max 5)</Label>
+                  <div className="grid grid-cols-3 gap-2 mt-2">
+                    {editingProject?.images?.map((url, i) => (
+                      <img key={i} src={url} alt="bestaande afbeelding" className="h-24 w-full object-cover rounded" />
+                    ))}
+                    {selectedImages.map((file, idx) => (
+                      <div key={idx} className="relative">
+                        <img src={URL.createObjectURL(file)} alt="preview" className="h-24 w-full object-cover rounded" />
+                        <button type="button" onClick={() => removeImage(idx)} className="absolute top-1 right-1 bg-white rounded-full p-0.5 shadow">
+                          <X className="h-3 w-3" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                  {((editingProject?.images?.length || 0) + selectedImages.length) < 5 && (
+                    <label className="mt-2 inline-flex items-center gap-2 cursor-pointer">
+                      <Camera className="h-5 w-5" />
+                      <span className="text-sm">Voeg afbeeldingen toe</span>
+                      <input type="file" accept="image/*" multiple onChange={handleImageUpload} className="hidden" />
+                    </label>
+                  )}
+                </div>
                 <Button type="submit" className="bg-red-600 hover:bg-red-700 text-white">
                   <Save className="mr-2 h-4 w-4" />
                   {editingProject ? 'Opslaan' : 'Toevoegen'}
@@ -1037,7 +1075,7 @@ const Projects = () => {
               <p className="text-xs text-gray-500">Plak hier de n8n webhook link waar het dagrapport naartoe gestuurd wordt.</p>
             </div>
             <DialogFooter>
-              <Button onClick={() => setShowEmailConfig(false)} className="bg-red-600 text-white">Opslaan</Button>
+              <Button onClick={saveEmailConfig} className="bg-red-600 text-white">Opslaan</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
