@@ -13,6 +13,7 @@ import {
   DialogTrigger,
   DialogContent
 } from '@/components/ui/dialog';
+import type { Database, Tables } from '@/integrations/supabase/types';
 
 interface Message {
   id: string;
@@ -61,10 +62,14 @@ const AIChatbot: React.FC = () => {
 
   const fetchAIConfig = async () => {
     try {
-      const { data, error } = await supabase.from('ai_assistant_config').select('*').single();
+      const { data, error } = await supabase
+        .from('ai_assistant_config')
+        .select('*')
+        .eq('type', 'chatbot')
+        .single();
       if (!error && data) {
-        setAiConfig(data);
-        setWebhookUrl(data.webhook_url || '');
+        setAiConfig(data as AIConfig);
+        setWebhookUrl((data as AIConfig).webhook_url || '');
       }
     } catch {
       toast({ title: 'Error', description: 'Kon AI-configuratie niet ophalen', variant: 'destructive' });
@@ -74,7 +79,7 @@ const AIChatbot: React.FC = () => {
   const saveAIConfig = async () => {
     if (!isAdmin) return;
     setLoadingConfig(true);
-    const configData = { webhook_url: webhookUrl, is_enabled: true, created_by: user?.id };
+    const configData = { webhook_url: webhookUrl, is_enabled: true, created_by: user?.id, type: 'chatbot' };
     let error;
     if (aiConfig) {
       ({ error } = await supabase.from('ai_assistant_config').update(configData).eq('id', aiConfig.id));
