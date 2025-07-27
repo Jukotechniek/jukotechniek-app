@@ -32,12 +32,18 @@ const ChatHistoryPage: React.FC = () => {
     let query = (supabase as any)
       .from('n8n_chat_histories')
       .select('*')
-      .order('id', { ascending: false });
+      .order('created_at', { ascending: false });
 
     if (selectedTech !== 'all') {
       query = query.eq('session_id', selectedTech);
     }
-    // No date filtering since there is no created_at column
+
+    if (selectedDate) {
+      const start = new Date(selectedDate);
+      const end = new Date(selectedDate);
+      end.setDate(end.getDate() + 1);
+      query = query.gte('created_at', start.toISOString()).lt('created_at', end.toISOString());
+    }
 
     const { data, error } = await query;
     if (!error && data) setMessages(data as ChatHistory[]);
@@ -112,9 +118,10 @@ const ChatHistoryPage: React.FC = () => {
                   {messages.map(msg => {
                     const userName = (msg as any).user_name || (msg as any).username || technicians.find(t => t.id === msg.session_id)?.full_name || msg.session_id;
                     const role = typeof msg.message === 'object' && 'role' in msg.message ? (msg.message.role === 'assistant' ? 'Bot' : msg.message.role) : '';
+                    const date = (msg as any).created_at ? new Date((msg as any).created_at).toLocaleString('nl-NL', { dateStyle: 'short', timeStyle: 'short' }) : msg.id;
                     return (
                       <TableRow key={msg.id}>
-                        <TableCell>{msg.id}</TableCell>
+                        <TableCell>{date}</TableCell>
                         <TableCell>{userName}</TableCell>
                         <TableCell>{role}</TableCell>
                         <TableCell className="whitespace-pre-wrap">{typeof msg.message === 'object' ? msg.message.content : String(msg.message)}</TableCell>
