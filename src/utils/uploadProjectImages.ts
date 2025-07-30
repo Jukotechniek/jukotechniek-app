@@ -1,7 +1,7 @@
 import { supabase } from '@/integrations/supabase/client';
 
 export const uploadProjectImages = async (files: File[], projectId: string) => {
-  const urls: string[] = [];
+  const paths: string[] = [];
   for (const file of files) {
     const ext = file.name.split('.').pop();
     const fileName = `${Date.now()}-${Math.random().toString(36).substring(2, 8)}.${ext}`;
@@ -11,10 +11,7 @@ export const uploadProjectImages = async (files: File[], projectId: string) => {
       console.error('Error uploading image', error);
       continue;
     }
-    const { data } = supabase.storage.from('project-images').getPublicUrl(filePath);
-    if (data?.publicUrl) {
-      urls.push(data.publicUrl);
-    }
+    paths.push(filePath);
   }
-  return urls;
+  return paths;
 };

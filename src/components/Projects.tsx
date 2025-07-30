@@ -82,7 +82,7 @@ const Projects = () => {
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [signedImageUrls, setSignedImageUrls] = useState<string[]>([]);
-  const [signedPreviewUrls, setSignedPreviewUrls] = useState<{ [projectId: string]: string[] }>({});
+  const [editingSignedUrls, setEditingSignedUrls] = useState<string[]>([]);
 
   // Fullscreen galerij state (welke index van signedImageUrls)
   const [fullscreenImageIndex, setFullscreenImageIndex] = useState<number | null>(null);
@@ -200,19 +200,6 @@ const Projects = () => {
   }, [fullscreenImageIndex, signedImageUrls.length]);
 
   // --- DATA ophalen en prepareren ---
-  useEffect(() => {
-    async function fetchAllSignedPreviews() {
-      const allUrls: { [projectId: string]: string[] } = {};
-      for (let project of projects) {
-        if (project.images && project.images.length > 0) {
-          const urls = await getSignedUrls(project.images);
-          allUrls[project.id] = urls;
-        }
-      }
-      setSignedPreviewUrls(allUrls);
-    }
-    if (projects.length > 0) fetchAllSignedPreviews();
-  }, [projects]);
 
   useEffect(() => {
     if (detailsOpen && selectedProject && selectedProject.images && selectedProject.images.length > 0) {
@@ -221,6 +208,14 @@ const Projects = () => {
       setSignedImageUrls([]);
     }
   }, [selectedProject, detailsOpen]);
+
+  useEffect(() => {
+    if (editingProject && editingProject.images && editingProject.images.length > 0) {
+      getSignedUrls(editingProject.images).then(urls => setEditingSignedUrls(urls));
+    } else {
+      setEditingSignedUrls([]);
+    }
+  }, [editingProject]);
 
   const fetchData = async () => {
     setLoading(true);
@@ -672,18 +667,6 @@ const Projects = () => {
                 </Button>
               </div>
             )}
-            {project.images?.length > 0 && signedPreviewUrls[project.id]?.length > 0 && (
-              <div className="mt-2 grid grid-cols-2 gap-2">
-                {signedPreviewUrls[project.id].map((url, idx) => (
-                  <img
-                    key={idx}
-                    src={url}
-                    alt={`Projectafbeelding ${idx + 1}`}
-                    className="h-24 w-full object-cover rounded"
-                  />
-                ))}
-              </div>
-            )}
           </CardContent>
         </Card>
       </TooltipTrigger>
@@ -949,7 +932,7 @@ const Projects = () => {
                 <div>
                   <Label>Afbeeldingen (max 5)</Label>
                   <div className="grid grid-cols-3 gap-2 mt-2">
-                    {editingProject?.images?.map((url, i) => (
+                    {editingSignedUrls.map((url, i) => (
                       <div key={i} className="relative">
                         <img src={url} alt="bestaande afbeelding" className="h-24 w-full object-cover rounded" />
                         {(isAdmin || editingProject.technicianId === user?.id) && (
