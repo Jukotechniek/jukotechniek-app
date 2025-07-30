@@ -232,6 +232,7 @@ const Projects = () => {
       const { data: profilesData } = await supabase
         .from('profiles')
         .select('id, full_name, customer')
+        .eq('role', 'technician')
         .order('full_name', { ascending: true });
       const { data: projectData } = await supabase
         .from('projects')
