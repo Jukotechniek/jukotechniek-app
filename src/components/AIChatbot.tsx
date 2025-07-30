@@ -47,6 +47,24 @@ const AIChatbot: React.FC = () => {
   const [webhookUrl, setWebhookUrl] = useState('');
   const [loadingConfig, setLoadingConfig] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
+  const [sessionId, setSessionId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    // Verwijder altijd de oude session_id bij user wissel
+    sessionStorage.removeItem('jukobot_session_id');
+    let id = sessionStorage.getItem('jukobot_session_id');
+    if (!id) {
+      const counterKey = `jukobot_session_counter_${user.id}`;
+      let counter = parseInt(localStorage.getItem(counterKey) || '0', 10);
+      counter += 1;
+      localStorage.setItem(counterKey, counter.toString());
+      id = `${user.id}-${counter}`;
+      sessionStorage.setItem('jukobot_session_id', id);
+    }
+    setSessionId(id);
+    console.log('DEBUG user.id:', user.id, 'session_id:', id);
+  }, [user?.id]);
 
   const isAdmin = user?.role === 'admin';
 
@@ -97,19 +115,21 @@ const AIChatbot: React.FC = () => {
   };
 
   const sendMessage = async () => {
-    if (!inputMessage.trim()) return;
+    if (!inputMessage.trim() || !sessionId) return;
     if (!aiConfig?.webhook_url) {
       toast({ title: 'Error', description: 'AI niet (goed) geconfigureerd', variant: 'destructive' });
       return;
     }
 
-    const userMsg: Message = {
-      id: Date.now().toString(),
+    // userMsg zonder id voor de webhook
+    const userMsg = {
       text: inputMessage.trim(),
       isUser: true,
       timestamp: new Date().toISOString(),
+      session_id: sessionId,
     };
-    setMessages((prev) => [...prev, userMsg]);
+    // Voor de lokale state wel een id toevoegen
+    setMessages((prev) => [...prev, { ...userMsg, id: Date.now().toString() }]);
     setInputMessage('');
     setIsLoading(true);
 
@@ -299,11 +319,11 @@ const AIChatbot: React.FC = () => {
               onChange={(e) => setInputMessage(e.target.value)}
               onKeyPress={handleKeyPress}
               placeholder="Typ je bericht..."
-              disabled={isLoading}
+              disabled={isLoading || !sessionId}
               className="flex-1 focus:ring-red-500 focus:border-red-500 text-base"
               autoComplete="off"
             />
-            <Button type="submit" disabled={isLoading || !inputMessage.trim()} className="bg-red-600 hover:bg-red-700 text-white px-3">
+            <Button type="submit" disabled={isLoading || !inputMessage.trim() || !sessionId} className="bg-red-600 hover:bg-red-700 text-white px-3">
               <Send className="h-4 w-4" />
             </Button>
           </form>
