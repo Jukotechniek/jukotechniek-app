@@ -51,55 +51,49 @@ const AIChatbot: React.FC = () => {
 
   useEffect(() => {
     if (!user?.id) return;
-    // Verwijder altijd de oude session_id bij user wissel
-    sessionStorage.removeItem('jukobot_session_id');
-    let id = sessionStorage.getItem('jukobot_session_id');
-    if (!id) {
-      // Haal de hoogste session counter op uit de n8n_chat_histories tabel
-      const getNextSessionId = async () => {
-        try {
-          // Zoek naar bestaande session IDs voor deze gebruiker
-          const { data: existingSessions } = await supabase
-            .from('n8n_chat_histories')
-            .select('session_id')
-            .like('session_id', `${user.id}-%`);
+    
+    // Haal altijd de hoogste session counter op uit de database
+    const getNextSessionId = async () => {
+      try {
+        // Zoek naar bestaande session IDs voor deze gebruiker
+        const { data: existingSessions } = await supabase
+          .from('n8n_chat_histories')
+          .select('session_id')
+          .like('session_id', `${user.id}-%`);
 
-          let nextCounter = 1;
-          if (existingSessions && existingSessions.length > 0) {
-            // Haal alle unieke session IDs op en vind de hoogste counter
-            const sessionCounters = existingSessions
-              .map(session => {
-                const match = session.session_id?.match(/-(\d+)$/);
-                return match ? parseInt(match[1], 10) : 0;
-              })
-              .filter(counter => counter > 0);
-            
-            if (sessionCounters.length > 0) {
-              nextCounter = Math.max(...sessionCounters) + 1;
-            }
+        let nextCounter = 1;
+        if (existingSessions && existingSessions.length > 0) {
+          // Haal alle unieke session IDs op en vind de hoogste counter
+          const sessionCounters = existingSessions
+            .map(session => {
+              const match = session.session_id?.match(/-(\d+)$/);
+              return match ? parseInt(match[1], 10) : 0;
+            })
+            .filter(counter => counter > 0);
+          
+          if (sessionCounters.length > 0) {
+            nextCounter = Math.max(...sessionCounters) + 1;
           }
-
-          id = `${user.id}-${nextCounter}`;
-          sessionStorage.setItem('jukobot_session_id', id);
-          setSessionId(id);
-          console.log('DEBUG user.id:', user.id, 'session_id:', id);
-        } catch (error) {
-          console.error('Error getting session ID:', error);
-          // Fallback naar localStorage als database niet werkt
-          const counterKey = `jukobot_session_counter_${user.id}`;
-          let counter = parseInt(localStorage.getItem(counterKey) || '0', 10);
-          counter += 1;
-          localStorage.setItem(counterKey, counter.toString());
-          id = `${user.id}-${counter}`;
-          sessionStorage.setItem('jukobot_session_id', id);
-          setSessionId(id);
         }
-      };
 
-      getNextSessionId();
-    } else {
-      setSessionId(id);
-    }
+        const id = `${user.id}-${nextCounter}`;
+        sessionStorage.setItem('jukobot_session_id', id);
+        setSessionId(id);
+        console.log('DEBUG user.id:', user.id, 'session_id:', id);
+      } catch (error) {
+        console.error('Error getting session ID:', error);
+        // Fallback naar localStorage als database niet werkt
+        const counterKey = `jukobot_session_counter_${user.id}`;
+        let counter = parseInt(localStorage.getItem(counterKey) || '0', 10);
+        counter += 1;
+        localStorage.setItem(counterKey, counter.toString());
+        const id = `${user.id}-${counter}`;
+        sessionStorage.setItem('jukobot_session_id', id);
+        setSessionId(id);
+      }
+    };
+
+    getNextSessionId();
   }, [user?.id]);
 
   const isAdmin = user?.role === 'admin';
