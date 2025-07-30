@@ -71,7 +71,10 @@ const WorkSchedulePage: React.FC = () => {
 
   // Fetch technicians & assign colors
   async function fetchTechnicians() {
-    const { data } = await supabase.from('profiles').select('id, full_name');
+    const { data } = await supabase
+      .from('profiles')
+      .select('id, full_name')
+      .eq('role', 'technician');
     const list = data || [];
 
     // 1) Raw: alle technici uit de DB, of alleen de ingelogde tech als geen planner
