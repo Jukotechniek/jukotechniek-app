@@ -603,6 +603,9 @@ const Projects = () => {
                 </CardTitle>
                 {isAdmin && <p className="text-sm text-gray-600">{project.technicianName}</p>}
                 <p className="text-sm text-gray-600">{project.customerName}</p>
+                {project.description && (
+                  <p className="text-sm text-gray-700 mt-1 line-clamp-2">{project.description}</p>
+                )}
                 <div className="flex items-center mt-2">
                   {getStatusIcon(project.status)}
                   <span className="ml-1 text-sm font-medium">{getStatusText(project.status)}</span>
