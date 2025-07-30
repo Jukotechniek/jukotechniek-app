@@ -58,12 +58,18 @@ const AppContent: React.FC = () => {
     let listener: (() => void) | null = null;
 
     if (isAuthenticated) {
-      listener = () => {
-        if (!document.fullscreenElement && document.documentElement.requestFullscreen) {
-          document.documentElement.requestFullscreen().catch(() => {});
-        }
-      };
-      document.addEventListener('click', listener, { once: true });
+      // Check of de app als PWA is geïnstalleerd (werkt voor zowel Android als iOS)
+      const isStandalone = window.matchMedia('(display-mode: standalone)').matches || 
+                          (window.navigator as any).standalone === true;
+      
+      if (isStandalone) {
+        listener = () => {
+          if (!document.fullscreenElement && document.documentElement.requestFullscreen) {
+            document.documentElement.requestFullscreen().catch(() => {});
+          }
+        };
+        document.addEventListener('click', listener, { once: true });
+      }
     } else {
       // Bij uitloggen: exit fullscreen als het aan staat
       if (document.fullscreenElement && document.exitFullscreen) {
