@@ -7,7 +7,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { ChatHistory } from '@/types/chatHistory';
 
-interface Technician { id: string; full_name: string; }
+interface Technician { id: string; full_name: string; role: string; }
 
 const ChatHistoryPage: React.FC = () => {
   const { user } = useAuth();
@@ -20,8 +20,8 @@ const ChatHistoryPage: React.FC = () => {
   const fetchTechnicians = async () => {
     const { data, error } = await supabase
       .from('profiles')
-      .select('id, full_name')
-      .eq('role', 'technician')
+      .select('id, full_name, role')
+      .in('role', ['technician', 'opdrachtgever', 'admin'])
       .order('full_name');
     if (!error && data) setTechnicians(data);
   };
@@ -31,11 +31,12 @@ const ChatHistoryPage: React.FC = () => {
     // TODO: Regenerate Supabase types so n8n_chat_histories is included in Database
     let query = (supabase as any)
       .from('n8n_chat_histories')
-      .select('*')
+      .select('id, session_id, message, created_at')
       .order('created_at', { ascending: false });
 
     if (selectedTech !== 'all') {
-      query = query.eq('session_id', selectedTech);
+      // session_id format is "userId-sessionCounter", so we need to filter by userId prefix
+      query = query.like('session_id', `${selectedTech}-%`);
     }
 
     if (selectedDate) {
@@ -46,7 +47,12 @@ const ChatHistoryPage: React.FC = () => {
     }
 
     const { data, error } = await query;
-    if (!error && data) setMessages(data as ChatHistory[]);
+    if (!error && data) {
+      console.log('Chat messages data:', data); // Debug log
+      setMessages(data as ChatHistory[]);
+    } else {
+      console.error('Error fetching messages:', error);
+    }
     setLoading(false);
   };
 
@@ -74,12 +80,12 @@ const ChatHistoryPage: React.FC = () => {
       <div className="max-w-7xl mx-auto">
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-gray-900 mb-2">Chatgeschiedenis</h1>
-          <p className="text-gray-600">Overzicht van verzonden berichten naar de AI chatbot</p>
+          <p className="text-gray-600">Overzicht van verzonden berichten naar de AI chatbot van alle gebruikers</p>
         </div>
 
         <div className="flex flex-col md:flex-row gap-4 mb-4">
           <TechnicianFilter
-            technicians={technicians.map(t => ({ id: t.id, name: t.full_name }))}
+            technicians={technicians.map(t => ({ id: t.id, name: `${t.full_name} (${t.role === 'technician' ? 'Monteur' : t.role === 'opdrachtgever' ? 'Opdrachtgever' : 'Admin'})` }))}
             selectedTechnician={selectedTech}
             onTechnicianChange={setSelectedTech}
           />
@@ -116,12 +122,35 @@ const ChatHistoryPage: React.FC = () => {
                 </TableHeader>
                 <TableBody>
                   {messages.map(msg => {
-                    const userName = (msg as any).user_name || (msg as any).username || technicians.find(t => t.id === msg.session_id)?.full_name || msg.session_id;
+                    // Extract user ID from session_id (format: "userId-sessionCounter")
+                    // Remove the session counter part (everything after the last dash)
+                    const lastDashIndex = msg.session_id.lastIndexOf('-');
+                    const userId = lastDashIndex !== -1 ? msg.session_id.substring(0, lastDashIndex) : msg.session_id;
+                    
+                    const user = technicians.find(t => t.id === userId);
+                    const userName = user ? `${user.full_name} (${user.role === 'technician' ? 'Monteur' : user.role === 'opdrachtgever' ? 'Opdrachtgever' : 'Admin'})` : userId;
                     const role = typeof msg.message === 'object' && 'role' in msg.message ? (msg.message.role === 'assistant' ? 'Bot' : msg.message.role) : '';
-                    const date = (msg as any).created_at ? new Date((msg as any).created_at).toLocaleString('nl-NL', { dateStyle: 'short', timeStyle: 'short' }) : msg.id;
+                    
+                    // Fix date display - use created_at if available, otherwise try to format the id as a date
+                    let dateDisplay = '';
+                    if ((msg as any).created_at) {
+                      dateDisplay = new Date((msg as any).created_at).toLocaleString('nl-NL', { 
+                        dateStyle: 'short', 
+                        timeStyle: 'short' 
+                      });
+                    } else if (typeof msg.id === 'number' && msg.id > 1000000000000) {
+                      // If id is a timestamp, convert it to a date
+                      dateDisplay = new Date(msg.id).toLocaleString('nl-NL', { 
+                        dateStyle: 'short', 
+                        timeStyle: 'short' 
+                      });
+                    } else {
+                      dateDisplay = `ID: ${msg.id}`;
+                    }
+                    
                     return (
                       <TableRow key={msg.id}>
-                        <TableCell>{date}</TableCell>
+                        <TableCell>{dateDisplay}</TableCell>
                         <TableCell>{userName}</TableCell>
                         <TableCell>{role}</TableCell>
                         <TableCell className="whitespace-pre-wrap">{typeof msg.message === 'object' ? msg.message.content : String(msg.message)}</TableCell>

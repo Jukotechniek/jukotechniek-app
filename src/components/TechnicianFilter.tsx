@@ -17,10 +17,10 @@ const TechnicianFilter: React.FC<TechnicianFilterProps> = ({
     <div className="mb-6">
       <Select value={selectedTechnician} onValueChange={onTechnicianChange}>
         <SelectTrigger className="w-64">
-          <SelectValue placeholder="Filter op monteur" />
+          <SelectValue placeholder="Filter op gebruiker" />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value="all">Alle monteurs</SelectItem>
+          <SelectItem value="all">Alle gebruikers</SelectItem>
           {technicians.map((tech) => (
             <SelectItem key={tech.id} value={tech.id}>
               {tech.name}
