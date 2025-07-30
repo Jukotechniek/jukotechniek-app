@@ -603,11 +603,11 @@ const Projects = () => {
                   )}
                 </CardTitle>
                 {(isAdminOrOpdrachtgever && project.technicianId && project.technicianName) && (
-                  <p className="text-sm text-gray-600">{project.technicianName}</p>
+                  <p className="text-sm text-gray-600">👤 {project.technicianName}</p>
                 )}
                 <p className="text-sm text-gray-600">{project.customerName}</p>
                 {project.description && (
-                  <p className="text-sm text-gray-700 mt-1 line-clamp-2">{project.description}</p>
+                  <p className="text-sm text-black mt-1 line-clamp-2">{project.description}</p>
                 )}
               </div>
               <div className="text-right">
