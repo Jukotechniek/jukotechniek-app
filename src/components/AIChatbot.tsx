@@ -93,6 +93,7 @@ const AIChatbot: React.FC = () => {
       }
     };
 
+    // Genereer altijd een nieuwe session ID wanneer je naar de chatbot komt
     getNextSessionId();
   }, [user?.id]);
 
