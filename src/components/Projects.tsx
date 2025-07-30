@@ -433,9 +433,10 @@ const Projects = () => {
     }
 
     // Map 'all' to null for DB
-    const technicianIdToSave = isAdmin
-      ? (newProject.technicianId === 'all' ? null : newProject.technicianId)
-      : user?.id;
+    const technicianIdToSave = 
+    (isAdmin || isOpdrachtgever)
+    ? (newProject.technicianId === 'all' ? null : newProject.technicianId)
+    : user?.id;
 
     let projectId: string | null = null;
 
@@ -508,8 +509,8 @@ const Projects = () => {
   };
 
   const handleEdit = (project: Project) => {
-    // Allow edit if admin, assigned mechanic, or 'Alle monteurs' (null)
-    if (!isAdmin && project.technicianId !== user?.id && project.technicianId !== null) {
+    // Allow edit if admin, opdrachtgever, assigned mechanic, or 'Alle monteurs' (null)
+    if (!isAdminOrOpdrachtgever && project.technicianId !== user?.id && project.technicianId !== null) {
       toast({ title: "Fout", description: "Je kunt alleen je eigen projecten of 'Alle monteurs' projecten bewerken", variant: "destructive" });
       return;
     }
@@ -529,7 +530,7 @@ const Projects = () => {
   };
 
   const handleDelete = async (projectId: string, project: Project) => {
-    if (!isAdmin && project.technicianId !== user?.id) {
+    if (!isAdminOrOpdrachtgever && project.technicianId !== user?.id) {
       toast({ title: "Fout", description: "Je kunt alleen je eigen projecten verwijderen", variant: "destructive" });
       return;
     }
@@ -576,7 +577,7 @@ const Projects = () => {
   };
 
   const canStatusChange = (project: Project) =>
-    isAdmin || project.technicianId === user?.id || project.technicianId === null;
+    isAdminOrOpdrachtgever || project.technicianId === user?.id || project.technicianId === null;
 
   // --- Details modal open/close ---
   const openDetails = (project: Project) => {
@@ -601,15 +602,13 @@ const Projects = () => {
                     <span className="ml-2 px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 text-xs font-semibold border border-blue-300">Alle monteurs</span>
                   )}
                 </CardTitle>
-                {isAdmin && <p className="text-sm text-gray-600">{project.technicianName}</p>}
+                {(isAdminOrOpdrachtgever && project.technicianId && project.technicianName) && (
+                  <p className="text-sm text-gray-600">{project.technicianName}</p>
+                )}
                 <p className="text-sm text-gray-600">{project.customerName}</p>
                 {project.description && (
                   <p className="text-sm text-gray-700 mt-1 line-clamp-2">{project.description}</p>
                 )}
-                <div className="flex items-center mt-2">
-                  {getStatusIcon(project.status)}
-                  <span className="ml-1 text-sm font-medium">{getStatusText(project.status)}</span>
-                </div>
               </div>
               <div className="text-right">
                 <p className="text-sm text-gray-600">
@@ -617,7 +616,7 @@ const Projects = () => {
                 </p>
                 <p className="text-lg font-semibold text-red-600">{project.hoursSpent ? project.hoursSpent + 'u' : ''}</p>
                 <div className="flex space-x-1 mt-2">
-                  {(isAdmin || project.technicianId === user?.id || project.technicianId === null) && (
+                  {(isAdminOrOpdrachtgever || project.technicianId === user?.id || project.technicianId === null) && (
                     <Button
                       size="sm"
                       variant="outline"
@@ -627,7 +626,7 @@ const Projects = () => {
                       <Edit2 className="h-4 w-4" />
                     </Button>
                   )}
-                  {(isAdmin || project.technicianId === user?.id) && (
+                  {(isAdminOrOpdrachtgever || project.technicianId === user?.id) && (
                     <Button
                         size="sm"
                         variant="outline"
@@ -642,34 +641,36 @@ const Projects = () => {
             </div>
           </CardHeader>
           <CardContent>
-            {canStatusChange(project) && (
-              <div className="flex flex-wrap gap-2 mb-2">
-                <Button
-                  size="sm"
-                  onClick={e => { e.stopPropagation(); handleStatusChange(project, 'in-progress'); }}
-                  variant={project.status === 'in-progress' ? 'default' : 'outline'}
-                  className="text-xs"
-                >
-                  <Clock className="h-3 w-3 mr-1" /> In Behandeling
-                </Button>
-                <Button
-                  size="sm"
-                  onClick={e => { e.stopPropagation(); handleStatusChange(project, 'needs-review'); }}
-                  variant={project.status === 'needs-review' ? 'default' : 'outline'}
-                  className="text-xs"
-                >
-                  <AlertCircle className="h-3 w-3 mr-1" /> Controle Nodig
-                </Button>
-                <Button
-                  size="sm"
-                  onClick={e => { e.stopPropagation(); handleStatusChange(project, 'completed'); }}
-                  variant={project.status === 'completed' ? 'default' : 'outline'}
-                  className="text-xs"
-                >
-                  <CheckCircle className="h-3 w-3 mr-1" /> Voltooid
-                </Button>
-              </div>
-            )}
+            {/* Status change buttons always at the bottom of the card */}
+            <div className="flex flex-wrap gap-2 mt-4">
+              <Button
+                size="sm"
+                onClick={e => { e.stopPropagation(); handleStatusChange(project, 'in-progress'); }}
+                variant={project.status === 'in-progress' ? 'default' : 'outline'}
+                className="text-xs"
+                disabled={!canStatusChange(project)}
+              >
+                <Clock className="h-3 w-3 mr-1" /> In Behandeling
+              </Button>
+              <Button
+                size="sm"
+                onClick={e => { e.stopPropagation(); handleStatusChange(project, 'needs-review'); }}
+                variant={project.status === 'needs-review' ? 'default' : 'outline'}
+                className="text-xs"
+                disabled={!canStatusChange(project)}
+              >
+                <AlertCircle className="h-3 w-3 mr-1" /> Controle Nodig
+              </Button>
+              <Button
+                size="sm"
+                onClick={e => { e.stopPropagation(); handleStatusChange(project, 'completed'); }}
+                variant={project.status === 'completed' ? 'default' : 'outline'}
+                className="text-xs"
+                disabled={!canStatusChange(project)}
+              >
+                <CheckCircle className="h-3 w-3 mr-1" /> Voltooid
+              </Button>
+            </div>
           </CardContent>
         </Card>
       </TooltipTrigger>
@@ -1052,7 +1053,7 @@ const Projects = () => {
                 <div className="col-span-2 text-gray-400">Geen afbeeldingen toegevoegd</div>
               )}
             </div>
-            {(isAdmin || selectedProject.technicianId === user?.id) && (
+            {(isAdminOrOpdrachtgever || selectedProject.technicianId === user?.id) && (
               <div className="mt-4 text-right">
                 <Button
                   size="sm"
@@ -1188,10 +1189,6 @@ const Projects = () => {
             <div>
               <Label>Ontvanger</Label>
               <p className="text-sm text-gray-700">{recipientEmail || 'Geen email ingesteld'}</p>
-            </div>
-            <div>
-              <Label>n8n Webhook</Label>
-              <p className="text-xs text-gray-500 break-all">{webhookUrl || 'Geen webhook ingesteld'}</p>
             </div>
           </div>
           <DialogFooter>
