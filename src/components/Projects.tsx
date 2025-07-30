@@ -75,7 +75,7 @@ const Projects = () => {
   const [collapsed, setCollapsed] = useState<Record<Project['status'], boolean>>({
     'in-progress': false,
     'needs-review': false,
-    'completed': false
+    'completed': true // Set completed to collapsed by default
   });
 
   // Modal state voor details
@@ -339,11 +339,11 @@ const Projects = () => {
 
   // Set all status sections collapsed by default, only open if there are projects in that status
   useEffect(() => {
-    setCollapsed({
+    setCollapsed(prev => ({
       'in-progress': projectsByStatus['in-progress'].length > 0 ? false : true,
       'needs-review': projectsByStatus['needs-review'].length > 0 ? false : true,
-      'completed': projectsByStatus['completed'].length > 0 ? false : true,
-    });
+      'completed': true // Always collapsed by default, even if there are projects
+    }));
     // eslint-disable-next-line
   }, [projectsByStatus['in-progress'].length, projectsByStatus['needs-review'].length, projectsByStatus['completed'].length]);
 
