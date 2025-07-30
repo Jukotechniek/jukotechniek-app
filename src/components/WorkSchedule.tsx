@@ -74,7 +74,7 @@ const WorkSchedulePage: React.FC = () => {
     const { data } = await supabase
       .from('profiles')
       .select('id, full_name')
-      .eq('role', 'technician');
+      .in('role', ['technician', 'admin']);
     const list = data || [];
 
     // 1) Raw: alle technici uit de DB, of alleen de ingelogde tech als geen planner
