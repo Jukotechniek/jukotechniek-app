@@ -1,10 +1,19 @@
 import React from 'react';
-import { Checkbox } from '@/components/ui/checkbox';
+import { Button } from '@/components/ui/button';
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuCheckboxItem,
+} from '@/components/ui/dropdown-menu';
 
 interface MultiTechnicianFilterProps {
   technicians: Array<{ id: string; name: string }>;
-  selected: string[];
-  onChange: (ids: string[]) => void;
+  /**
+   * Selected technician ids. Use `null` for "all" and an empty array for "none".
+   */
+  selected: string[] | null;
+  onChange: (ids: string[] | null) => void;
 }
 
 const MultiTechnicianFilter: React.FC<MultiTechnicianFilterProps> = ({
@@ -12,41 +21,53 @@ const MultiTechnicianFilter: React.FC<MultiTechnicianFilterProps> = ({
   selected,
   onChange,
 }) => {
+  const allSelected = selected === null;
+
   const toggle = (id: string, checked: boolean) => {
-    if (checked) {
-      onChange([...selected, id]);
+    if (allSelected) {
+      const ids = technicians.map(t => t.id);
+      const newIds = checked ? ids : ids.filter(t => t !== id);
+      onChange(newIds);
     } else {
-      onChange(selected.filter(t => t !== id));
+      const current = selected || [];
+      const newIds = checked ? [...current, id] : current.filter(t => t !== id);
+      onChange(newIds);
     }
   };
 
-  const allSelected = selected.length === 0;
-
-  const toggleAll = () => {
-    if (allSelected) {
-      onChange(technicians.map(t => t.id));
+  const toggleAll = (checked: boolean) => {
+    if (checked) {
+      onChange(null);
     } else {
       onChange([]);
     }
   };
 
   return (
-    <div className="flex flex-col space-y-1">
-      <label className="flex items-center gap-2 cursor-pointer">
-        <Checkbox checked={allSelected} onCheckedChange={toggleAll} id="tech-all" />
-        <span>Alle monteurs</span>
-      </label>
-      {technicians.map(t => (
-        <label key={t.id} className="flex items-center gap-2 cursor-pointer">
-          <Checkbox
-            checked={allSelected ? true : selected.includes(t.id)}
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="outline" size="sm">
+          Monteurs
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent className="p-1 space-y-1">
+        <DropdownMenuCheckboxItem
+          checked={allSelected}
+          onCheckedChange={toggleAll}
+        >
+          Alle monteurs
+        </DropdownMenuCheckboxItem>
+        {technicians.map(t => (
+          <DropdownMenuCheckboxItem
+            key={t.id}
+            checked={allSelected ? true : (selected || []).includes(t.id)}
             onCheckedChange={checked => toggle(t.id, checked as boolean)}
-            id={`tech-${t.id}`}
-          />
-          <span>{t.name}</span>
-        </label>
-      ))}
-    </div>
+          >
+            {t.name}
+          </DropdownMenuCheckboxItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 };
 
