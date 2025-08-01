@@ -195,6 +195,18 @@ const HourComparisonComponent: React.FC = () => {
     // eslint-disable-next-line
   }, []);
 
+  // Refetch data when returning to the tab to avoid blank screen after
+  // the app was in the background
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (!document.hidden && comparisons.length === 0 && !loading) {
+        fetchComparisons();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => document.removeEventListener('visibilitychange', handleVisibility);
+  }, [comparisons.length, loading]);
+
   const handleRefresh = () => fetchComparisons();
 
   const handleVerify = async (comp: HourComparison) => {
@@ -216,7 +228,13 @@ const HourComparisonComponent: React.FC = () => {
           title: "Success",
           description: `Webhook uren geverifieerd voor ${comp.technicianName}`,
         });
-        fetchComparisons();
+        setAllComparisons(prev =>
+          prev.map(c =>
+            c.technicianId === comp.technicianId && c.date === comp.date
+              ? { ...c, verified: true }
+              : c
+          )
+        );
       } catch (err) {
         console.error('Failed to verify webhook hours:', err);
         toast({ title: "Error", description: `Failed to verify webhook hours: ${err?.message || err}`, variant: "destructive" });
@@ -237,7 +255,13 @@ const HourComparisonComponent: React.FC = () => {
           title: "Success",
           description: `Handmatige uren geverifieerd voor ${comp.technicianName}`,
         });
-        fetchComparisons();
+        setAllComparisons(prev =>
+          prev.map(c =>
+            c.technicianId === comp.technicianId && c.date === comp.date
+              ? { ...c, verified: true }
+              : c
+          )
+        );
       } catch (err) {
         console.error('Failed to verify manual hours:', err);
         toast({ title: "Error", description: `Failed to verify manual hours: ${err?.message || err}`, variant: "destructive" });
@@ -261,7 +285,13 @@ const HourComparisonComponent: React.FC = () => {
           title: "Success",
           description: `Webhook uren onverifieerd voor ${comp.technicianName}`,
         });
-        fetchComparisons();
+        setAllComparisons(prev =>
+          prev.map(c =>
+            c.technicianId === comp.technicianId && c.date === comp.date
+              ? { ...c, verified: false }
+              : c
+          )
+        );
       } catch (err) {
         console.error('Failed to unverify webhook hours:', err);
         toast({ title: "Error", description: `Failed to unverify webhook hours: ${err?.message || err}`, variant: "destructive" });
@@ -279,7 +309,13 @@ const HourComparisonComponent: React.FC = () => {
           title: "Success",
           description: `Handmatige uren onverifieerd voor ${comp.technicianName}`,
         });
-        fetchComparisons();
+        setAllComparisons(prev =>
+          prev.map(c =>
+            c.technicianId === comp.technicianId && c.date === comp.date
+              ? { ...c, verified: false }
+              : c
+          )
+        );
       } catch (err) {
         console.error('Failed to unverify manual hours:', err);
         toast({ title: "Error", description: `Failed to unverify manual hours: ${err?.message || err}`, variant: "destructive" });
