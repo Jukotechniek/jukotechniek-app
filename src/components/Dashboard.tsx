@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -21,7 +21,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { TechnicianSummary } from '@/types/workHours';
 import { formatDutchDate } from '@/utils/overtimeCalculations';
-import TechnicianFilter from './TechnicianFilter';
+import MultiTechnicianFilter from './MultiTechnicianFilter';
 import type { WorkEntry } from '@/types/workHours';
 
 const COLORS = ['#2563eb', '#dc2626', '#991b1b', '#fbbf24', '#8b5cf6', '#059669'];
@@ -71,13 +71,29 @@ const Dashboard = () => {
   const [technicianData, setTechnicianData] = useState([]);
   const [weeklyData, setWeeklyData] = useState([]);
   const [weeklyAdminData, setWeeklyAdminData] = useState([]);
-  const [selectedTechnician, setSelectedTechnician] = useState('all');
+  const [selectedTechnicians, setSelectedTechnicians] = useState<string[]>([]);
+  const initTechRef = useRef(false);
   const [loading, setLoading] = useState(true);
 
   const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7));
   const [monthlyHours, setMonthlyHours] = useState(0);
   const [selectedTechnicianDetails, setSelectedTechnicianDetails] = useState(null);
   const [detailedHours, setDetailedHours] = useState([]);
+
+  const allTechnicians = useMemo(() => {
+    const map = new Map<string, string>();
+    rawWorkHours.forEach((e: any) => {
+      map.set(e.technician_id, e.profiles?.full_name || 'Unknown');
+    });
+    return Array.from(map.entries()).map(([id, name]) => ({ id, name }));
+  }, [rawWorkHours]);
+
+  useEffect(() => {
+    if (isAdmin && allTechnicians.length && !initTechRef.current) {
+      setSelectedTechnicians(allTechnicians.map(t => t.id));
+      initTechRef.current = true;
+    }
+  }, [isAdmin, allTechnicians]);
 
   const [projectCounts, setProjectCounts] = useState({
     completed: 0,
@@ -121,8 +137,10 @@ const Dashboard = () => {
     if (!rawWorkHours.length) return;
     let filtered = rawWorkHours;
     if (isAdmin) {
-      if (selectedTechnician !== 'all') {
-        filtered = filtered.filter(e => e.technician_id === selectedTechnician);
+      if (selectedTechnicians.length) {
+        filtered = filtered.filter(e => selectedTechnicians.includes(e.technician_id));
+      } else {
+        filtered = [];
       }
     } else {
       filtered = filtered.filter(e => e.technician_id === user?.id);
@@ -139,7 +157,13 @@ const Dashboard = () => {
       setMonthlyHours(uren);
     }
     // Process data once and store in state
-    const processedData = processTechnicianData(filtered, rawRates, travelRates, rawWorkHours);
+    const processedData = processTechnicianData(
+      filtered,
+      rawRates,
+      travelRates,
+      rawWorkHours,
+      selectedTechnicians
+    );
     setTechnicianData(processedData);
     setWeeklyData(processWeeklyData(filtered, isAdmin ? null : user?.id));
     if (isAdmin)
@@ -148,7 +172,7 @@ const Dashboard = () => {
           rawWorkHours.filter(e => Boolean(e.manual_verified))
         )
       );
-  }, [rawWorkHours, rawRates, travelRates, selectedTechnician, selectedMonth, isAdmin, user?.id]);
+  }, [rawWorkHours, rawRates, travelRates, selectedTechnicians, selectedMonth, isAdmin, user?.id]);
 
   const fetchDashboardData = async () => {
     setLoading(true);
@@ -358,11 +382,19 @@ const Dashboard = () => {
     setSelectedTechnicianDetails(technician);
   };
 
-  const processTechnicianData = (workHours, rates, travelRates, allRawWorkHours) => {
+  const processTechnicianData = (
+    workHours,
+    rates,
+    travelRates,
+    allRawWorkHours,
+    selectedTechs: string[]
+  ) => {
+    if (selectedTechs.length === 0) {
+      return [];
+    }
     // Eerst filteren we de entries op basis van de geselecteerde filters
     const filteredEntries = (allRawWorkHours || []).filter(entry => {
-      // Als er een geselecteerde monteur is, filter daarop
-      if (selectedTechnician !== 'all' && entry.technician_id !== selectedTechnician) {
+      if (!selectedTechs.includes(entry.technician_id)) {
         return false;
       }
       
@@ -593,7 +625,8 @@ const Dashboard = () => {
   const filteredWorkHours = rawWorkHours.filter(e => {
     // Filter op monteur
     if (isAdmin) {
-      if (selectedTechnician !== 'all' && e.technician_id !== selectedTechnician) return false;
+      if (selectedTechnicians.length === 0) return false;
+      if (!selectedTechnicians.includes(e.technician_id)) return false;
     } else {
       if (e.technician_id !== user?.id) return false;
     }
@@ -610,16 +643,13 @@ const Dashboard = () => {
   const filteredTechnicianData = technicianData;
 
   const displayData = isAdmin
-    ? filteredTechnicianData
+    ? filteredTechnicianData.filter(t => selectedTechnicians.includes(t.technicianId))
     : filteredTechnicianData.filter(t => t.technicianId === user?.id);
 
   const totalHours = displayData.reduce((s, t) => s + t.totalHours, 0);
   const totalDays = displayData.reduce((s, t) => s + t.daysWorked, 0);
-  const avgHoursPerDay = totalDays > 0 ? (totalHours / totalDays) : 0;
-  const availableTechnicians = displayData.map(t => ({
-    id: t.technicianId,
-    name: t.technicianName,
-  }));
+  const avgHoursPerDay = totalDays > 0 ? totalHours / totalDays : 0;
+  const availableTechnicians = allTechnicians;
   const maxHours = Math.max(...displayData.map(t => t.totalHours), 0);
   const maxProfit = Math.max(...displayData.map(t => t.profit), 0);
 
@@ -638,10 +668,10 @@ const Dashboard = () => {
         <div className="mb-4 flex flex-col md:flex-row md:items-center md:space-x-6 space-y-2 md:space-y-0">
           {isAdmin && (
             <div>
-              <TechnicianFilter
+              <MultiTechnicianFilter
                 technicians={availableTechnicians}
-                selectedTechnician={selectedTechnician}
-                onTechnicianChange={setSelectedTechnician}
+                selected={selectedTechnicians}
+                onChange={setSelectedTechnicians}
               />
             </div>
           )}
