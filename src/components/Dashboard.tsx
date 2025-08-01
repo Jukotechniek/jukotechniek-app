@@ -71,7 +71,7 @@ const Dashboard = () => {
   const [technicianData, setTechnicianData] = useState([]);
   const [weeklyData, setWeeklyData] = useState([]);
   const [weeklyAdminData, setWeeklyAdminData] = useState([]);
-  const [selectedTechnicians, setSelectedTechnicians] = useState<string[]>([]);
+  const [selectedTechnicians, setSelectedTechnicians] = useState<string[] | null>(null);
   const [loading, setLoading] = useState(true);
 
   const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7));
@@ -129,8 +129,12 @@ const Dashboard = () => {
     if (!rawWorkHours.length) return;
     let filtered = rawWorkHours;
     if (isAdmin) {
-      if (selectedTechnicians.length) {
-        filtered = filtered.filter(e => selectedTechnicians.includes(e.technician_id));
+      if (Array.isArray(selectedTechnicians)) {
+        if (selectedTechnicians.length) {
+          filtered = filtered.filter(e => selectedTechnicians.includes(e.technician_id));
+        } else {
+          filtered = [];
+        }
       }
     } else {
       filtered = filtered.filter(e => e.technician_id === user?.id);
@@ -377,13 +381,14 @@ const Dashboard = () => {
     rates,
     travelRates,
     allRawWorkHours,
-    selectedTechs: string[]
+    selectedTechs: string[] | null
   ) => {
     // Eerst filteren we de entries op basis van de geselecteerde filters
     const filteredEntries = (allRawWorkHours || []).filter(entry => {
       // Als er geselecteerde monteurs zijn, filter daarop
-      if (selectedTechs.length && !selectedTechs.includes(entry.technician_id)) {
-        return false;
+      if (Array.isArray(selectedTechs)) {
+        if (selectedTechs.length === 0) return false;
+        if (!selectedTechs.includes(entry.technician_id)) return false;
       }
       
       // Als er een geselecteerde maand is, filter daarop
@@ -613,7 +618,10 @@ const Dashboard = () => {
   const filteredWorkHours = rawWorkHours.filter(e => {
     // Filter op monteur
     if (isAdmin) {
-      if (selectedTechnicians.length && !selectedTechnicians.includes(e.technician_id)) return false;
+      if (Array.isArray(selectedTechnicians)) {
+        if (selectedTechnicians.length && !selectedTechnicians.includes(e.technician_id)) return false;
+        if (selectedTechnicians.length === 0) return false;
+      }
     } else {
       if (e.technician_id !== user?.id) return false;
     }
@@ -630,9 +638,11 @@ const Dashboard = () => {
   const filteredTechnicianData = technicianData;
 
   const displayData = isAdmin
-    ? filteredTechnicianData.filter(t =>
-        selectedTechnicians.length === 0 || selectedTechnicians.includes(t.technicianId)
-      )
+    ? filteredTechnicianData.filter(t => {
+        if (selectedTechnicians === null) return true;
+        if (selectedTechnicians.length === 0) return false;
+        return selectedTechnicians.includes(t.technicianId);
+      })
     : filteredTechnicianData.filter(t => t.technicianId === user?.id);
 
   const totalHours = displayData.reduce((s, t) => s + t.totalHours, 0);
