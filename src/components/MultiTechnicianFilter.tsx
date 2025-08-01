@@ -54,6 +54,7 @@ const MultiTechnicianFilter: React.FC<MultiTechnicianFilterProps> = ({
         <DropdownMenuCheckboxItem
           checked={allSelected}
           onCheckedChange={toggleAll}
+          onSelect={e => e.preventDefault()}
         >
           Alle monteurs
         </DropdownMenuCheckboxItem>
@@ -62,6 +63,7 @@ const MultiTechnicianFilter: React.FC<MultiTechnicianFilterProps> = ({
             key={t.id}
             checked={allSelected ? true : (selected || []).includes(t.id)}
             onCheckedChange={checked => toggle(t.id, checked as boolean)}
+            onSelect={e => e.preventDefault()}
           >
             {t.name}
           </DropdownMenuCheckboxItem>
