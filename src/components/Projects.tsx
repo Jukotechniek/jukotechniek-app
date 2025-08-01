@@ -520,7 +520,7 @@ const Projects = () => {
       description: project.description,
       hoursSpent: project.hoursSpent ? project.hoursSpent.toString() : '',
       customerId: project.customerId,
-      date: project.date,
+      date: new Date().toISOString().split('T')[0],
       status: project.status,
       technicianId: project.technicianId,
       isPublic: project.isPublic || false
@@ -695,7 +695,8 @@ const Projects = () => {
       const { data, error } = await supabase
         .from('projects')
         .select('id, title, description, hours_spent, images, technician_id, customer_id, date')
-        .eq('date', emailDate);
+        .eq('date', emailDate)
+        .eq('status', 'completed');
       if (error) throw error;
       projects = data;
     } catch (err) {
