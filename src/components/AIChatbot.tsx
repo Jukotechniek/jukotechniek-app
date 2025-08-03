@@ -139,17 +139,12 @@ const AIChatbot: React.FC = () => {
       created_by: user?.id,
       type: 'chatbot',
     };
-    let error;
-    if (aiConfig) {
-      ({ error } = await supabase
-        .from('ai_assistant_config')
-        .update(configData as any) // eslint-disable-line @typescript-eslint/no-explicit-any
-        .eq('id', aiConfig.id));
-    } else {
-      ({ error } = await supabase
-        .from('ai_assistant_config')
-        .insert([configData as any])); // eslint-disable-line @typescript-eslint/no-explicit-any
-    }
+    const { error } = await supabase
+      .from('ai_assistant_config')
+      .upsert(configData as any, { // eslint-disable-line @typescript-eslint/no-explicit-any
+        onConflict: 'type',
+      });
+
     if (error) {
       toast({ title: 'Error', description: 'Kon AI-configuratie niet opslaan', variant: 'destructive' });
     } else {
