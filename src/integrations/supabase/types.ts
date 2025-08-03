@@ -22,6 +22,10 @@ export type Database = {
           is_enabled: boolean | null
           updated_at: string | null
           webhook_url: string | null
+          report_webhook_url: string | null
+          project_email_recipient: string | null
+          project_email_webhook: string | null
+          type: string | null
         }
         Insert: {
           created_at?: string | null
@@ -30,6 +34,10 @@ export type Database = {
           is_enabled?: boolean | null
           updated_at?: string | null
           webhook_url?: string | null
+          report_webhook_url?: string | null
+          project_email_recipient?: string | null
+          project_email_webhook?: string | null
+          type?: string | null
         }
         Update: {
           created_at?: string | null
@@ -38,6 +46,10 @@ export type Database = {
           is_enabled?: boolean | null
           updated_at?: string | null
           webhook_url?: string | null
+          report_webhook_url?: string | null
+          project_email_recipient?: string | null
+          project_email_webhook?: string | null
+          type?: string | null
         }
         Relationships: [
           {

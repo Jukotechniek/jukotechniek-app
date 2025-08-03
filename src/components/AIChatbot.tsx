@@ -30,6 +30,7 @@ interface AIConfig {
   webhook_url: string | null;
   report_webhook_url: string | null;
   is_enabled: boolean;
+  type: string | null;
 }
 
 const AIChatbot: React.FC = () => {
