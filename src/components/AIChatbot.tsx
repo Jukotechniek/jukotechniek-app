@@ -28,6 +28,7 @@ interface Message {
 interface AIConfig {
   id: string;
   webhook_url: string | null;
+  report_webhook_url: string | null;
   is_enabled: boolean;
 }
 
@@ -45,6 +46,7 @@ const AIChatbot: React.FC = () => {
   const [showConfig, setShowConfig] = useState(false);
   const [aiConfig, setAiConfig] = useState<AIConfig | null>(null);
   const [webhookUrl, setWebhookUrl] = useState('');
+  const [reportWebhookUrl, setReportWebhookUrl] = useState('');
   const [loadingConfig, setLoadingConfig] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
@@ -119,6 +121,7 @@ const AIChatbot: React.FC = () => {
       if (!error && data) {
         setAiConfig(data as AIConfig);
         setWebhookUrl((data as AIConfig).webhook_url || '');
+        setReportWebhookUrl((data as AIConfig).report_webhook_url || '');
       }
     } catch {
       toast({ title: 'Error', description: 'Kon AI-configuratie niet ophalen', variant: 'destructive' });
@@ -128,12 +131,23 @@ const AIChatbot: React.FC = () => {
   const saveAIConfig = async () => {
     if (!isAdmin) return;
     setLoadingConfig(true);
-    const configData = { webhook_url: webhookUrl, is_enabled: true, created_by: user?.id, type: 'chatbot' };
+    const configData = {
+      webhook_url: webhookUrl,
+      report_webhook_url: reportWebhookUrl,
+      is_enabled: true,
+      created_by: user?.id,
+      type: 'chatbot',
+    };
     let error;
     if (aiConfig) {
-      ({ error } = await supabase.from('ai_assistant_config').update(configData).eq('id', aiConfig.id));
+      ({ error } = await supabase
+        .from('ai_assistant_config')
+        .update(configData as any) // eslint-disable-line @typescript-eslint/no-explicit-any
+        .eq('id', aiConfig.id));
     } else {
-      ({ error } = await supabase.from('ai_assistant_config').insert([configData]));
+      ({ error } = await supabase
+        .from('ai_assistant_config')
+        .insert([configData as any])); // eslint-disable-line @typescript-eslint/no-explicit-any
     }
     if (error) {
       toast({ title: 'Error', description: 'Kon AI-configuratie niet opslaan', variant: 'destructive' });
@@ -197,6 +211,41 @@ const AIChatbot: React.FC = () => {
     }
   };
 
+  const reportMessage = async (messageId: string) => {
+    if (!aiConfig?.report_webhook_url) {
+      toast({
+        title: 'Error',
+        description: 'Report webhook niet geconfigureerd',
+        variant: 'destructive',
+      });
+      return;
+    }
+    const reportedMessage = messages.find((m) => m.id === messageId);
+    if (!reportedMessage) return;
+    try {
+      await fetch(aiConfig.report_webhook_url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          session_id: sessionId,
+          user_id: user?.id,
+          reported_message: reportedMessage,
+          conversation: messages,
+        }),
+      });
+      toast({
+        title: 'Gemeld',
+        description: 'Het bericht is gemeld aan de beheerder',
+      });
+    } catch {
+      toast({
+        title: 'Error',
+        description: 'Kon bericht niet melden',
+        variant: 'destructive',
+      });
+    }
+  };
+
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
@@ -236,6 +285,14 @@ const AIChatbot: React.FC = () => {
                 value={webhookUrl}
                 onChange={(e) => setWebhookUrl(e.target.value)}
                 placeholder="https://jouw-n8n-endpoint"
+                className="mb-4 focus:ring-red-500 focus:border-red-500"
+              />
+              <Label htmlFor="reportWebhookUrl">Report Webhook URL</Label>
+              <Input
+                id="reportWebhookUrl"
+                value={reportWebhookUrl}
+                onChange={(e) => setReportWebhookUrl(e.target.value)}
+                placeholder="https://jouw-report-endpoint"
                 className="mb-4 focus:ring-red-500 focus:border-red-500"
               />
               <Button onClick={saveAIConfig} disabled={loadingConfig} className="bg-red-600 hover:bg-red-700 text-white">
@@ -319,6 +376,18 @@ const AIChatbot: React.FC = () => {
                     <p className="text-xs mt-1 text-gray-400 text-right">
                       {new Date(m.timestamp).toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' })}
                     </p>
+                    {!m.isUser && (
+                      <div className="text-right mt-1">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-xs text-gray-500 hover:text-red-600"
+                          onClick={() => reportMessage(m.id)}
+                        >
+                          Rapporteer fout antwoord
+                        </Button>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
