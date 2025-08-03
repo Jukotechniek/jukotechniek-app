@@ -349,7 +349,6 @@ const Dashboard = () => {
           profiles!work_hours_technician_id_fkey(full_name)
         `)
         .eq('technician_id', technicianId)
-        .eq('manual_verified', true)
         .order('date', { ascending: false });
       
       if (error) throw error;
@@ -361,9 +360,9 @@ const Dashboard = () => {
   };
 
   const handleTechnicianClick = (technician) => {
-    // Gebruik de gecombineerde rawWorkHours, gefilterd op monteur/maand en verified
+    // Gebruik de gecombineerde rawWorkHours, gefilterd op monteur/maand (alle entries, niet alleen verified)
     let details = rawWorkHours.filter(
-      e => e.technician_id === technician.technicianId && e.manual_verified
+      e => e.technician_id === technician.technicianId
     );
     if (selectedMonth) {
       const [y, m] = selectedMonth.split('-').map(n => parseInt(n, 10));
@@ -486,10 +485,10 @@ const Dashboard = () => {
         tech.lastWorked = entry.date;
       }
 
-      // Bereken kosten alleen voor manuele entries
+      // Bereken kosten alleen voor manuele entries (overuren als normale uren)
       if (entry.is_manual_entry === true) {
         const regularCost = regular * rate.hourly;
-        const overtimeCost = overtime * rate.hourly * 1.25;
+        const overtimeCost = overtime * rate.hourly; // Overuren als normale uren voor kosten
         const weekendCost = weekend * rate.saturday;
         const sundayCost = sunday * rate.sunday;
         const travelCost = Number(entry.travel_expense_to_technician || 0);
@@ -767,8 +766,8 @@ const Dashboard = () => {
                     <>
                      <Bar dataKey="regularHours" name="Normaal 100%" stackId="a" fill="#1e3a8a" />
                      <Bar dataKey="overtimeHours" name="Overtime 125%" stackId="a" fill="#2563eb" />
-                     <Bar dataKey="weekendHours" name="Weekend 150%" stackId="a" fill="#60a5fa" />
-                     <Bar dataKey="sundayHours" name="Sunday 200%" stackId="a" fill="#93c5fd" />
+                     <Bar dataKey="weekendHours" name="Zaterdag 150%" stackId="a" fill="#60a5fa" />
+                     <Bar dataKey="sundayHours" name="Zondag 200%" stackId="a" fill="#93c5fd" />
 
 
                     </>
@@ -864,8 +863,8 @@ const Dashboard = () => {
                       <Legend />
                       <Bar dataKey="regularHours" fill="#1e3a8a" name="Normaal 100%" stackId="a" />
                       <Bar dataKey="overtimeHours" fill="#2563eb" name="Overtime 125%" stackId="a" />
-                      <Bar dataKey="weekendHours" fill="#60a5fa" name="Weekend 150%" stackId="a" />
-                      <Bar dataKey="sundayHours" fill="#93c5fd" name="Sunday 200%" stackId="a" />
+                      <Bar dataKey="weekendHours" fill="#60a5fa" name="Zaterdag 150%" stackId="a" />
+                      <Bar dataKey="sundayHours" fill="#93c5fd" name="Zondag 200%" stackId="a" />
                     </BarChart>
                   </ResponsiveContainer>
                 </CardContent>
@@ -946,7 +945,7 @@ const Dashboard = () => {
                             <Tooltip>
                               <TooltipTrigger asChild>
                                 <div>
-                                  <div className="text-xs text-gray-400 mb-1">Kosten</div>
+                                  <div className="text-xs text-gray-400 mb-1">Kosten inclusief reiskosten</div>
                                   <div className="font-semibold text-gray-800"><ZakelijkEuro value={t.costs} /></div>
                                 </div>
                               </TooltipTrigger>
@@ -1024,7 +1023,7 @@ const Dashboard = () => {
                           <span className="text-xs text-green-700 mt-1">Te factureren reiskosten klant: <ZakelijkEuro value={t.travelRevenue} /></span>
                         </div>
                         <div className="flex flex-col items-start">
-                          <span className="text-xs text-gray-400">Kosten</span>
+                          <span className="text-xs text-gray-400">Kosten + Reiskosten</span>
                           <span className="font-semibold text-gray-800"><ZakelijkEuro value={t.costs} /></span>
                         </div>
                         <div className="flex flex-col items-start">
@@ -1070,19 +1069,38 @@ const Dashboard = () => {
                   <tr>
                     <th className="p-2 border">Datum</th>
                     <th className="p-2 border">Klant</th>
+                    <th className="p-2 border">Type</th>
                     <th className="p-2 border">Omschrijving</th>
-                    <th className="p-2 border">Normaal</th>
-                    <th className="p-2 border">Overwerk</th>
-                    <th className="p-2 border">Weekend</th>
-                    <th className="p-2 border">Zondag</th>
-                    <th className="p-2 border">Totaal uren</th>
-                    <th className="p-2 border">Reiskosten aan monteur</th>
-                    <th className="p-2 border">Reiskosten van klant</th>
-                    <th className="p-2 border">Omzet</th>
-                    <th className="p-2 border">Kosten</th>
-                    <th className="p-2 border">Winst</th>
-                    <th className="p-2 border">Breakdown</th>
-                    <th className="p-2 border">Te factureren reiskosten klant</th>
+                    {(() => {
+                      // Check if any entries have non-zero values for each hour type
+                      const hasRegular = detailedHours.some(e => (e.regular_hours ?? e.regularHours ?? 0) > 0);
+                      const hasOvertime = detailedHours.some(e => (e.overtime_hours ?? e.overtimeHours ?? 0) > 0);
+                      const hasWeekend = detailedHours.some(e => (e.weekend_hours ?? e.weekendHours ?? 0) > 0);
+                      const hasSunday = detailedHours.some(e => (e.sunday_hours ?? e.sundayHours ?? 0) > 0);
+                      const hasTravelToTech = detailedHours.some(e => Number(e.travel_expense_to_technician || 0) > 0);
+                      const hasTravelFromClient = detailedHours.some(e => {
+                        const travelRate = travelRates.find(tr =>
+                          String(tr.customer_id) === String(e.customer_id) &&
+                          String(tr.technician_id) === String(e.technician_id)
+                        );
+                        return Number(travelRate?.travel_expense_from_client || 0) > 0;
+                      });
+
+                      return (
+                        <>
+                          {hasRegular && <th className="p-2 border">Normaal</th>}
+                          {hasOvertime && <th className="p-2 border">Overwerk</th>}
+                          {hasWeekend && <th className="p-2 border">Zaterdag</th>}
+                          {hasSunday && <th className="p-2 border">Zondag</th>}
+                          <th className="p-2 border">Totaal uren</th>
+                          {hasTravelToTech && <th className="p-2 border">Reiskosten aan monteur</th>}
+                          {hasTravelFromClient && <th className="p-2 border">Reiskosten van klant</th>}
+                          <th className="p-2 border">Omzet</th>
+                          <th className="p-2 border">Kosten</th>
+                          <th className="p-2 border">Winst</th>
+                        </>
+                      );
+                    })()}
                   </tr>
                 </thead>
                 <tbody>
@@ -1106,17 +1124,17 @@ const Dashboard = () => {
                         String(tr.technician_id) === String(first.technician_id)
                       );
 
-                      // Filter alleen manual hours voor kosten aan monteur
+                      // Gebruik alle entries voor uren, maar filter manual entries voor kosten
                       const manualEntries = entries.filter(e => e.is_manual_entry === true);
-                      const regular = manualEntries.reduce((s, e) => s + (e.regular_hours ?? e.regularHours ?? 0), 0);
-                      const overtime = manualEntries.reduce((s, e) => s + (e.overtime_hours ?? e.overtimeHours ?? 0), 0);
-                      const weekend = manualEntries.reduce((s, e) => s + (e.weekend_hours ?? e.weekendHours ?? 0), 0);
-                      const sunday = manualEntries.reduce((s, e) => s + (e.sunday_hours ?? e.sundayHours ?? 0), 0);
-                      const total = manualEntries.reduce((s, e) => s + (e.hours_worked ?? e.hoursWorked ?? 0), 0);
+                      const regular = entries.reduce((s, e) => s + (e.regular_hours ?? e.regularHours ?? 0), 0);
+                      const overtime = entries.reduce((s, e) => s + (e.overtime_hours ?? e.overtimeHours ?? 0), 0);
+                      const weekend = entries.reduce((s, e) => s + (e.weekend_hours ?? e.weekendHours ?? 0), 0);
+                      const sunday = entries.reduce((s, e) => s + (e.sunday_hours ?? e.sundayHours ?? 0), 0);
+                      const total = entries.reduce((s, e) => s + (e.hours_worked ?? e.hoursWorked ?? 0), 0);
 
-                      // Bereken kosten voor manuele entries
+                      // Bereken kosten voor manuele entries (overuren als normale uren)
                       const regularCost = regular * (rate.hourly_rate || 0);
-                      const overtimeCost = overtime * (rate.hourly_rate || 0) * 1.25;
+                      const overtimeCost = overtime * (rate.hourly_rate || 0); // Overuren als normale uren voor kosten
                       const weekendCost = weekend * (rate.saturday_rate || rate.hourly_rate * 1.5 || 0);
                       const sundayCost = sunday * (rate.sunday_rate || rate.hourly_rate * 2 || 0);
                       
@@ -1135,14 +1153,14 @@ const Dashboard = () => {
                       // Bereken reiskosten van klant
                       const travelRevenue = travelRate ? Number(travelRate.travel_expense_from_client || 0) : 0;
 
-                      // Bereken totalen
+                      // Bereken totalen (kosten inclusief overuren als normale uren, omzet inclusief overuren)
                       const hoursCost = regularCost + overtimeCost + weekendCost + sundayCost;
                       const totalCost = hoursCost + travelCostToTech;
                       const totalRevenue = regularRevenue + overtimeRevenue + weekendRevenue + sundayRevenue + travelRevenue;
                       const profit = totalRevenue - totalCost;
 
-                      // Omschrijving samenvoegen
-                      const description = manualEntries.map(e => e.description).filter(Boolean).join(' | ');
+                      // Omschrijving samenvoegen (alle entries)
+                      const description = entries.map(e => e.description).filter(Boolean).join(' | ');
 
                       // Breakdown
                       const breakdown = [
@@ -1160,18 +1178,43 @@ const Dashboard = () => {
                         <tr key={key} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
                           <td className="p-2 border whitespace-nowrap">{new Date(first.date).toLocaleDateString('nl-NL')}</td>
                           <td className="p-2 border">{first.customer_name || first.customerName || 'Geen klant'}</td>
+                          <td className="p-2 border">
+                            {entries.some(e => e.is_manual_entry === true) ? 
+                              <span className="bg-blue-100 text-blue-800 px-2 py-1 rounded text-xs">Manueel</span> : 
+                              <span className="bg-green-100 text-green-800 px-2 py-1 rounded text-xs">Webhook</span>
+                            }
+                          </td>
                           <td className="p-2 border">{description || '-'}</td>
-                          <td className="p-2 border text-right">{regular.toFixed(2)}</td>
-                          <td className="p-2 border text-right">{overtime.toFixed(2)}</td>
-                          <td className="p-2 border text-right">{weekend.toFixed(2)}</td>
-                          <td className="p-2 border text-right">{sunday.toFixed(2)}</td>
-                          <td className="p-2 border text-right font-bold">{total.toFixed(2)}</td>
-                          <td className="p-2 border text-right">€{travelCostToTech.toFixed(2)}</td>
-                          <td className="p-2 border text-right text-green-700 font-semibold">€{travelRevenue.toFixed(2)}</td>
-                          <td className="p-2 border text-right text-green-700">€{totalRevenue.toFixed(2)}</td>
-                          <td className="p-2 border text-right text-red-700">€{totalCost.toFixed(2)}</td>
-                          <td className={`p-2 border text-right font-bold ${profit >= 0 ? 'text-green-700' : 'text-red-700'}`}>€{profit.toFixed(2)}</td>
-                          <td className="p-2 border text-xs">{breakdown}</td>
+                          {(() => {
+                            // Check if any entries have non-zero values for each hour type
+                            const hasRegular = detailedHours.some(e => (e.regular_hours ?? e.regularHours ?? 0) > 0);
+                            const hasOvertime = detailedHours.some(e => (e.overtime_hours ?? e.overtimeHours ?? 0) > 0);
+                            const hasWeekend = detailedHours.some(e => (e.weekend_hours ?? e.weekendHours ?? 0) > 0);
+                            const hasSunday = detailedHours.some(e => (e.sunday_hours ?? e.sundayHours ?? 0) > 0);
+                            const hasTravelToTech = detailedHours.some(e => Number(e.travel_expense_to_technician || 0) > 0);
+                            const hasTravelFromClient = detailedHours.some(e => {
+                              const travelRate = travelRates.find(tr =>
+                                String(tr.customer_id) === String(e.customer_id) &&
+                                String(tr.technician_id) === String(e.technician_id)
+                              );
+                              return Number(travelRate?.travel_expense_from_client || 0) > 0;
+                            });
+
+                            return (
+                              <>
+                                {hasRegular && <td className="p-2 border text-right">{regular.toFixed(2)}</td>}
+                                {hasOvertime && <td className="p-2 border text-right">{overtime.toFixed(2)}</td>}
+                                {hasWeekend && <td className="p-2 border text-right">{weekend.toFixed(2)}</td>}
+                                {hasSunday && <td className="p-2 border text-right">{sunday.toFixed(2)}</td>}
+                                <td className="p-2 border text-right font-bold">{total.toFixed(2)}</td>
+                                {hasTravelToTech && <td className="p-2 border text-right">€{travelCostToTech.toFixed(2)}</td>}
+                                {hasTravelFromClient && <td className="p-2 border text-right text-green-700 font-semibold">€{travelRevenue.toFixed(2)}</td>}
+                                <td className="p-2 border text-right text-green-700">€{totalRevenue.toFixed(2)}</td>
+                                <td className="p-2 border text-right text-red-700">€{totalCost.toFixed(2)}</td>
+                                <td className={`p-2 border text-right font-bold ${profit >= 0 ? 'text-green-700' : 'text-red-700'}`}>€{profit.toFixed(2)}</td>
+                              </>
+                            );
+                          })()}
                         </tr>
                       );
                     });
