@@ -228,8 +228,21 @@ const AIChatbot: React.FC = () => {
       });
       return;
     }
-    const reportedMessage = messages.find((m) => m.id === messageId);
-    if (!reportedMessage) return;
+    
+    const reportedMessageIndex = messages.findIndex((m) => m.id === messageId);
+    if (reportedMessageIndex === -1) return;
+    
+    const reportedMessage = messages[reportedMessageIndex];
+    
+    // Zoek de vraag die ervoor gesteld is (het laatste user bericht voor dit bot bericht)
+    let questionAsked = '';
+    for (let i = reportedMessageIndex - 1; i >= 0; i--) {
+      if (messages[i].isUser) {
+        questionAsked = messages[i].text;
+        break;
+      }
+    }
+    
     try {
       await fetch(aiConfig.report_webhook_url, {
         method: 'POST',
@@ -238,7 +251,8 @@ const AIChatbot: React.FC = () => {
           session_id: sessionId,
           user_id: user?.id,
           reported_message: reportedMessage,
-          conversation: messages,
+          question_asked: questionAsked,
+          timestamp: new Date().toISOString(),
         }),
       });
       toast({
@@ -385,14 +399,14 @@ const AIChatbot: React.FC = () => {
                       {new Date(m.timestamp).toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' })}
                     </p>
                     {!m.isUser && (
-                      <div className="text-right mt-1">
+                      <div className="text-right mt-2">
                         <Button
-                          variant="ghost"
+                          variant="outline"
                           size="sm"
-                          className="text-xs text-gray-500 hover:text-red-600"
+                          className="text-xs text-gray-600 hover:text-red-600 hover:border-red-300 hover:bg-red-50 transition-colors duration-200 border-gray-300"
                           onClick={() => reportMessage(m.id)}
                         >
-                          Rapporteer fout antwoord
+                          ⚠️ Rapporteer fout antwoord
                         </Button>
                       </div>
                     )}
