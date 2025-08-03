@@ -104,6 +104,7 @@ const AIChatbot: React.FC = () => {
 
   useEffect(() => {
     fetchAIConfig();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -139,11 +140,22 @@ const AIChatbot: React.FC = () => {
       created_by: user?.id,
       type: 'chatbot',
     };
-    const { error } = await supabase
-      .from('ai_assistant_config')
-      .upsert(configData as any, { // eslint-disable-line @typescript-eslint/no-explicit-any
-        onConflict: 'type',
-      });
+
+    let error;
+    if (aiConfig?.id) {
+      ({ error } = await supabase
+        .from('ai_assistant_config')
+        .update(configData as any) // eslint-disable-line @typescript-eslint/no-explicit-any
+        .eq('id', aiConfig.id));
+    } else {
+      const { error: insertError, data } = await supabase
+        .from('ai_assistant_config')
+        .insert([configData as any]) // eslint-disable-line @typescript-eslint/no-explicit-any
+        .select()
+        .single();
+      error = insertError;
+      if (!insertError && data) setAiConfig(data as AIConfig);
+    }
 
     if (error) {
       toast({ title: 'Error', description: 'Kon AI-configuratie niet opslaan', variant: 'destructive' });
