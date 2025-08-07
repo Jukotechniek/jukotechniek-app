@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { CheckCircle, AlertTriangle, XCircle, RefreshCw, Check, X } from 'lucide-react';
@@ -51,7 +51,7 @@ const HourComparisonComponent: React.FC = () => {
     );
   }
 
-  const fetchComparisons = async () => {
+  const fetchComparisons = useCallback(async () => {
     setLoading(true);
     try {
       // Haal monteurs
@@ -188,7 +188,7 @@ const HourComparisonComponent: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [toast]);
 
   useEffect(() => {
     fetchComparisons();
@@ -199,14 +199,14 @@ const HourComparisonComponent: React.FC = () => {
   // the app was in the background
   useEffect(() => {
     const handleVisibility = () => {
-      if (!document.hidden) {
+      if (!document.hidden && !loading) {
         // Refresh data when tab becomes visible again to ensure we have the latest data
         fetchComparisons();
       }
     };
     document.addEventListener('visibilitychange', handleVisibility);
     return () => document.removeEventListener('visibilitychange', handleVisibility);
-  }, []);
+  }, [fetchComparisons, loading]);
 
   const handleRefresh = () => fetchComparisons();
 
@@ -353,7 +353,7 @@ const HourComparisonComponent: React.FC = () => {
     }).filter(Boolean).join(' / ');
   }
 
-  if (loading) {
+  if (loading || allComparisons.length === 0) {
     return (
       <div className="p-6 bg-gray-50 min-h-screen flex items-center justify-center">
         <div className="animate-spin h-8 w-8 border-b-2 border-red-600 rounded-full"></div>
