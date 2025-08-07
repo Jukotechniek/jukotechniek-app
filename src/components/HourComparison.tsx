@@ -199,13 +199,14 @@ const HourComparisonComponent: React.FC = () => {
   // the app was in the background
   useEffect(() => {
     const handleVisibility = () => {
-      if (!document.hidden && comparisons.length === 0 && !loading) {
+      if (!document.hidden) {
+        // Refresh data when tab becomes visible again to ensure we have the latest data
         fetchComparisons();
       }
     };
     document.addEventListener('visibilitychange', handleVisibility);
     return () => document.removeEventListener('visibilitychange', handleVisibility);
-  }, [comparisons.length, loading]);
+  }, []);
 
   const handleRefresh = () => fetchComparisons();
 
