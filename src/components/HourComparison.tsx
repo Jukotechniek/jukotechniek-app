@@ -14,42 +14,16 @@ interface TechnicianProfile {
 }
 
 const HourComparisonComponent: React.FC = () => {
+  // Alle hooks bovenaan
   const [comparisons, setComparisons] = useState<HourComparison[]>([]);
   const [allComparisons, setAllComparisons] = useState<HourComparison[]>([]);
   const [technicians, setTechnicians] = useState<TechnicianProfile[]>([]);
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
   const { user } = useAuth();
-
   const isAdmin = user?.role === 'admin';
   const [selectedTech, setSelectedTech] = useState<string>('all');
   const [selectedMonth, setSelectedMonth] = useState<string>(new Date().toISOString().slice(0, 7));
-
-  useEffect(() => {
-    if (!allComparisons) return;
-    setComparisons(
-      allComparisons.filter(c => {
-        if (selectedTech !== 'all' && c.technicianId !== selectedTech) return false;
-        if (selectedMonth !== 'all') {
-          const [year, month] = selectedMonth.split('-').map(Number);
-          const d = new Date(c.date);
-          if (d.getFullYear() !== year || d.getMonth() + 1 !== month) return false;
-        }
-        return true;
-      })
-    );
-  }, [selectedTech, selectedMonth, allComparisons]);
-
-  if (!isAdmin) {
-    return (
-      <div className="p-6 bg-gray-50 min-h-screen">
-        <div className="max-w-7xl mx-auto text-center">
-          <h1 className="text-2xl font-bold text-gray-900">Toegang Geweigerd</h1>
-          <p className="text-gray-600">Alleen beheerders kunnen urenvergelijking bekijken.</p>
-        </div>
-      </div>
-    );
-  }
 
   const fetchComparisons = useCallback(async () => {
     setLoading(true);
@@ -193,10 +167,8 @@ const HourComparisonComponent: React.FC = () => {
   useEffect(() => {
     fetchComparisons();
     // eslint-disable-next-line
-  }, []);
+  }, [fetchComparisons]);
 
-  // Refetch data when returning to the tab to avoid blank screen after
-  // the app was in the background
   useEffect(() => {
     const handleVisibility = () => {
       if (!document.hidden && !loading) {
@@ -207,6 +179,33 @@ const HourComparisonComponent: React.FC = () => {
     document.addEventListener('visibilitychange', handleVisibility);
     return () => document.removeEventListener('visibilitychange', handleVisibility);
   }, [fetchComparisons, loading]);
+
+  useEffect(() => {
+    if (!allComparisons) return;
+    setComparisons(
+      allComparisons.filter(c => {
+        if (selectedTech !== 'all' && c.technicianId !== selectedTech) return false;
+        if (selectedMonth !== 'all') {
+          const [year, month] = selectedMonth.split('-').map(Number);
+          const d = new Date(c.date);
+          if (d.getFullYear() !== year || d.getMonth() + 1 !== month) return false;
+        }
+        return true;
+      })
+    );
+  }, [selectedTech, selectedMonth, allComparisons]);
+
+  // if (!isAdmin) check NA alle hooks
+  if (!isAdmin) {
+    return (
+      <div className="p-6 bg-gray-50 min-h-screen">
+        <div className="max-w-7xl mx-auto text-center">
+          <h1 className="text-2xl font-bold text-gray-900">Toegang Geweigerd</h1>
+          <p className="text-gray-600">Alleen beheerders kunnen urenvergelijking bekijken.</p>
+        </div>
+      </div>
+    );
+  }
 
   const handleRefresh = () => fetchComparisons();
 
