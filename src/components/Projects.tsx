@@ -50,6 +50,30 @@ function mod(n: number, m: number) {
   return ((n % m) + m) % m;
 }
 
+// Helper function to send project completion data to webhook
+const sendProjectCompletionToWebhook = async (projectData: any, webhookUrl: string, recipientEmail: string) => {
+  try {
+    const resp = await fetch(webhookUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        type: 'project_completed',
+        project: projectData,
+        recipientEmail: recipientEmail,
+        completedAt: new Date().toISOString()
+      })
+    });
+    
+    if (resp.ok) {
+      console.log('Project completion data sent to webhook successfully');
+    } else {
+      console.warn('Failed to send project completion data to webhook:', resp.status);
+    }
+  } catch (webhookError) {
+    console.error('Error sending project completion data to webhook:', webhookError);
+  }
+};
+
 const Projects = () => {
   const { user } = useAuth();
   const { toast } = useToast();
@@ -485,6 +509,77 @@ const Projects = () => {
         return;
       }
       projectId = editingProject.id;
+      
+      // If project status was changed to completed, send data to webhook
+      if (newProject.status === 'completed' && editingProject.status !== 'completed' && webhookUrl) {
+        // Get updated project data with all necessary information
+        const { data: updatedProject, error: fetchError } = await supabase
+          .from('projects')
+          .select(`
+            id, 
+            title, 
+            description, 
+            hours_spent, 
+            images, 
+            technician_id, 
+            customer_id, 
+            date,
+            created_at,
+            updated_at,
+            is_public,
+            created_by
+          `)
+          .eq('id', editingProject.id)
+          .single();
+        
+        if (!fetchError && updatedProject) {
+          // Get technician and customer names
+          let technicianName = '';
+          let customerName = '';
+          
+          if (updatedProject.technician_id) {
+            const { data: techData } = await supabase
+              .from('profiles')
+              .select('full_name')
+              .eq('id', updatedProject.technician_id)
+              .single();
+            technicianName = techData?.full_name || '';
+          }
+          
+          if (updatedProject.customer_id) {
+            const { data: customerData } = await supabase
+              .from('customers')
+              .select('name')
+              .eq('id', updatedProject.customer_id)
+              .single();
+            customerName = customerData?.name || '';
+          }
+          
+          // Prepare project data for webhook
+          const projectData = {
+            id: updatedProject.id,
+            title: updatedProject.title,
+            description: updatedProject.description,
+            hoursSpent: updatedProject.hours_spent,
+            images: updatedProject.images || [],
+            technicianId: updatedProject.technician_id,
+            technicianName,
+            customerId: updatedProject.customer_id,
+            customerName,
+            date: updatedProject.date,
+            status: 'completed',
+            createdAt: updatedProject.created_at,
+            updatedAt: updatedProject.updated_at,
+            isPublic: updatedProject.is_public,
+            createdBy: updatedProject.created_by,
+            completedAt: new Date().toISOString()
+          };
+          
+          // Send to webhook
+          await sendProjectCompletionToWebhook(projectData, webhookUrl, recipientEmail);
+        }
+      }
+      
       toast({ title: 'Succes', description: 'Project succesvol bijgewerkt' });
     } else {
       const { data, error } = await supabase.from('projects').insert([{
@@ -503,6 +598,55 @@ const Projects = () => {
         return;
       }
       projectId = data?.id || null;
+      
+      // If new project is created with completed status, send data to webhook
+      if (newProject.status === 'completed' && webhookUrl && projectId) {
+        // Get technician and customer names
+        let technicianName = '';
+        let customerName = '';
+        
+        if (technicianIdToSave) {
+          const { data: techData } = await supabase
+            .from('profiles')
+            .select('full_name')
+            .eq('id', technicianIdToSave)
+            .single();
+          technicianName = techData?.full_name || '';
+        }
+        
+        if (newProject.customerId) {
+          const { data: customerData } = await supabase
+            .from('customers')
+            .select('name')
+            .eq('id', newProject.customerId)
+            .single();
+          customerName = customerData?.name || '';
+        }
+        
+        // Prepare project data for webhook
+        const projectData = {
+          id: projectId,
+          title: newProject.title,
+          description: newProject.description,
+          hoursSpent: newProject.hoursSpent !== '' ? parseFloat(newProject.hoursSpent) : 0,
+          images: [],
+          technicianId: technicianIdToSave,
+          technicianName,
+          customerId: newProject.customerId,
+          customerName,
+          date: newProject.date,
+          status: 'completed',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          isPublic: newProject.isPublic || false,
+          createdBy: user?.id,
+          completedAt: new Date().toISOString()
+        };
+        
+        // Send to webhook
+        await sendProjectCompletionToWebhook(projectData, webhookUrl, recipientEmail);
+      }
+      
       toast({ title: 'Succes', description: 'Project succesvol toegevoegd' });
     }
 
@@ -585,6 +729,77 @@ const Projects = () => {
       toast({ title: 'Fout', description: error.message, variant: 'destructive' });
       return;
     }
+    
+    // If project is marked as completed, send data to webhook
+    if (newStatus === 'completed' && webhookUrl) {
+      // Get updated project data with all necessary information
+      const { data: updatedProject, error: fetchError } = await supabase
+        .from('projects')
+        .select(`
+          id, 
+          title, 
+          description, 
+          hours_spent, 
+          images, 
+          technician_id, 
+          customer_id, 
+          date,
+          created_at,
+          updated_at,
+          is_public,
+          created_by
+        `)
+        .eq('id', project.id)
+        .single();
+      
+      if (!fetchError && updatedProject) {
+        // Get technician and customer names
+        let technicianName = '';
+        let customerName = '';
+        
+        if (updatedProject.technician_id) {
+          const { data: techData } = await supabase
+            .from('profiles')
+            .select('full_name')
+            .eq('id', updatedProject.technician_id)
+            .single();
+          technicianName = techData?.full_name || '';
+        }
+        
+        if (updatedProject.customer_id) {
+          const { data: customerData } = await supabase
+            .from('customers')
+            .select('name')
+            .eq('id', updatedProject.customer_id)
+            .single();
+          customerName = customerData?.name || '';
+        }
+        
+        // Prepare project data for webhook
+        const projectData = {
+          id: updatedProject.id,
+          title: updatedProject.title,
+          description: updatedProject.description,
+          hoursSpent: updatedProject.hours_spent,
+          images: updatedProject.images || [],
+          technicianId: updatedProject.technician_id,
+          technicianName,
+          customerId: updatedProject.customer_id,
+          customerName,
+          date: updatedProject.date,
+          status: 'completed',
+          createdAt: updatedProject.created_at,
+          updatedAt: updatedProject.updated_at,
+          isPublic: updatedProject.is_public,
+          createdBy: updatedProject.created_by,
+          completedAt: new Date().toISOString()
+        };
+        
+        // Send to webhook
+        await sendProjectCompletionToWebhook(projectData, webhookUrl, recipientEmail);
+      }
+    }
+    
     toast({ title: 'Succes', description: `Project status bijgewerkt naar: ${getStatusText(newStatus)}` });
     fetchData();
   };
