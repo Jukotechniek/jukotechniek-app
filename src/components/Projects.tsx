@@ -231,7 +231,12 @@ const Projects = () => {
         .order('full_name', { ascending: true });
       const { data: projectData } = await supabase
         .from('projects')
-        .select('*, customers(name), profiles(full_name)')
+        .select(`
+          *,
+          customers(name),
+          technician_profile:profiles!projects_technician_id_fkey(full_name),
+          created_by_profile:profiles!projects_created_by_fkey(full_name)
+        `)
         .order('date', { ascending: false });
       setCustomers(customerData || []);
       setTechniciansList(
@@ -242,11 +247,11 @@ const Projects = () => {
             }))
           : []
       );
-      const formatted = Array.isArray(projectData)
+              const formatted = Array.isArray(projectData)
         ? projectData.map((p: any) => ({
         id: p.id,
         technicianId: p.technician_id, // no fallback to ''
-        technicianName: p.profiles?.full_name || '',
+        technicianName: p.technician_profile?.full_name || '',
         customerId: p.customer_id || '',
         customerName: p.customers?.name || '',
         date: p.date,
@@ -256,7 +261,9 @@ const Projects = () => {
         hoursSpent: p.hours_spent,
         status: p.status as Project['status'],
         createdAt: p.created_at || '',
-        isPublic: p.is_public ?? false
+        isPublic: p.is_public ?? false,
+        createdBy: p.created_by || null,
+        createdByName: p.created_by_profile?.full_name || null
       })) : [];
       setProjects(formatted);
     } catch (err) {
@@ -300,27 +307,47 @@ const Projects = () => {
     .map(([id, name]) => ({ id, name }));
 
   const filteredProjects = projects.filter(p => {
-    // Show for all mechanics if technicianId is null, for the assigned mechanic, or for admin/opdrachtgever
-    if (isAdminOrOpdrachtgever) {
+    // Voor admin: openstaande projecten zijn altijd zichtbaar maar filterbaar op monteur
+    if (isAdmin) {
       if (selectedTech !== 'all' && p.technicianId !== selectedTech) return false;
+      
+      // Voor voltooide projecten wordt ook de maand filter toegepast
+      if (p.status === 'completed' && selectedMonth) {
+        const [y, m] = selectedMonth.split('-').map(n => parseInt(n, 10));
+        const d = new Date(p.date);
+        if (d.getFullYear() !== y || d.getMonth() + 1 !== m) return false;
+      }
+      return true;
+    }
+    
+    // Voor opdrachtgever: openstaande projecten zijn altijd zichtbaar maar filterbaar op monteur
+    if (isOpdrachtgever) {
+      if (selectedTech !== 'all' && p.technicianId !== selectedTech) return false;
+      
+      // Voor voltooide projecten wordt ook de maand filter toegepast
+      if (p.status === 'completed' && selectedMonth) {
+        const [y, m] = selectedMonth.split('-').map(n => parseInt(n, 10));
+        const d = new Date(p.date);
+        if (d.getFullYear() !== y || d.getMonth() + 1 !== m) return false;
+      }
+      return true;
+    }
+    
+    // Voor monteurs: openstaande projecten (in-progress en needs-review) zijn altijd zichtbaar
+    if (p.status === 'in-progress' || p.status === 'needs-review') {
+      return true;
+    }
+    
+    // Voor voltooide projecten (completed) wordt de normale filtering toegepast voor monteurs
+    if (p.technicianId === user?.id || p.technicianId === null) {
       if (selectedMonth) {
         const [y, m] = selectedMonth.split('-').map(n => parseInt(n, 10));
         const d = new Date(p.date);
         if (d.getFullYear() !== y || d.getMonth() + 1 !== m) return false;
       }
       return true;
-    } else {
-      // For mechanics: show if assigned to them OR if technicianId is null (Alle monteurs)
-      if (p.technicianId === user?.id || p.technicianId === null) {
-        if (selectedMonth) {
-          const [y, m] = selectedMonth.split('-').map(n => parseInt(n, 10));
-          const d = new Date(p.date);
-          if (d.getFullYear() !== y || d.getMonth() + 1 !== m) return false;
-        }
-        return true;
-      }
-      return false;
     }
+    return false;
   });
 
   const projectsByStatus: Record<Project['status'], Project[]> = {
@@ -468,7 +495,8 @@ const Projects = () => {
         date: newProject.date,
         hours_spent: newProject.hoursSpent !== '' ? parseFloat(newProject.hoursSpent) : 0,
         status: newProject.status,
-        images: []
+        images: [],
+        created_by: user?.id
       }]).select().single();
       if (error) {
         toast({ title: 'Fout', description: error.message, variant: 'destructive' });
@@ -590,32 +618,46 @@ const Projects = () => {
     <Tooltip key={project.id}>
       <TooltipTrigger asChild>
         <Card
-          className="bg-white hover:shadow-lg transition-shadow duration-200 cursor-pointer"
+          className="h-full flex flex-col bg-white hover:shadow-lg transition-shadow duration-200 cursor-pointer"
           onClick={() => openDetails(project)}
         >
-          <CardHeader>
-            <div className="flex justify-between items-start">
-              <div>
+          {/* HEADER vult de hoogte */}
+          <CardHeader className="flex-1">
+            <div className="flex justify-between gap-4">
+              {/* Linkerkolom (reservecapaciteit voor 2 regels omschrijving) */}
+              <div className="flex-1 min-h-[108px] flex flex-col">
                 <CardTitle className="text-lg font-semibold text-gray-900 flex items-center gap-2">
                   {project.title}
                   {project.technicianId === null && (
-                    <span className="ml-2 px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 text-xs font-semibold border border-blue-300">Alle monteurs</span>
+                    <span className="ml-2 px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 text-xs font-semibold border border-blue-300">
+                      Alle monteurs
+                    </span>
                   )}
                 </CardTitle>
+  
                 {(isAdminOrOpdrachtgever && project.technicianId && project.technicianName) && (
                   <p className="text-sm text-gray-600">👤 {project.technicianName}</p>
                 )}
                 <p className="text-sm text-gray-600">{project.customerName}</p>
+  
                 {project.description && (
-                  <p className="text-sm text-black mt-1 line-clamp-2">{project.description}</p>
+                  <p className="text-sm text-black mt-1 line-clamp-2">
+                    {project.description}
+                  </p>
                 )}
               </div>
-              <div className="text-right">
-                <p className="text-sm text-gray-600">
-                  {new Date(project.date).toLocaleDateString('nl-NL')}
-                </p>
-                <p className="text-lg font-semibold text-red-600">{project.hoursSpent ? project.hoursSpent + 'u' : ''}</p>
-                <div className="flex space-x-1 mt-2">
+  
+              {/* Rechterkolom (datum/uren + acties) */}
+              <div className="text-right flex flex-col items-end shrink-0">
+                <div className="mb-2">
+                  <p className="text-sm text-gray-600">
+                    {new Date(project.date).toLocaleDateString('nl-NL')}
+                  </p>
+                  <p className="text-lg font-semibold text-red-600">
+                    {project.hoursSpent ? project.hoursSpent + 'u' : ''}
+                  </p>
+                </div>
+                <div className="flex space-x-1">
                   {(isAdminOrOpdrachtgever || project.technicianId === user?.id || project.technicianId === null) && (
                     <Button
                       size="sm"
@@ -628,60 +670,69 @@ const Projects = () => {
                   )}
                   {(isAdminOrOpdrachtgever || project.technicianId === user?.id) && (
                     <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={e => { e.stopPropagation(); handleDelete(project.id, project); }}
-                        className="h-8 w-8 p-0 border-red-300 text-red-600 hover:bg-red-50"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
+                      size="sm"
+                      variant="outline"
+                      onClick={e => { e.stopPropagation(); handleDelete(project.id, project); }}
+                      className="h-8 w-8 p-0 border-red-300 text-red-600 hover:bg-red-50"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
                   )}
                 </div>
               </div>
             </div>
           </CardHeader>
-          <CardContent>
-            {/* Status change buttons always at the bottom of the card */}
-            <div className="flex flex-wrap gap-2 mt-4">
-              <Button
-                size="sm"
-                onClick={e => { e.stopPropagation(); handleStatusChange(project, 'in-progress'); }}
-                variant={project.status === 'in-progress' ? 'default' : 'outline'}
-                className="text-xs"
-                disabled={!canStatusChange(project)}
-              >
-                <Clock className="h-3 w-3 mr-1" /> In Behandeling
-              </Button>
-              <Button
-                size="sm"
-                onClick={e => { e.stopPropagation(); handleStatusChange(project, 'needs-review'); }}
-                variant={project.status === 'needs-review' ? 'default' : 'outline'}
-                className="text-xs"
-                disabled={!canStatusChange(project)}
-              >
-                <AlertCircle className="h-3 w-3 mr-1" /> Controle Nodig
-              </Button>
-              <Button
-                size="sm"
-                onClick={e => { e.stopPropagation(); handleStatusChange(project, 'completed'); }}
-                variant={project.status === 'completed' ? 'default' : 'outline'}
-                className="text-xs"
-                disabled={!canStatusChange(project)}
-              >
-                <CheckCircle className="h-3 w-3 mr-1" /> Voltooid
-              </Button>
+  
+          {/* CONTENT staat altijd onderaan door mt-auto + card is flex-col */}
+          <CardContent className="mt-auto pt-0">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  size="sm"
+                  onClick={e => { e.stopPropagation(); handleStatusChange(project, 'in-progress'); }}
+                  variant={project.status === 'in-progress' ? 'default' : 'outline'}
+                  className="text-xs"
+                  disabled={!canStatusChange(project)}
+                >
+                  <Clock className="h-3 w-3 mr-1" /> In Behandeling
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={e => { e.stopPropagation(); handleStatusChange(project, 'needs-review'); }}
+                  variant={project.status === 'needs-review' ? 'default' : 'outline'}
+                  className="text-xs"
+                  disabled={!canStatusChange(project)}
+                >
+                  <AlertCircle className="h-3 w-3 mr-1" /> Controle Nodig
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={e => { e.stopPropagation(); handleStatusChange(project, 'completed'); }}
+                  variant={project.status === 'completed' ? 'default' : 'outline'}
+                  className="text-xs"
+                  disabled={!canStatusChange(project)}
+                >
+                  <CheckCircle className="h-3 w-3 mr-1" /> Voltooid
+                </Button>
+              </div>
+              {project.createdByName && (
+                <span className="text-xs text-gray-500">📝 Melder: {project.createdByName}</span>
+              )}
             </div>
           </CardContent>
         </Card>
       </TooltipTrigger>
+  
       <TooltipContent side="top" className="max-w-xs text-wrap">
         <p className="font-semibold mb-1">{project.title}</p>
-        <p className="text-sm text-gray-700">
-          {project.description || 'Geen omschrijving'}
-        </p>
+        <p className="text-sm text-gray-700">{project.description || 'Geen omschrijving'}</p>
+        {project.createdByName && (
+          <p className="text-sm text-gray-600 mt-1">📝 Melder: {project.createdByName}</p>
+        )}
       </TooltipContent>
     </Tooltip>
   );
+  
 
   // Directly send day report to n8n webhook
   const sendDayReportDirect = async () => {
@@ -1011,10 +1062,10 @@ const Projects = () => {
                 />
               </h2>
               {!collapsed[status] && (
-                <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-                  {projectsByStatus[status].length === 0 ? (
-                    <div className="col-span-2 py-8 text-center text-gray-500">
-                      Geen projecten gevonden
+  <div className="grid grid-cols-1 gap-6 lg:grid-cols-2 items-stretch">
+    {projectsByStatus[status].length === 0 ? (
+      <div className="col-span-2 py-8 text-center text-gray-500">
+        Geen projecten gevonden
                     </div>
                   ) : (
                     projectsByStatus[status].map(renderProjectCard)
@@ -1037,6 +1088,9 @@ const Projects = () => {
             </button>
             <h2 className="text-xl font-bold mb-2">{selectedProject.title}</h2>
             <div className="mb-2 text-gray-600">{selectedProject.customerName}</div>
+            {selectedProject.createdByName && (
+              <div className="mb-2 text-gray-500">📝 Melder: {selectedProject.createdByName}</div>
+            )}
             <div className="mb-2">{selectedProject.description || <span className="text-gray-400">Geen omschrijving</span>}</div>
             <div className="grid grid-cols-2 gap-3 mt-4">
               {signedImageUrls && signedImageUrls.length > 0 ? (

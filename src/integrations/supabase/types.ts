@@ -434,6 +434,7 @@ export type Database = {
       projects: {
         Row: {
           created_at: string | null
+          created_by: string | null
           customer_id: string | null
           date: string
           description: string | null
@@ -448,6 +449,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string | null
+          created_by?: string | null
           customer_id?: string | null
           date: string
           description?: string | null
@@ -462,6 +464,7 @@ export type Database = {
         }
         Update: {
           created_at?: string | null
+          created_by?: string | null
           customer_id?: string | null
           date?: string
           description?: string | null
@@ -485,6 +488,13 @@ export type Database = {
           {
             foreignKeyName: "projects_technician_id_fkey"
             columns: ["technician_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "projects_created_by_fkey"
+            columns: ["created_by"]
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
