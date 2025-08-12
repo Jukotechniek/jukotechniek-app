@@ -16,6 +16,7 @@ export interface Project {
   isPublic?: boolean;
   createdBy?: string | null;
   createdByName?: string | null;
+  technicianIds?: string[] | null;
 }
 
 export interface ProjectImage {

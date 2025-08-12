@@ -25,6 +25,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { format } from 'date-fns';
 import TechnicianFilter from './TechnicianFilter';
+import MultiTechnicianFilter from './MultiTechnicianFilter';
 
 interface Customer { id: string; name: string; }
 interface Technician { id: string; name: string; }
@@ -92,6 +93,7 @@ const Projects = () => {
     date: new Date().toISOString().split('T')[0],
     status: 'in-progress' as Project['status'],
     technicianId: '',
+    technicianIds: null as string[] | null,
     isPublic: false
   });
   const [selectedTech, setSelectedTech] = useState<string>('all');
@@ -407,7 +409,6 @@ const Projects = () => {
   // Fetch saved email config from Supabase if available
   useEffect(() => {
     const fetchEmailConfig = async () => {
-      // @ts-expect-error Type instantiation is excessively deep and possibly infinite
       const result = await supabase
         .from('ai_assistant_config')
         .select('id, project_email_recipient, project_email_webhook')
@@ -469,7 +470,7 @@ const Projects = () => {
       !newProject.title ||
       !newProject.date ||
       (!isOpdrachtgever && !newProject.customerId) ||
-      ((isAdmin || isOpdrachtgever) && !newProject.technicianId) ||
+      ((isAdmin || isOpdrachtgever) && !(newProject.technicianId || newProject.technicianIds !== null)) ||
       (newProject.status === 'completed' && !newProject.hoursSpent)
     ) {
       toast({ title: "Fout", description: "Vul alle verplichte velden in", variant: "destructive" });
@@ -673,6 +674,7 @@ const Projects = () => {
       date: new Date().toISOString().split('T')[0],
       status: 'in-progress',
       technicianId: '',
+      technicianIds: null,
       isPublic: false
     });
     setSelectedImages([]);
@@ -686,17 +688,18 @@ const Projects = () => {
       toast({ title: "Fout", description: "Je kunt alleen je eigen projecten of 'Alle monteurs' projecten bewerken", variant: "destructive" });
       return;
     }
-    setEditingProject(project);
-    setNewProject({
-      title: project.title,
-      description: project.description,
-      hoursSpent: project.hoursSpent ? project.hoursSpent.toString() : '',
-      customerId: project.customerId,
-      date: new Date().toISOString().split('T')[0],
-      status: project.status,
-      technicianId: project.technicianId,
-      isPublic: project.isPublic || false
-    });
+  setEditingProject(project);
+  setNewProject({
+    title: project.title,
+    description: project.description,
+    hoursSpent: project.hoursSpent ? project.hoursSpent.toString() : '',
+    customerId: project.customerId,
+    date: new Date().toISOString().split('T')[0],
+    status: project.status,
+    technicianId: project.technicianId,
+    technicianIds: project.technicianIds ?? (project.technicianId === null ? null : (project.technicianId ? [project.technicianId] : null)),
+    isPublic: project.isPublic || false
+  });
     setSelectedImages([]);
     setShowAddForm(true);
   };
