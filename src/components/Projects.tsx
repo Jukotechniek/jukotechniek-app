@@ -1052,6 +1052,7 @@ const Projects = () => {
                   date: new Date().toISOString().split('T')[0],
                   status: 'in-progress',
                   technicianId: '',
+                  technicianIds: null,
                   isPublic: false
                 });
               }}
