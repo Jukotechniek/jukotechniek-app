@@ -278,7 +278,6 @@ const Projects = () => {
         id: p.id,
         technicianId: p.technician_id, // no fallback to ''
         technicianName: p.technician_profile?.full_name || '',
-        technicianIds: p.technician_ids || null,
         customerId: p.customer_id || '',
         customerName: p.customers?.name || '',
         date: p.date,
@@ -467,17 +466,11 @@ const Projects = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const hasTechSelection =
-      !(isAdmin || isOpdrachtgever) ||
-      newProject.technicianIds === null ||
-      (Array.isArray(newProject.technicianIds) && newProject.technicianIds.length > 0) ||
-      (!!newProject.technicianId && newProject.technicianId !== '');
-
     if (
       !newProject.title ||
       !newProject.date ||
       (!isOpdrachtgever && !newProject.customerId) ||
-      ((isAdmin || isOpdrachtgever) && !hasTechSelection) ||
+      ((isAdmin || isOpdrachtgever) && !(newProject.technicianId || newProject.technicianIds !== null)) ||
       (newProject.status === 'completed' && !newProject.hoursSpent)
     ) {
       toast({ title: "Fout", description: "Vul alle verplichte velden in", variant: "destructive" });
@@ -491,28 +484,11 @@ const Projects = () => {
       }
     }
 
-    // Determine technician assignment: single, multiple, or all
-    let technicianIdToSave: string | null = null;
-    let technicianIdsToSave: string[] | null = null;
-
-    if (isAdmin || isOpdrachtgever) {
-      if (newProject.technicianIds === null) {
-        // Alle monteurs
-        technicianIdToSave = null;
-        technicianIdsToSave = null;
-      } else if (Array.isArray(newProject.technicianIds) && newProject.technicianIds.length > 0) {
-        // Geselecteerde monteurs
-        technicianIdToSave = null;
-        technicianIdsToSave = newProject.technicianIds;
-      } else {
-        // Enkelvoudige selectie via oude veld
-        technicianIdToSave = newProject.technicianId === 'all' ? null : newProject.technicianId || null;
-        technicianIdsToSave = null;
-      }
-    } else {
-      technicianIdToSave = user?.id || null;
-      technicianIdsToSave = null;
-    }
+    // Map 'all' to null for DB
+    const technicianIdToSave = 
+    (isAdmin || isOpdrachtgever)
+    ? (newProject.technicianId === 'all' ? null : newProject.technicianId)
+    : user?.id;
 
     let projectId: string | null = null;
 
@@ -527,7 +503,6 @@ const Projects = () => {
           status: newProject.status,
           customer_id: newProject.customerId,
           technician_id: technicianIdToSave,
-          technician_ids: technicianIdsToSave,
         })
         .eq('id', editingProject.id);
       if (error) {
@@ -610,7 +585,6 @@ const Projects = () => {
     } else {
       const { data, error } = await supabase.from('projects').insert([{
         technician_id: technicianIdToSave,
-        technician_ids: technicianIdsToSave,
         customer_id: newProject.customerId,
         title: newProject.title,
         description: newProject.description,
@@ -1078,7 +1052,6 @@ const Projects = () => {
                   date: new Date().toISOString().split('T')[0],
                   status: 'in-progress',
                   technicianId: '',
-                  technicianIds: null,
                   isPublic: false
                 });
               }}
@@ -1164,21 +1137,20 @@ const Projects = () => {
                 {/* Mechanic select: show for admin and opdrachtgever, not for technicians */}
                 {(isAdmin || isOpdrachtgever) && (
                   <div>
-                    <Label>Monteurs *</Label>
-                    <div className="mt-2">
-                      <MultiTechnicianFilter
-                        technicians={techniciansList}
-                        selected={newProject.technicianIds}
-                        onChange={(ids) => setNewProject({ ...newProject, technicianIds: ids, technicianId: '' })}
-                      />
-                      <p className="text-xs text-gray-600 mt-1">
-                        {newProject.technicianIds === null
-                          ? 'Alle monteurs'
-                          : Array.isArray(newProject.technicianIds) && newProject.technicianIds.length > 0
-                              ? `${newProject.technicianIds.length} monteur(s) geselecteerd`
-                              : 'Geen monteur geselecteerd'}
-                      </p>
-                    </div>
+                    <Label htmlFor="technician">Monteur *</Label>
+                    <select
+                      id="technician"
+                      required
+                      value={newProject.technicianId}
+                      onChange={e => setNewProject({ ...newProject, technicianId: e.target.value })}
+                      className="w-full rounded border p-2"
+                    >
+                      <option value="">Selecteer Monteur</option>
+                      <option value="all">Alle monteurs</option>
+                      {techniciansList.map(t => (
+                        <option key={t.id} value={t.id}>{t.name}</option>
+                      ))}
+                    </select>
                   </div>
                 )}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
